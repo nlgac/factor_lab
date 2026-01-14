@@ -1,68 +1,82 @@
-# demo.py: Showcases the full pipeline of 'factor_lab'.
+# demo.py: Comprehensive showcase of factor_lab features.
 
+import sys
 import numpy as np
+from loguru import logger
 from factor_lab import (
     DistributionFactory, DataSampler, ReturnsSimulator, 
-    ScenarioBuilder, FactorOptimizer, pca_decomposition
+    ScenarioBuilder, FactorOptimizer, pca_decomposition, svd_decomposition
 )
 
+# --- LOGGING SETUP ---
+# Configure Loguru to show DEBUG messages (needed for 'debug_intermediate_quantity_length')
+logger.remove()
+logger.add(sys.stderr, level="DEBUG", format="<green>{time:HH:mm:ss}</green> | <level>{message}</level>")
+
 def main():
-    print("=== 1. Setup Data Generation ===")
-    p_assets, k_factors = 100, 3
-    
-    # Use Factory to create generators
+    logger.info("=== 1. Setup Heterogeneous Model (Generative) ===")
+    p_assets, k_factors = 100, 2
     factory = DistributionFactory()
     
-    # Create a DataSampler with specific distributions
+    # Create a synthetic model structure
     ds = DataSampler(p_assets, k_factors)
     ds.configure(
-        beta_gen=factory.create_generator('normal', mean=0, std=1),
-        f_vol_gen=factory.create_generator('uniform', low=0.1, high=0.2),
-        d_vol_gen=factory.create_generator('uniform', low=0.05, high=0.15)
+        beta=[factory.create_generator('normal', mean=1, std=0.5), 
+              factory.create_generator('normal', mean=0, std=1)],
+        f_vol=[factory.create_generator('constant', c=0.20), 
+               factory.create_generator('constant', c=0.05)],
+        d_vol=factory.create_generator('constant', c=0.10)
     )
-    model_data = ds.generate()
-    print(f"Generated Model: B{model_data.B.shape}, F{model_data.F.shape}")
-
-    print("\n=== 2. Simulate Returns (Hybrid Method) ===")
-    # Register a Fat-Tailed distribution
-    factory.register('student_t', lambda n, df: np.random.standard_t(df, n))
+    model = ds.generate()
     
-    # Factor 1 is Fat-Tailed, others Normal
-    f_gens = [factory.create_generator('student_t', df=4)] + \
-             [factory.create_generator('normal', mean=0, std=1) for _ in range(k_factors-1)]
-    i_gens = [factory.create_generator('normal', mean=0, std=1) for _ in range(p_assets)]
+    logger.info("\n=== 2. Generate Synthetic Returns ===")
+    # We use the simulator to create a "History" of returns
+    sim = ReturnsSimulator(model, seed=42)
     
-    sim = ReturnsSimulator(model_data, seed=42)
-    results = sim.simulate(252, f_gens, i_gens)
+    # We log the first 5 rows of the raw (pre-scaled) distributions for inspection
+    results = sim.simulate(n=2000, 
+        f_gens=[factory.create_generator('student_t', df=4)] * 2, 
+        i_gens=[factory.create_generator('normal', mean=0, std=1)] * p_assets,
+        debug_intermediate_quantity_length=5
+    )
+    history = results['security_returns']
+    logger.success(f"Generated {history.shape} return matrix.")
+
+    logger.info("\n=== 3. SVD Decomposition (Path B) ===")
+    # "Path B": Fit a model directly to the raw returns history.
+    svd_model = svd_decomposition(history, k=k_factors)
     
-    returns = results['security_returns']
-    print(f"Simulated 1 Year Returns: {returns.shape}")
-    print(f"Worst Day: {returns.min():.2%}")
+    logger.info(f"SVD Model Extracted. Factors: {svd_model.k}")
+    logger.info(f"Top Factor Variance: {svd_model.F[0,0]:.4f}")
 
-    print("\n=== 3. PCA Reconstruction (Verification) ===")
-    # Compute covariance of simulated returns
-    cov_matrix = np.cov(returns, rowvar=False)
-    B_pca, F_pca = pca_decomposition(cov_matrix, k=k_factors)
-    print(f"PCA Recovered F (Diagonal Elements):\n{np.diag(F_pca)[:3]}")
+    logger.info("\n=== 4. Re-Simulation using SVD Model ===")
+    # Initialize a new simulator using the model we just extracted.
+    sim_svd = ReturnsSimulator(svd_model)
+    
+    val_res = sim_svd.simulate(n=1000,
+        f_gens=[factory.create_generator('normal', mean=0, std=1)] * k_factors,
+        i_gens=[factory.create_generator('normal', mean=0, std=1)] * p_assets
+    )
+    
+    # Validate that our SVD model captures the risk structure
+    val = sim_svd.validate_covariance(val_res['security_returns'])
+    logger.info(f"SVD Model Validation Error (Frobenius): {val['frobenius_error']:.4f}")
 
-    print("\n=== 4. Optimization Scenarios ===")
+    logger.info("\n=== 5. Optimization ===")
+    # Optimize a Long-Only portfolio using the SVD-derived risk model
+    opt = FactorOptimizer(svd_model)
     builder = ScenarioBuilder(p_assets)
     
-    # Scenario A: Long Only
-    scen_a = builder.create("Long Only")
-    scen_a = builder.add_fully_invested(scen_a)
-    scen_a = builder.add_long_only(scen_a)
+    # CORRECTED: Builder methods return the Scenario, they are not chained on the Scenario itself.
+    scen = builder.create("Long Only")
+    scen = builder.add_fully_invested(scen)
+    scen = builder.add_long_only(scen)
     
-    # Solve
-    opt = FactorOptimizer(model_data)
-    for A, b in scen_a.equality_constraints: opt.add_eq(A, b)
-    for A, b in scen_a.inequality_constraints: opt.add_ineq(A, b)
+    for A, b in scen.equality_constraints: opt.add_eq(A, b)
+    for A, b in scen.inequality_constraints: opt.add_ineq(A, b)
     
     res = opt.solve()
-    print(f"Scenario: {scen_a.name}")
-    print(f"Solved: {res.solved}, Risk: {res.risk:.4f}")
-    if res.weights is not None:
-        print(f"Net Exposure: {res.weights.sum():.4f}")
+    logger.info(f"Solved: {res.solved}, Risk: {res.risk:.4f}")
 
 if __name__ == "__main__":
     main()

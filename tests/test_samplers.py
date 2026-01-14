@@ -56,5 +56,7 @@ def test_validation_errors(factory):
     gen = factory.create_generator('constant', c=1.0)
     
     # Pass 3 generators for 2 factors
-    with pytest.raises(ValueError, match="Beta list length 3 != required 2"):
+    # UPDATED: Match the generic message raised by the Loguru-enabled samplers.py
+    # The detailed numbers are now logged to stderr, not contained in the exception string.
+    with pytest.raises(ValueError, match="list length mismatch"):
         ds.configure(beta=[gen, gen, gen], f_vol=gen, d_vol=gen)
