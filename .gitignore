@@ -4,6 +4,9 @@
 *temp*
 *~backup*
 
+# old Knowledge_Transfer files
+knowledge_transfers/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -29,6 +32,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+../*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -54,6 +58,13 @@ coverage.xml
 # Translations
 *.mo
 *.pot
+
+# Office documents
+*.odt
+*.ods
+*.docx
+*.xlsx
+*.pptx
 
 # Django stuff:
 *.log
@@ -95,3 +106,12 @@ ENV/
 .ropeproject
 
 .DS_Store
+
+# compressed files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.tar.bz2
+*.tgz
+*.xz
