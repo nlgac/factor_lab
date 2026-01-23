@@ -66,6 +66,15 @@ coverage.xml
 *.xlsx
 *.pptx
 
+# Other files
+*.log
+*.sqlite3
+*.db
+*.xml
+*.txt
+*.png
+*.md
+
 # Django stuff:
 *.log
 local_settings.py
@@ -115,3 +124,4 @@ ENV/
 *.tar.bz2
 *.tgz
 *.xz
+*.tar

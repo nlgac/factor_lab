@@ -1,10 +1,9 @@
 import pytest
 import numpy as np
 import sys
-from loguru import logger
 from factor_lab import (
     ReturnsSimulator, FactorOptimizer, ScenarioBuilder, 
-    FactorModelData, DistributionFactory
+    FactorModelData, DistributionFactory, CovarianceValidator
 )
 
 @pytest.fixture
@@ -15,33 +14,35 @@ def simple_model():
     D = np.diag(np.full(p, 0.01))
     return FactorModelData(B, F, D)
 
-def test_covariance_validation(simple_model):
+def test_covariance_validation(simple_model, rng, factory):
     """
-    Verify that the validate_covariance method correctly identifies 
+    Verify that CovarianceValidator correctly identifies 
     discrepancies between empirical and theoretical covariance.
     """
     # 1. Simulate a large sample to get convergence
-    factory = DistributionFactory()
-    gen = factory.create_generator('normal', mean=0, std=1)
+    normal_sampler = factory.create('normal', mean=0, std=1)
     
-    sim = ReturnsSimulator(simple_model, seed=42)
+    sim = ReturnsSimulator(simple_model, rng=rng)
     # Use 5000 samples to ensure statistical convergence
-    res = sim.simulate(n=5000, 
-                       f_gens=[gen]*simple_model.k, 
-                       i_gens=[gen]*simple_model.p)
+    results = sim.simulate(
+        n_periods=5000, 
+        factor_samplers=[normal_sampler] * simple_model.k, 
+        idio_samplers=[normal_sampler] * simple_model.p
+    )
     
     # 2. Validate
-    validation = sim.validate_covariance(res['security_returns'])
+    validator = CovarianceValidator(simple_model)
+    validation = validator.compare(results['security_returns'])
     
     # Error should be small (e.g. < 0.10 Frobenius norm for this size)
-    assert validation['frobenius_error'] < 0.1, \
-        f"Validation error too high: {validation['frobenius_error']}"
+    assert validation.frobenius_error < 0.1, \
+        f"Validation error too high: {validation.frobenius_error}"
 
     # 3. Test mismatch detection
     # Pass in garbage data (wrong shape)
-    with pytest.raises(ValueError, match="Returns/Asset count mismatch"):
+    with pytest.raises(ValueError, match="assets"):
         # Transpose returns so shape is (Assets, Time) instead of (Time, Assets)
-        sim.validate_covariance(res['security_returns'].T)
+        validator.compare(results['security_returns'].T)
 
 
 def test_optimization_constraints(simple_model):
@@ -52,14 +53,15 @@ def test_optimization_constraints(simple_model):
     builder = ScenarioBuilder(simple_model.p)
     
     # Create scenario: Long Only + Box (Max 20% per asset)
-    scen = builder.create("Constrained")
-    scen = builder.add_fully_invested(scen)
-    scen = builder.add_long_only(scen)
-    scen = builder.add_box_constraints(scen, low=0.0, high=0.20)
+    scenario = (builder
+        .create("Constrained")
+        .add_fully_invested()
+        .add_long_only()
+        .add_box_constraints(low=0.0, high=0.20)
+        .build())
     
     # Apply constraints
-    for A, b in scen.equality_constraints: opt.add_eq(A, b)
-    for A, b in scen.inequality_constraints: opt.add_ineq(A, b)
+    opt.apply_scenario(scenario)
     
     res = opt.solve()
     
@@ -75,20 +77,23 @@ def test_optimization_constraints(simple_model):
     # Check 3: Max Weight 0.20
     assert np.all(w <= 0.20 + 1e-7), f"Box Constraint failed: Max weight {w.max()}"
 
-def test_logging_safety(simple_model, capsys):
+def test_logging_safety(simple_model, rng, factory, capsys):
     """
     Ensure that enabling debug logging does not crash the simulation
     and correctly handles array slicing.
     """
-    factory = DistributionFactory()
-    gen = factory.create_generator('normal', mean=0, std=1)
-    sim = ReturnsSimulator(simple_model)
+    normal_sampler = factory.create('normal', mean=0, std=1)
+    sim = ReturnsSimulator(simple_model, rng=rng)
     
     # Check for crashes during logging
     try:
-        sim.simulate(n=10, 
-                     f_gens=[gen]*simple_model.k, 
-                     i_gens=[gen]*simple_model.p,
-                     debug_intermediate_quantity_length=5) # Test the slicing logic
+        results = sim.simulate(
+            n_periods=10, 
+            factor_samplers=[normal_sampler] * simple_model.k, 
+            idio_samplers=[normal_sampler] * simple_model.p,
+            sample_log_rows=5  # Test the slicing logic
+        )
+        # If we got results with the optional log, that's success
+        assert 'security_returns' in results
     except Exception as e:
         pytest.fail(f"Simulation crashed with logging enabled: {e}")

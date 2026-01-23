@@ -1,6 +1,15 @@
 import pytest
 import numpy as np
-from factor_lab import pca_decomposition, FactorOptimizer
+from factor_lab import pca_decomposition, FactorOptimizer, FactorModelData
+
+@pytest.fixture
+def simple_model():
+    """Simple 20-asset, 2-factor model for computation tests."""
+    p, k = 20, 2
+    B = np.random.RandomState(42).normal(0, 1, (k, p))
+    F = np.diag([0.04, 0.04])
+    D = np.diag(np.full(p, 0.01))
+    return FactorModelData(B, F, D)
 
 def test_pca_method_equivalence(simple_model):
     """
@@ -48,7 +57,7 @@ def test_optimizer_basic(simple_model):
     
     # Constraint: Sum(w) == 1
     p = simple_model.p
-    opt.add_eq(np.ones((1, p)), np.array([1.0]))
+    opt.add_equality(np.ones((1, p)), np.array([1.0]))
     
     # Solve
     res = opt.solve()

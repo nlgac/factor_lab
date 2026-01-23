@@ -54,27 +54,41 @@ def test_svd_recovery():
 
 def test_cached_roots_usage(caplog):
     """
-    Verify that the Simulator uses the pre-computed roots from SVD.
+    Verify that the Simulator uses the pre-computed transforms from SVD.
     """
     import logging
+    from factor_lab import CovarianceTransform, TransformType
     
-    # 1. Create dummy SVD model
+    # 1. Create dummy model with pre-computed transforms
     B = np.zeros((1, 5))
     F = np.eye(1)
     D = np.eye(5)
-    # Manually attach roots
-    F_sqrt = np.ones(1) 
-    D_sqrt = np.ones(5)
     
-    model = FactorModelData(B, F, D, F_sqrt=F_sqrt, D_sqrt=D_sqrt)
+    # Create transforms (as SVD would)
+    factor_transform = CovarianceTransform(
+        matrix=np.ones(1),  # sqrt of diagonal
+        transform_type=TransformType.DIAGONAL
+    )
+    idio_transform = CovarianceTransform(
+        matrix=np.ones(5),  # sqrt of diagonal
+        transform_type=TransformType.DIAGONAL
+    )
+    
+    model = FactorModelData(
+        B=B, F=F, D=D, 
+        factor_transform=factor_transform,
+        idio_transform=idio_transform
+    )
     
     # 2. Initialize Simulator
     sim = ReturnsSimulator(model)
     
-    # The 'True' flag indicates diagonal/scalar transform was selected
-    assert sim.F_diag is True
-    assert sim.D_diag is True
+    # The transforms should be used
+    assert sim._factor_transform is not None
+    assert sim._idio_transform is not None
+    assert sim._factor_transform.is_diagonal
+    assert sim._idio_transform.is_diagonal
     
-    # Check that the transform matches our cached input
-    assert np.array_equal(sim.F_tx, F_sqrt)
-    assert np.array_equal(sim.D_tx, D_sqrt)
+    # Check that the transform matches our input
+    assert np.array_equal(sim._factor_transform.matrix, np.ones(1))
+    assert np.array_equal(sim._idio_transform.matrix, np.ones(5))

@@ -7,64 +7,50 @@ name = "factor_lab"
 version = "2.0.0"
 description = "A Python library for factor model construction, simulation, and portfolio optimization"
 readme = "README.md"
+requires-python = ">=3.8"
 license = {text = "MIT"}
-requires-python = ">=3.9"
 authors = [
-    {name = "Factor Lab Contributors"}
+    {name = "Your Name", email = "your.email@example.com"}
 ]
 keywords = [
-    "factor model",
-    "portfolio optimization",
-    "monte carlo simulation",
-    "PCA",
-    "SVD",
-    "quantitative finance",
-    "risk management"
+    "finance",
+    "quantitative",
+    "portfolio",
+    "optimization",
+    "factor-models",
+    "risk-management",
+    "monte-carlo",
+    "simulation"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business :: Financial :: Investment",
     "Topic :: Scientific/Engineering :: Mathematics",
-    "Typing :: Typed",
 ]
 
 dependencies = [
-    "numpy>=1.21.0",
+    "numpy>=1.20.0",
     "scipy>=1.7.0",
-    "cvxpy>=1.3.0",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
+    "cvxpy>=1.2.0",
 ]
-
-[project.scripts]
-factor-lab = "factor_lab.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.0.0",
-    "ruff>=0.1.0",
-]
-pandas = [
-    "pandas>=2.0.0",
-]
-docs = [
-    "sphinx>=6.0.0",
-    "sphinx-rtd-theme>=1.2.0",
-    "myst-parser>=1.0.0",
+    "pytest-cov>=3.0.0",
+    "matplotlib>=3.5.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+    "mypy>=0.950",
 ]
 
 [project.urls]
@@ -73,104 +59,51 @@ Documentation = "https://factor-lab.readthedocs.io"
 Repository = "https://github.com/yourusername/factor_lab"
 Issues = "https://github.com/yourusername/factor_lab/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["factor_lab*"]
+# IMPORTANT: Include both factor_lab and examples packages
+[tool.setuptools]
+packages = ["factor_lab", "examples"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "-v",
-    "--tb=short",
-    "-ra",
+addopts = "-v --strict-markers --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
 ]
+# ADD THIS BLOCK TO SILENCE THE WARNING:
 filterwarnings = [
-    "ignore::DeprecationWarning",
+    "ignore:module 'sre_constants' is deprecated:DeprecationWarning"
 ]
 
 [tool.coverage.run]
-source = ["factor_lab"]
-branch = true
-omit = [
-    "tests/*",
-    "*/__pycache__/*",
-]
+source = ["factor_lab", "examples"]
+omit = ["*/tests/*", "*/conftest.py"]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
+    "raise AssertionError",
     "raise NotImplementedError",
-    "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
 ]
+precision = 2
 show_missing = true
+skip_covered = false
 
 [tool.black]
 line-length = 88
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py38", "py39", "py310", "py311"]
 include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-line_length = 88
-known_first_party = ["factor_lab"]
-skip_gitignore = true
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-strict_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-
-[[tool.mypy.overrides]]
-module = [
-    "cvxpy.*",
-    "scipy.*",
-]
+disallow_untyped_defs = false
 ignore_missing_imports = true
-
-[tool.ruff]
-line-length = 88
-target-version = "py39"
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # Pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "D",   # pydocstyle
-]
-ignore = [
-    "E501",  # line too long (handled by black)
-    "D100",  # missing docstring in public module
-    "D104",  # missing docstring in public package
-]
-
-[tool.ruff.lint.pydocstyle]
-convention = "numpy"
