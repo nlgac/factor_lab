@@ -2,7 +2,7 @@
 factor_lab - A Python Library for Factor Model Construction and Simulation
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # =============================================================================
 # CORE TYPES
@@ -57,6 +57,15 @@ from .samplers import (
 )
 
 # =============================================================================
+# =============================================================================
+# I/O
+# =============================================================================
+from .io import (
+    save_model,
+    load_model,
+    ModelFormat,
+)
+
 # PUBLIC API
 # =============================================================================
 __all__ = [
@@ -83,4 +92,7 @@ __all__ = [
     "DistributionRegistry",
     "DataSampler",
     "DistributionInfo",
+    "save_model",
+    "load_model",
+    "ModelFormat",
 ]

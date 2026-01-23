@@ -8,6 +8,21 @@ organized by category:
 - Samplers and factories
 """
 
+# ============================================================================
+# CRITICAL: Fix Python path for Windows before any imports
+# ============================================================================
+import sys
+from pathlib import Path
+
+# Add project root to Python path BEFORE importing factor_lab
+# This fixes: ModuleNotFoundError on Windows
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# ============================================================================
+# Now we can safely import from factor_lab
+# ============================================================================
 import pytest
 import numpy as np
 
