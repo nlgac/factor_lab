@@ -1,11 +1,12 @@
 """
-Factor Model Builder & Simulator (JSON Configured)
-==================================================
-A modular framework that parses JSON specifications to build,
-simulate, analyze, and SAVE factor models and returns.
+Factor Model Builder & Simulator (Manifold Analysis Version)
+==========================================================
+Parses JSON specs to build, simulate, and perform Deep Spectral Analysis.
 
-Usage:
-    python build_and_simulate.py model_spec.json
+New Features:
+- Computes Grassmannian Distance (Subspace fit)
+- Computes Stiefel Distance (Frame fit, Chordal Metric)
+- Computes Procrustes Distance (Frame fit, Rotation Invariant)
 """
 
 import json
@@ -13,10 +14,12 @@ import sys
 import argparse
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 
 import numpy as np
 import scipy.linalg
+import scipy.sparse.linalg
+from scipy.sparse.linalg import LinearOperator
 
 # Standard Factor Lab Imports
 from factor_lab import (
@@ -28,7 +31,7 @@ from factor_lab import (
 )
 
 # =============================================================================
-# 1. DATA CONTRACTS (The Spec)
+# 1. DATA CONTRACTS
 # =============================================================================
 
 @dataclass
@@ -61,11 +64,8 @@ class ModelSpec:
 # =============================================================================
 
 class JsonParser:
-    """Parses JSON configuration files for Factor Models."""
-
     @staticmethod
     def _parse_numeric(value: Union[str, float, int]) -> float:
-        """Safely evaluates strings like '0.18^2' or returns floats directly."""
         if isinstance(value, (int, float)):
             return float(value)
         if isinstance(value, str):
@@ -81,30 +81,25 @@ class JsonParser:
             data = json.load(f)
 
         meta = data.get("meta", {})
+        factors = [
+            DistConfig(
+                name=f.get("distribution", "normal"), 
+                params=f.get("params", {}), 
+                transform=f.get("transform")
+            ) for f in data.get("factor_loadings", [])
+        ]
         
-        # Factors
-        factors = []
-        for f_conf in data.get("factor_loadings", []):
-            factors.append(DistConfig(
-                name=f_conf.get("distribution", "normal"),
-                params=f_conf.get("params", {}),
-                transform=f_conf.get("transform")
-            ))
-
-        # Covariances
         cov_data = data.get("covariance", {})
-        f_diag_raw = cov_data.get("F_diagonal", [])
-        f_vars = [cls._parse_numeric(x) for x in f_diag_raw]
+        f_vars = [cls._parse_numeric(x) for x in cov_data.get("F_diagonal", [])]
         d_var = cls._parse_numeric(cov_data.get("D_diagonal", 0.1))
 
-        # Simulations
-        sims = []
-        for s_conf in data.get("simulations", []):
-            sims.append(SimConfig(
-                name=s_conf.get("name", "Unnamed"),
-                dist_type=s_conf.get("type", "normal"),
-                params=s_conf.get("params", {})
-            ))
+        sims = [
+            SimConfig(
+                name=s.get("name"), 
+                dist_type=s.get("type", "normal"), 
+                params=s.get("params", {})
+            ) for s in data.get("simulations", [])
+        ]
 
         return ModelSpec(
             p_assets=meta.get("p_assets", 100),
@@ -128,30 +123,25 @@ class FactorModelBuilder:
 
     def build(self, spec: ModelSpec) -> FactorModelData:
         print(f"🏗️  Building Model: p={spec.p_assets}, k={spec.k_factors}")
-        
         B = np.zeros((spec.k_factors, spec.p_assets))
         
         for i, config in enumerate(spec.factor_loadings):
             loc = config.params.get("loc", 0.0)
             scale = config.params.get("scale", 1.0)
-            raw_vec = self.rng.normal(loc, scale, spec.p_assets)
+            raw = self.rng.normal(loc, scale, spec.p_assets)
             
-            if config.transform == "gram_schmidt":
-                if i == 0:
-                    B[i, :] = raw_vec
-                else:
-                    print(f"   ↳ Factor {i+1}: Applying Gram-Schmidt...")
-                    B[i, :] = self._gram_schmidt_project(raw_vec, B[0, :])
+            if config.transform == "gram_schmidt" and i > 0:
+                print(f"   ↳ Factor {i+1}: Applying Gram-Schmidt...")
+                B[i, :] = self._gram_schmidt_project(raw, B[0, :])
             else:
-                B[i, :] = raw_vec
+                B[i, :] = raw
 
         F = np.diag(spec.factor_variances)
         D = np.diag(np.full(spec.p_assets, spec.idio_variance))
-        
         return FactorModelData(B=B, F=F, D=D)
 
 # =============================================================================
-# 4. ANALYSIS & PERSISTENCE ENGINE
+# 4. DEEP ANALYSIS ENGINE
 # =============================================================================
 
 class AnalysisEngine:
@@ -161,111 +151,176 @@ class AnalysisEngine:
         self.rng = rng
         self.factory = DistributionFactory(rng)
 
-    def compute_subspace_distance(self, returns: np.ndarray) -> float:
-        """Computes geodesic distance between True Model B and Sample B."""
-        # 1. Get True B (Orthonormalized for comparison)
-        B_true = self.model.B.T # (p, k)
-        B_true_orth, _ = scipy.linalg.qr(B_true, mode='economic')
+    def _compute_true_eigenvalues(self, k_top: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Computes eigenpairs of True Matrix Sigma = B.T @ F @ B + D."""
+        B, F, D = self.model.B, self.model.F, self.model.D
+        p = self.model.p
+        D_diag = np.diag(D)
 
-        # 2. Get Sample B via SVD
-        sample_model = svd_decomposition(returns, k=self.model.k)
-        B_sample = sample_model.B.T # (p, k)
+        def matvec(v):
+            return B.T @ (F @ (B @ v)) + D_diag * v
 
-        # 3. Compute Principal Angles
-        angles = scipy.linalg.subspace_angles(B_true_orth, B_sample)
+        op = LinearOperator((p, p), matvec=matvec, dtype=float)
+        vals, vecs = scipy.sparse.linalg.eigsh(op, k=k_top, which='LM')
+        return vals[::-1], vecs[:, ::-1].T
+
+    def _compute_manifold_distances(self, B_true: np.ndarray, B_sample: np.ndarray) -> Dict[str, Any]:
+        """
+        Computes distances on Grassmannian and Stiefel Manifolds.
+        """
+        # 1. ORTHONORMALIZE FRAMES (Project to Stiefel V_{p,k})
+        # Q matrices are (p, k) with orthonormal columns
+        Q_true, _ = scipy.linalg.qr(B_true.T, mode='economic')
+        ortho_B = Q_true.T # (k, p) Stiefel frame
         
-        return float(np.linalg.norm(angles))
+        Q_sample, _ = scipy.linalg.qr(B_sample.T, mode='economic')
 
-    def run_all_simulations(self) -> Dict[str, Dict[str, np.ndarray]]:
-        results_collection = {}
+        # 2. GRASSMANNIAN METRIC (Subspace Distance)
+        # Invariant to rotation of the frame
+        angles = scipy.linalg.subspace_angles(Q_true, Q_sample)
+        dist_grassmann = float(np.linalg.norm(angles))
+
+        # 3. STIEFEL METRIC 1: Chordal Distance
+        # Measures direct difference between frames: || U - V ||_F
+        # Sensitive to sign flips and permutation
+        dist_stiefel_chordal = float(np.linalg.norm(Q_true - Q_sample))
+
+        # 4. STIEFEL METRIC 2: Procrustes Geodesic
+        # Finds optimal rotation R to align Q_sample to Q_true, then measures distance.
+        # This handles the "Sign Flip" and "Permutation" issues common in simulations.
+        # Solves: min_R || Q_true - Q_sample @ R ||_F
+        M = Q_sample.T @ Q_true
+        U_m, _, Vt_m = scipy.linalg.svd(M)
+        R_opt = U_m @ Vt_m
+        Q_aligned = Q_sample @ R_opt
+        dist_stiefel_procrustes = float(np.linalg.norm(Q_true - Q_aligned))
+        
+        return {
+            "dist_grassmannian": dist_grassmann,
+            "dist_stiefel_chordal": dist_stiefel_chordal,
+            "dist_stiefel_procrustes": dist_stiefel_procrustes,
+            "principal_angles": angles,
+            "ortho_B": ortho_B 
+        }
+
+    def run_simulation_and_analyze(self, sim_config: SimConfig) -> Dict[str, Any]:
+        print(f"\n▶ Simulation: {sim_config.name} ({sim_config.dist_type})")
+        
+        # 1. Setup Samplers
+        if "student" in sim_config.dist_type:
+            df_f = int(sim_config.params.get('df_factors', 5))
+            df_d = int(sim_config.params.get('df_idio', 5))
+            f_s = [self.factory.create("student_t", df=df_f) for _ in range(self.model.k)]
+            d_s = [self.factory.create("student_t", df=df_d) for _ in range(self.model.p)]
+        else:
+            f_s = [self.factory.create("normal", mean=0, std=1) for _ in range(self.model.k)]
+            d_s = [self.factory.create("normal", mean=0, std=1) for _ in range(self.model.p)]
+
+        # 2. Simulate
         sim = ReturnsSimulator(self.model, rng=self.rng)
+        sim_res = sim.simulate(self.spec.sim_n_periods, factor_samplers=f_s, idio_samplers=d_s)
+        returns = sim_res['security_returns']
 
-        for sim_config in self.spec.simulations:
-            print(f"\n▶ Simulation: {sim_config.name} ({sim_config.dist_type})")
-            
-            # FIX: Explicitly create samplers for ALL cases.
-            # Passing None caused simulation.py to crash on len(None).
-            
-            if sim_config.dist_type == "normal":
-                # Create standard normal samplers explicitly
-                f_samplers = [
-                    self.factory.create("normal", mean=0.0, std=1.0) 
-                    for _ in range(self.model.k)
-                ]
-                d_samplers = [
-                    self.factory.create("normal", mean=0.0, std=1.0) 
-                    for _ in range(self.model.p)
-                ]
-                
-            elif "student" in sim_config.dist_type:
-                df_f = int(sim_config.params.get('df_factors', 5))
-                df_d = int(sim_config.params.get('df_idio', 5))
-                f_samplers = [self.factory.create("student_t", df=df_f) for _ in range(self.model.k)]
-                d_samplers = [self.factory.create("student_t", df=df_d) for _ in range(self.model.p)]
-            
-            else:
-                # Fallback to Normal
-                print(f"   ⚠ Unknown type '{sim_config.dist_type}', defaulting to Normal.")
-                f_samplers = [self.factory.create("normal", mean=0, std=1) for _ in range(self.model.k)]
-                d_samplers = [self.factory.create("normal", mean=0, std=1) for _ in range(self.model.p)]
+        # 3. Extract Estimated Model (SVD)
+        est_model = svd_decomposition(returns, k=self.model.k)
 
-            # 2. Run Simulation
-            res = sim.simulate(
-                n_periods=self.spec.sim_n_periods,
-                factor_samplers=f_samplers,
-                idio_samplers=d_samplers
-            )
-            results_collection[sim_config.name] = res
-
-            # 3. Analyze
-            dist = self.compute_subspace_distance(res['security_returns'])
-            print(f"   ✓ Subspace Geodesic Distance: {dist:.4f}")
-
-        return results_collection
-
-    def save_results(self, results: Dict[str, Dict[str, np.ndarray]]):
-        print("\n💾 Saving Results...")
+        # 4. Compute Spectral Comparison
+        print("   ↳ Computing True Eigenvalues (Implicitly)...")
+        true_evals, true_evecs = self._compute_true_eigenvalues(k_top=self.model.k)
         
-        # 1. Save the Model
-        model_filename = "factor_model.npz"
-        save_model(self.model, model_filename)
-        print(f"   • Model saved to: {model_filename}")
+        sample_evecs = est_model.B 
+        sample_evals = np.diag(est_model.F) + np.mean(np.diag(est_model.D))
+        
+        # 5. Compute Manifold Distances
+        print("   ↳ Computing Manifold Distances (Grassmann & Stiefel)...")
+        manifold_res = self._compute_manifold_distances(self.model.B, est_model.B)
+        ortho_B = manifold_res.pop("ortho_B")
 
-        # 2. Save Simulation Data
-        for name, data_dict in results.items():
+        # 6. Package Results
+        return {
+            "returns": returns,
+            "matrices": {
+                "true": {
+                    "B": self.model.B,
+                    "ortho_B": ortho_B,
+                    "F": self.model.F,
+                    "D": self.model.D,
+                    "eigenvalues": true_evals,
+                    "eigenvectors_top_k": true_evecs
+                },
+                "sample": {
+                    "B": est_model.B,
+                    "F": est_model.F,
+                    "D": est_model.D,
+                    "eigenvalues": sample_evals,
+                    "eigenvectors_top_k": sample_evecs 
+                }
+            },
+            "metrics": manifold_res
+        }
+
+    def save_results(self, all_results: Dict[str, Any]):
+        print("\n💾 Saving Results...")
+        save_model(self.model, "factor_model.npz")
+        
+        for name, data in all_results.items():
             safe_name = name.replace(" ", "_").lower()
-            filename = f"simulation_{safe_name}.npz"
-            np.savez_compressed(filename, **data_dict)
-            print(f"   • {name} results saved to: {filename}")
+            fname = f"simulation_{safe_name}.npz"
+            
+            save_dict = {
+                "security_returns": data['returns'],
+                
+                # TRUE
+                "true_B": data['matrices']['true']['B'],
+                "true_ortho_B": data['matrices']['true']['ortho_B'],
+                "true_F": data['matrices']['true']['F'],
+                "true_D": data['matrices']['true']['D'],
+                "true_eigenvalues": data['matrices']['true']['eigenvalues'],
+                "true_eigenvectors": data['matrices']['true']['eigenvectors_top_k'],
+                
+                # SAMPLE
+                "sample_B": data['matrices']['sample']['B'],
+                "sample_F": data['matrices']['sample']['F'],
+                "sample_D": data['matrices']['sample']['D'],
+                "sample_eigenvalues": data['matrices']['sample']['eigenvalues'],
+                "sample_eigenvectors": data['matrices']['sample']['eigenvectors_top_k'],
+                
+                # METRICS
+                "dist_grassmannian": data['metrics']['dist_grassmannian'],
+                "dist_stiefel_chordal": data['metrics']['dist_stiefel_chordal'],
+                "dist_stiefel_procrustes": data['metrics']['dist_stiefel_procrustes'],
+                "principal_angles": data['metrics']['principal_angles']
+            }
+            np.savez_compressed(fname, **save_dict)
+            print(f"   • {name} -> {fname}")
+            print(f"     Grassmann Dist (Subspace): {data['metrics']['dist_grassmannian']:.4f}")
+            print(f"     Stiefel Dist (Chordal):    {data['metrics']['dist_stiefel_chordal']:.4f}")
+            print(f"     Stiefel Dist (Procrustes): {data['metrics']['dist_stiefel_procrustes']:.4f}")
 
 # =============================================================================
 # MAIN
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Factor Lab Builder (JSON)")
-    parser.add_argument("config_file", type=Path, help="Path to .json model spec")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config_file", type=Path)
     args = parser.parse_args()
 
     if not args.config_file.exists():
-        sys.exit(f"Error: File {args.config_file} not found.")
+        sys.exit(f"Error: {args.config_file} not found.")
 
     rng = np.random.default_rng(42)
-    
-    try:
-        spec = JsonParser.parse(args.config_file)
-    except Exception as e:
-        sys.exit(f"Parsing Error: {e}")
-
-    builder = FactorModelBuilder(rng)
-    model = builder.build(spec)
+    spec = JsonParser.parse(args.config_file)
+    model = FactorModelBuilder(rng).build(spec)
     
     engine = AnalysisEngine(model, spec, rng)
-    all_results = engine.run_all_simulations()
+    results = {}
     
-    engine.save_results(all_results)
-    
-    print("\n✅ Process Complete.")
+    for sim_conf in spec.simulations:
+        results[sim_conf.name] = engine.run_simulation_and_analyze(sim_conf)
+        
+    engine.save_results(results)
+    print("\n✅ Deep Analysis Complete.")
 
 if __name__ == "__main__":
     main()

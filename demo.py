@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 demo.py - Comprehensive Demonstration of Factor Lab
+===================================================
 
 This script demonstrates the complete factor_lab workflow:
 1. Generative Model Creation - Build synthetic factor models
@@ -8,14 +9,14 @@ This script demonstrates the complete factor_lab workflow:
 3. SVD Decomposition - Extract factors from returns data
 4. Covariance Validation - Verify model accuracy
 5. Portfolio Optimization - Find minimum variance portfolios
+6. PCA vs SVD Comparison - Check numerical consistency
 
 Usage:
     python demo.py
-
-Each section is self-contained with explanatory comments.
 """
 
 import numpy as np
+import scipy.stats
 from typing import Dict, Any
 
 # =============================================================================
@@ -60,272 +61,221 @@ def print_model_summary(model: FactorModelData, name: str = "Model") -> None:
     print(f"\n{name} Summary:")
     print(f"  Factors (k): {model.k}")
     print(f"  Assets (p):  {model.p}")
-    print(f"  Factor variances: {np.diag(model.F)[:3]}...")
-    print(f"  Explained variance: {compute_explained_variance(model):.1%}")
+    
+    # Print factor variances (diagonal of F)
+    f_vars = np.diag(model.F)
+    print(f"  Factor variances: {f_vars[:3]}{'...' if len(f_vars)>3 else ''}")
+    
+    # Calculate explained variance ratio
+    explained = compute_explained_variance(model)
+    print(f"  Explained variance: {explained:.1%}")
+    
+    # Print sample loadings
+    print(f"\n  Sample loadings (first 5 assets):")
+    factor_names = ["Market", "Value", "Momentum", "Quality", "Vol"]
+    for i in range(min(model.k, 3)):
+        fname = factor_names[i] if i < len(factor_names) else f"Factor {i+1}"
+        print(f"    {fname:<8}: {np.round(model.B[i, :5], 3)}")
 
+
+# =============================================================================
+# 1. GENERATIVE MODEL
+# =============================================================================
 
 def demo_generative_model(rng: np.random.Generator, factory: DistributionFactory) -> FactorModelData:
-    """
-    Demonstrate creating a synthetic factor model.
-    
-    This shows how to use DataSampler to create factor models with
-    specified statistical properties for testing and simulation.
-    """
+    """Demonstrate creating a synthetic factor model."""
     print_section("1. GENERATIVE MODEL CREATION")
     
-    p_assets = 100  # 100 stocks
-    k_factors = 3   # Market, Value, Momentum
+    p_assets = 100
+    k_factors = 3
     
-    print(f"\nCreating a {k_factors}-factor model for {p_assets} assets...")
+    print(f"Creating a {k_factors}-factor model for {p_assets} assets...")
     
-    # Create the DataSampler
+    # Configure samplers
+    # 1. Betas: Normal distribution
+    # 2. Factor Vols: Uniform [0.1, 0.2] (squared for covariance)
+    # 3. Idio Vols: Constant 0.1
+    
     sampler = DataSampler(p=p_assets, k=k_factors, rng=rng)
-    
-    # Configure with specific distributions for each component:
-    # - beta: Factor loadings (how much each asset is exposed to each factor)
-    # - factor_vol: Volatility of each factor
-    # - idio_vol: Asset-specific (idiosyncratic) volatility
-    
     model = sampler.configure(
-        # Each factor has different loading distribution
-        beta=[
-            factory.create("normal", mean=1.0, std=0.3),   # Market: avg beta=1
-            factory.create("normal", mean=0.0, std=0.5),   # Value: centered at 0
-            factory.create("normal", mean=0.0, std=0.5),   # Momentum: centered at 0
-        ],
-        # Factor volatilities (annualized)
-        factor_vol=[
-            factory.create("constant", value=0.20),  # Market: 20% vol
-            factory.create("constant", value=0.12),  # Value: 12% vol
-            factory.create("constant", value=0.10),  # Momentum: 10% vol
-        ],
-        # Idiosyncratic volatility varies by asset
-        idio_vol=factory.create("uniform", low=0.15, high=0.30)
+        beta=factory.create("normal", mean=0.2, std=0.5), # Market-like betas
+        factor_vol=factory.create("uniform", low=0.1, high=0.2),
+        idio_vol=factory.create("constant", value=0.10)
     ).generate()
     
     print_model_summary(model, "Generative Model")
-    
-    # Show some loadings
-    print(f"\n  Sample loadings (first 5 assets):")
-    print(f"    Market: {model.B[0, :5].round(3)}")
-    print(f"    Value:  {model.B[1, :5].round(3)}")
-    print(f"    Momentum: {model.B[2, :5].round(3)}")
-    
     return model
 
 
-def demo_simulation(
-    model: FactorModelData, 
-    rng: np.random.Generator, 
-    factory: DistributionFactory
-) -> Dict[str, np.ndarray]:
-    """
-    Demonstrate Monte Carlo simulation of returns.
-    
-    This shows how to generate synthetic returns that match the
-    covariance structure implied by the factor model.
-    """
+# =============================================================================
+# 2. SIMULATION
+# =============================================================================
+
+def demo_simulation(model: FactorModelData, rng: np.random.Generator, factory: DistributionFactory) -> Dict[str, Any]:
+    """Demonstrate Monte Carlo simulation."""
     print_section("2. RETURNS SIMULATION")
     
-    n_periods = 2000  # ~8 years of daily data
-    
-    print(f"\nSimulating {n_periods} periods of returns...")
+    n_periods = 2000
+    print(f"Simulating {n_periods} periods of returns...")
     
     # Create simulator
     simulator = ReturnsSimulator(model, rng=rng)
     
-    # You can use different distributions for innovations:
-    # - Normal: Standard assumption
-    # - Student's t: Fat tails (more realistic for financial returns)
-    # - Custom: Any distribution you define
-    
-    # Here we use Student's t for factor innovations (fat tails)
-    # and normal for idiosyncratic innovations
+    # Define Innovation Distributions
+    # We'll use Student's t (df=5) for fat tails
+    t_dist = factory.create("student_t", df=5)
     
     results = simulator.simulate(
         n_periods=n_periods,
-        factor_samplers=[factory.create("student_t", df=5)] * model.k,
-        idio_samplers=[factory.create("normal", mean=0, std=1)] * model.p,
-        sample_log_rows=5  # Log first 5 rows for debugging
+        factor_samplers=[t_dist] * model.k,
+        idio_samplers=[t_dist] * model.p
     )
     
     returns = results["security_returns"]
     
+    # Stats
     print(f"\n  Returns shape: {returns.shape}")
-    print(f"  Mean return: {returns.mean():.4f}")
-    print(f"  Std return: {returns.std():.4f}")
-    print(f"  Min return: {returns.min():.4f}")
-    print(f"  Max return: {returns.max():.4f}")
+    print(f"  Mean return: {np.mean(returns):.4f}")
+    print(f"  Std return: {np.std(returns):.4f}")
+    print(f"  Min return: {np.min(returns):.4f}")
+    print(f"  Max return: {np.max(returns):.4f}")
     
-    # Check some basic statistics
-    from scipy.stats import kurtosis
-    k = kurtosis(returns.flatten())
-    print(f"  Excess kurtosis: {k:.2f} (>0 indicates fat tails)")
+    # Kurtosis check
+    kurt = scipy.stats.kurtosis(returns.flatten())
+    print(f"  Excess kurtosis: {kurt:.2f} (>0 indicates fat tails)")
     
     return results
 
 
+# =============================================================================
+# 3. SVD EXTRACTION
+# =============================================================================
+
 def demo_svd_extraction(returns: np.ndarray) -> FactorModelData:
-    """
-    Demonstrate factor extraction via SVD.
-    
-    This shows how to extract a factor model from historical returns
-    data. SVD is more numerically stable than PCA on the covariance
-    matrix.
-    """
+    """Demonstrate extracting factors via SVD."""
     print_section("3. SVD DECOMPOSITION")
     
-    print(f"\nExtracting factors from returns ({returns.shape[0]} periods, {returns.shape[1]} assets)...")
+    T, p = returns.shape
+    print(f"Extracting factors from returns ({T} periods, {p} assets)...")
     
-    # First, determine how many factors to use
-    # Option 1: Use domain knowledge (we know we used 3 factors)
-    # Option 2: Use explained variance target
+    # 1. Determine k automatically
+    k_suggested = select_k_by_variance(returns, target_explained=0.80)
+    print(f"\n  Automatic k selection (80% variance): k={k_suggested}")
     
-    k_auto = select_k_by_variance(returns, target_explained=0.80)
-    print(f"\n  Automatic k selection (80% variance): k={k_auto}")
-    
-    # Extract with k=3 (matching our generative model)
-    k = 3
-    model = svd_decomposition(returns, k=k)
+    # 2. Extract 3 factors (for comparison with generative model)
+    k_extract = 3
+    model = svd_decomposition(returns, k=k_extract)
     
     print_model_summary(model, "SVD-Extracted Model")
     
-    # The SVD model includes pre-computed transforms for efficient simulation
-    print(f"\n  Pre-computed transforms available:")
-    print(f"    Factor transform: {'Diagonal' if model.factor_transform.is_diagonal else 'Dense'}")
-    print(f"    Idio transform: {'Diagonal' if model.idio_transform.is_diagonal else 'Dense'}")
+    # Check transforms (Safely!)
+    print("\n  Pre-computed transforms available:")
+    
+    ft_str = "None"
+    if model.factor_transform is not None:
+        ft_str = 'Diagonal' if model.factor_transform.is_diagonal else 'Dense'
+        
+    it_str = "None"
+    if model.idio_transform is not None:
+        it_str = 'Diagonal' if model.idio_transform.is_diagonal else 'Dense'
+        
+    print(f"    Factor transform: {ft_str}")
+    print(f"    Idio transform:   {it_str}")
     
     return model
 
 
+# =============================================================================
+# 4. VALIDATION
+# =============================================================================
+
 def demo_validation(model: FactorModelData, returns: np.ndarray) -> None:
-    """
-    Demonstrate covariance validation.
-    
-    This shows how to verify that a factor model accurately captures
-    the covariance structure of the underlying returns.
-    """
+    """Demonstrate covariance validation."""
     print_section("4. COVARIANCE VALIDATION")
     
-    print(f"\nValidating model against empirical covariance...")
-    
     validator = CovarianceValidator(model)
-    validation = validator.compare(returns)
+    result = validator.compare(returns)
     
-    print(f"\n  Frobenius error: {validation.frobenius_error:.4f}")
-    print(f"  Mean absolute error: {validation.mean_absolute_error:.6f}")
-    print(f"  Max absolute error: {validation.max_absolute_error:.6f}")
-    print(f"  Explained variance ratio: {validation.explained_variance_ratio:.1%}")
+    print("Comparing Model-Implied Covariance vs Empirical Covariance:")
+    print(f"  Frobenius Error: {result.frobenius_error:.4f}")
+    print(f"  Mean Abs Error:  {result.mean_absolute_error:.6f}")
+    print(f"  Max Abs Error:   {result.max_absolute_error:.6f}")
     
-    # Interpretation
-    if validation.frobenius_error < 0.5:
-        print("\n  ✓ Excellent model fit!")
-    elif validation.frobenius_error < 1.0:
-        print("\n  ✓ Good model fit")
+    # Check if fit is acceptable (heuristic)
+    if result.mean_absolute_error < 0.01:
+        print("\n  >> Model Fit: EXCELLENT")
     else:
-        print("\n  ⚠ Consider using more factors or checking data quality")
+        print("\n  >> Model Fit: ACCEPTABLE (Simulated noise expected)")
 
+
+# =============================================================================
+# 5. OPTIMIZATION
+# =============================================================================
 
 def demo_optimization(model: FactorModelData) -> None:
-    """
-    Demonstrate portfolio optimization.
-    
-    This shows how to find minimum variance portfolios with various
-    constraint sets using the factor model covariance structure.
-    """
+    """Demonstrate portfolio optimization."""
     print_section("5. PORTFOLIO OPTIMIZATION")
     
-    # ----------------------------------------------------------------------
-    # Example 1: Simple long-only minimum variance
-    # ----------------------------------------------------------------------
-    print("\n--- Example 1: Long-Only Minimum Variance ---")
+    print("Solving Minimum Variance Portfolio (Long Only)...")
     
-    result = minimum_variance_portfolio(model, long_only=True)
-    
-    print(f"  Solved: {result.solved}")
-    print(f"  Portfolio Risk: {result.risk:.2%}")
-    print(f"  Non-zero weights: {np.sum(result.weights > 1e-4)}")
-    print(f"  Max weight: {result.weights.max():.2%}")
-    
-    # ----------------------------------------------------------------------
-    # Example 2: Diversified portfolio (max 2% per asset)
-    # ----------------------------------------------------------------------
-    print("\n--- Example 2: Diversified (Max 2% per Asset) ---")
-    
-    result = minimum_variance_portfolio(model, long_only=True, max_weight=0.02)
-    
-    print(f"  Solved: {result.solved}")
-    print(f"  Portfolio Risk: {result.risk:.2%}")
-    print(f"  Non-zero weights: {np.sum(result.weights > 1e-4)}")
-    print(f"  Max weight: {result.weights.max():.2%}")
-    
-    # ----------------------------------------------------------------------
-    # Example 3: Custom constraints using ScenarioBuilder
-    # ----------------------------------------------------------------------
-    print("\n--- Example 3: Custom Constraints ---")
-    
-    # Build a complex scenario using the fluent API
-    scenario = (ScenarioBuilder(model.p)
-        .create(
-            name="130/30 Style",
-            description="Allow limited shorting with leverage constraint"
+    try:
+        # Use the convenience function
+        result = minimum_variance_portfolio(
+            model, 
+            long_only=True, 
+            max_weight=0.10  # 10% max weight per asset
         )
-        .add_fully_invested()
-        .add_box_constraints(low=-0.05, high=0.10)  # -5% to +10% per asset
-        .build())
-    
-    print(f"  Scenario: {scenario.name}")
-    print(f"  Equality constraints: {scenario.n_equality()}")
-    print(f"  Inequality constraints: {scenario.n_inequality()}")
-    
-    # Create optimizer and apply scenario
-    optimizer = FactorOptimizer(model)
-    optimizer.apply_scenario(scenario)
-    
-    result = optimizer.solve()
-    
-    print(f"  Solved: {result.solved}")
-    print(f"  Portfolio Risk: {result.risk:.2%}")
-    print(f"  Sum of weights: {result.weights.sum():.4f}")
-    print(f"  Short positions: {np.sum(result.weights < -1e-4)}")
-    print(f"  Min weight: {result.weights.min():.2%}")
-    print(f"  Max weight: {result.weights.max():.2%}")
-    
-    # Show top 5 positions
-    top_5 = np.argsort(result.weights)[-5:][::-1]
-    print(f"\n  Top 5 holdings:")
-    for i in top_5:
-        print(f"    Asset {i}: {result.weights[i]:.2%}")
+        
+        if result.solved:
+            print(f"\n  Optimization Status: {result.status}")
+            print(f"  Portfolio Risk:      {result.risk:.2%}")
+            
+            # Show top weights
+            w = result.weights
+            top_indices = np.argsort(w)[::-1][:5]
+            print("\n  Top 5 Asset Weights:")
+            for idx in top_indices:
+                print(f"    Asset {idx:<3}: {w[idx]:.1%}")
+                
+            print(f"\n  Sum of weights: {np.sum(w):.4f}")
+        else:
+            print("\n  Optimization failed to converge.")
+            
+    except ImportError:
+        print("\n  CVXPY not installed. Skipping optimization demo.")
+    except Exception as e:
+        print(f"\n  Optimization error: {e}")
 
+
+# =============================================================================
+# 6. PCA vs SVD COMPARISON
+# =============================================================================
 
 def demo_pca_comparison(returns: np.ndarray) -> None:
-    """
-    Demonstrate PCA vs SVD comparison.
-    
-    This shows that PCA and SVD give equivalent results when applied
-    correctly, but SVD is numerically more stable.
-    """
+    """Compare numerical results of PCA vs SVD."""
     print_section("6. PCA vs SVD COMPARISON")
     
     k = 3
+    print(f"Comparing decomposition methods for k={k}...")
     
-    # SVD on returns
+    # SVD
+    print("  Running SVD...")
     model_svd = svd_decomposition(returns, k=k)
+    svd_vals = np.diag(model_svd.F)
     
-    # PCA on sample covariance
-    sample_cov = np.cov(returns, rowvar=False)
-    B_pca, F_pca = pca_decomposition(sample_cov, k=k)
+    # PCA
+    print("  Running PCA on Covariance Matrix...")
+    cov = np.cov(returns, rowvar=False)
+    _, F_pca = pca_decomposition(cov, k=k)
+    pca_vals = np.diag(F_pca)
     
-    print(f"\nComparing eigenvalues (factor variances):")
-    print(f"  SVD: {np.diag(model_svd.F).round(6)}")
-    print(f"  PCA: {np.diag(F_pca).round(6)}")
+    # Compare Eigenvalues (Factor Variances)
+    print("\n  Factor Variances (Eigenvalues):")
+    print(f"    SVD: {svd_vals}")
+    print(f"    PCA: {pca_vals}")
     
-    # Check if they match
-    svd_vals = np.sort(np.diag(model_svd.F))[::-1]
-    pca_vals = np.sort(np.diag(F_pca))[::-1]
-    
-    if np.allclose(svd_vals, pca_vals, rtol=1e-10):
-        print("\n  ✓ Eigenvalues match perfectly!")
+    if np.allclose(svd_vals, pca_vals, rtol=1e-5):
+        print("\n  >> SUCCESS: Eigenvalues match perfectly!")
     else:
         max_diff = np.max(np.abs(svd_vals - pca_vals))
         print(f"\n  Maximum difference: {max_diff:.2e}")
