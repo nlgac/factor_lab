@@ -1,0 +1,43 @@
+# MANIFEST.in - Specify additional files to include in distribution
+# ==================================================================
+
+# Include documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+recursive-include docs *.md *.rst *.txt
+
+# Include requirements files
+include requirements*.txt
+include pyproject.toml
+
+# Include example scripts
+include demo.py
+include build_and_simulate.py
+include perturbation_study.py
+include inspect_npz.py
+include verify_npz_output.py
+
+# Include configuration files
+include model_spec.json
+include perturbation_spec.json
+
+# Include examples
+recursive-include examples *.py *.json *.md
+
+# Include tests
+recursive-include tests *.py
+
+# Exclude unnecessary files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+prune .pytest_cache
+prune .mypy_cache
+prune .ruff_cache
+prune htmlcov
+prune dist
+prune build
+prune *.egg-info

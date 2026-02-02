@@ -16,9 +16,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Python extras
+# Extras
 auxiliary/
 examples/
+older/
+
+# Python extras
 *egg*/
 
 # C extensions
@@ -84,7 +87,7 @@ coverage.xml
 *.xml
 *.txt
 *.png
-*.md
+# *.md
 *.npz
 *.html
 
@@ -138,3 +141,4 @@ ENV/
 *.tgz
 *.xz
 *.tar
+*.npz
