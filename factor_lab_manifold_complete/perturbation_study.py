@@ -5,15 +5,31 @@ perturbation_study.py - Factor Model Perturbation Analysis
 
 Compares estimation error from finite samples to rotational perturbation.
 
+EXPERIMENTAL DESIGN:
+--------------------
+1. Create true factor model with loadings B
+2. Apply small rotation to get B_perturbed (distance = d_ref)
+3. Simulate returns from B_perturbed
+4. Estimate B_sample from subsets of returns
+5. Compute estimation error: d(B_perturbed, B_sample)
+6. Compare estimation error to reference perturbation d_ref
+
+KEY QUESTION:
+-------------
+Is the estimation error from finite samples comparable to 
+a controlled rotational perturbation of the factor loadings?
+
 Usage:
     python perturbation_study.py perturbation_spec.json
     
-Output:
-    - perturbation_results.npz: Complete results
+Output Files:
+    - perturbation_results.npz: Complete results (all arrays)
     - scatter_stiefel.png: Stiefel distance scatter plot
     - scatter_grassmannian.png: Grassmannian distance scatter plot
-    - histogram_full.png: Full sample histogram
-    - histograms_subsets.png: 100 subset histograms
+    - histogram_stiefel_distances.png: Estimation error distribution (Stiefel)
+    - histogram_grassmannian_distances.png: Estimation error distribution (Grassmannian)
+    - histogram_full.png: Full sample returns distribution
+    - histograms_subsets.png: 100 subset histograms (small multiples)
 """
 
 import sys
@@ -93,11 +109,7 @@ def create_factor_model(spec: PerturbationSpec, rng: np.random.Generator) -> Fac
     print(f"   ✓ F: {F.shape}, variances: {variances}")
     print(f"   ✓ D: {D.shape}, diagonal: {spec.idio_variance}")
     
-    return FactorModelData(
-        factor_loadings=B,
-        factor_covariance=F,
-        idio_covariance=D
-    )
+    return FactorModelData(B=B, F=F, D=D)
 
 
 def generate_small_orthogonal(p: int, epsilon: float, rng: np.random.Generator) -> np.ndarray:
@@ -199,8 +211,8 @@ def compute_distances(B_true: np.ndarray, B_test: np.ndarray) -> Tuple[float, fl
         Grassmannian distance (subspace distance)
     """
     # Orthonormalize both
-    Q_true, _ = np.linalg.qr(B_true.T, mode='economic')
-    Q_test, _ = np.linalg.qr(B_test.T, mode='economic')
+    Q_true, _ = np.linalg.qr(B_true.T, mode='reduced')
+    Q_test, _ = np.linalg.qr(B_test.T, mode='reduced')
     
     # Grassmannian distance
     d_grass, _ = compute_grassmannian_distance(Q_true.T, Q_test.T)
@@ -216,7 +228,58 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
     """
     Run complete perturbation study.
     
-    Returns dictionary with all results.
+    EXPERIMENTAL DESIGN:
+    --------------------
+    This study compares two sources of error in factor model estimation:
+    
+    1. PERTURBATION ERROR (controlled, known):
+       - Start with true loadings B
+       - Apply small rotation: B_perturbed = O @ B (where O ≈ I)
+       - Distance: d_ref = d(B, B_perturbed)
+       - This is a KNOWN, CONTROLLED error
+    
+    2. ESTIMATION ERROR (stochastic, unknown):
+       - Simulate returns from B_perturbed
+       - Extract subsets of returns
+       - Estimate B_sample via PCA/SVD
+       - Distance: d_est = d(B_perturbed, B_sample)
+       - This is UNKNOWN estimation error from finite samples
+    
+    KEY COMPARISON:
+    ---------------
+    We compare d_est (estimation error) to d_ref (perturbation error):
+    
+    - If d_est ≈ d_ref: Estimation error ~ Perturbation size
+      → Finite sample error is comparable to model uncertainty
+    
+    - If d_est > d_ref: Estimation error dominates
+      → Need more data or simpler model
+    
+    - If d_est < d_ref: Good recovery
+      → Model is well-estimated despite perturbation
+    
+    WORKFLOW:
+    ---------
+    1. Create factor model (B, F, D)
+    2. Generate perturbation: B_perturbed = O @ B
+    3. Compute reference distance: d_ref = d(B, B_perturbed)
+    4. Simulate returns from B_perturbed (not B!)
+    5. For each subset:
+       a. Extract B_sample via PCA
+       b. Compute estimation error: d_est = d(B_perturbed, B_sample)
+    6. Visualize distribution of d_est vs. reference d_ref
+    
+    Returns
+    -------
+    dict
+        Complete results including:
+        - B: Original loadings (k, p)
+        - B_perturbed: Perturbed loadings (k, p)
+        - distances: Array (n_subsets, 4) with:
+          [d_est_stiefel, d_ref_stiefel, d_est_grass, d_ref_grass]
+        - returns: Simulated returns (n_total, p)
+        - sample_models: List of estimated models
+        - And more...
     """
     print("="*70)
     print("  FACTOR MODEL PERTURBATION STUDY")
@@ -247,12 +310,21 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
     print(f"   ✓ B_perturbed: {B_perturbed.shape}")
     
     # Compute baseline perturbation distances
+    # This is the REFERENCE distance: how far did we perturb the true model?
+    # We'll compare estimation errors to this reference distance.
     d_pert_stiefel, d_pert_grass = compute_distances(B, B_perturbed)
     print(f"   ✓ Stiefel distance (B → B_perturbed): {d_pert_stiefel:.6f}")
     print(f"   ✓ Grassmannian distance (B → B_perturbed): {d_pert_grass:.6f}")
     
-    # Step 4: Simulate returns
-    returns = simulate_returns(model, spec.n_total, rng)
+    # Create perturbed model for simulation
+    # CRITICAL: We simulate from B_perturbed, not B
+    # This is the "true" model we're trying to recover via estimation
+    model_perturbed = FactorModelData(B=B_perturbed, F=F, D=D)
+    
+    # Step 4: Simulate returns from PERTURBED model
+    # All returns come from model_perturbed (not the original model)
+    # Estimation error is: how well can we recover B_perturbed from finite samples?
+    returns = simulate_returns(model_perturbed, spec.n_total, rng)
     
     # Compute statistics for full sample
     full_stats = pd.DataFrame(returns).describe()
@@ -282,14 +354,22 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
         model_sample = svd_decomposition(returns_subset, spec.k_factors)
         sample_models.append(model_sample)
         
-        # Compute distances: B → B_sample
-        d_sample_stiefel, d_sample_grass = compute_distances(B, model_sample.B)
+        # Compute distances: B_perturbed → B_sample
+        # CRITICAL CHANGE: We compare to B_perturbed (not B)
+        # Question: Can we recover B_perturbed from finite samples?
+        # The estimation error is d(B_perturbed, B_sample)
+        # We compare this to the perturbation distance d(B, B_perturbed)
+        d_sample_stiefel, d_sample_grass = compute_distances(B_perturbed, model_sample.B)
         
         # Store distances
-        distances[i, 0] = d_sample_stiefel  # d_sample_stiefel
-        distances[i, 1] = d_pert_stiefel     # d_perturbed_stiefel (constant)
-        distances[i, 2] = d_sample_grass     # d_sample_grassmannian
-        distances[i, 3] = d_pert_grass       # d_perturbed_grassmannian (constant)
+        # Column 0: Stiefel distance from B_perturbed to B_sample (estimation error)
+        # Column 1: Stiefel distance from B to B_perturbed (reference perturbation)
+        # Column 2: Grassmannian distance from B_perturbed to B_sample (estimation error)
+        # Column 3: Grassmannian distance from B to B_perturbed (reference perturbation)
+        distances[i, 0] = d_sample_stiefel  # Estimation error (Stiefel)
+        distances[i, 1] = d_pert_stiefel     # Reference perturbation (Stiefel)
+        distances[i, 2] = d_sample_grass     # Estimation error (Grassmannian)
+        distances[i, 3] = d_pert_grass       # Reference perturbation (Grassmannian)
         
         # Compute subset statistics
         subset_stats.append(pd.DataFrame(returns_subset).describe())
@@ -299,13 +379,15 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
     # Summary statistics
     print(f"\n📊 DISTANCE STATISTICS")
     print(f"\n   Stiefel Distance:")
-    print(f"      Sample mean:       {distances[:, 0].mean():.6f}")
-    print(f"      Sample std:        {distances[:, 0].std():.6f}")
-    print(f"      Perturbation:      {distances[0, 1]:.6f}")
+    print(f"      Estimation Error (mean):  {distances[:, 0].mean():.6f}")
+    print(f"      Estimation Error (std):   {distances[:, 0].std():.6f}")
+    print(f"      Reference Perturbation:   {distances[0, 1]:.6f}")
+    print(f"      Ratio (Error/Perturbation): {distances[:, 0].mean() / distances[0, 1]:.3f}x")
     print(f"\n   Grassmannian Distance:")
-    print(f"      Sample mean:       {distances[:, 2].mean():.6f}")
-    print(f"      Sample std:        {distances[:, 2].std():.6f}")
-    print(f"      Perturbation:      {distances[0, 3]:.6f}")
+    print(f"      Estimation Error (mean):  {distances[:, 2].mean():.6f}")
+    print(f"      Estimation Error (std):   {distances[:, 2].std():.6f}")
+    print(f"      Reference Perturbation:   {distances[0, 3]:.6f}")
+    print(f"      Ratio (Error/Perturbation): {distances[:, 2].mean() / distances[0, 3]:.3f}x")
     
     # Return all results
     return {
@@ -372,6 +454,207 @@ def create_scatter_plots(distances: np.ndarray, output_dir: Path):
     plt.tight_layout()
     
     fname_grass = output_dir / 'scatter_grassmannian.png'
+    plt.savefig(fname_grass, dpi=300, bbox_inches='tight')
+    print(f"   ✓ Saved: {fname_grass}")
+    plt.close()
+
+
+def create_distance_histograms(distances: np.ndarray, output_dir: Path):
+    """
+    Create histograms of estimation errors with reference perturbation distance.
+    
+    This visualization answers the key question:
+    "Is the estimation error from finite samples comparable to 
+     the controlled perturbation distance?"
+    
+    Parameters
+    ----------
+    distances : array (n_subsets, 4)
+        Column 0: Stiefel distance B_perturbed → B_sample (estimation error)
+        Column 1: Stiefel distance B → B_perturbed (reference perturbation)
+        Column 2: Grassmannian distance B_perturbed → B_sample (estimation error)
+        Column 3: Grassmannian distance B → B_perturbed (reference perturbation)
+        
+    Output
+    ------
+    Creates two PNG files:
+    - histogram_stiefel_distances.png: Stiefel distance histogram
+    - histogram_grassmannian_distances.png: Grassmannian distance histogram
+    
+    Each histogram shows:
+    - Distribution of estimation errors (blue bars)
+    - Red vertical line at reference perturbation distance
+    - Statistics (mean, std, min, max)
+    
+    Interpretation:
+    - If red line is near the center of the distribution:
+      → Estimation error ≈ Perturbation distance
+      → Finite sample error comparable to model perturbation
+    - If red line is to the left:
+      → Estimation error > Perturbation distance
+      → Sampling uncertainty dominates
+    - If red line is to the right:
+      → Estimation error < Perturbation distance
+      → Good recovery despite perturbation
+    """
+    print(f"\n📊 CREATING DISTANCE HISTOGRAMS")
+    
+    # Extract distances
+    d_sample_stiefel = distances[:, 0]      # Estimation errors (Stiefel)
+    d_pert_stiefel = distances[0, 1]        # Reference perturbation (constant)
+    d_sample_grass = distances[:, 2]        # Estimation errors (Grassmannian)
+    d_pert_grass = distances[0, 3]          # Reference perturbation (constant)
+    
+    # ============================================================
+    # Stiefel Distance Histogram
+    # ============================================================
+    plt.figure(figsize=(12, 7))
+    
+    # Create histogram of estimation errors
+    counts, bins, patches = plt.hist(
+        d_sample_stiefel, 
+        bins=30, 
+        alpha=0.7, 
+        color='steelblue',
+        edgecolor='black',
+        linewidth=1.2,
+        label='Estimation Error Distribution'
+    )
+    
+    # Add vertical line for reference perturbation distance
+    plt.axvline(
+        d_pert_stiefel, 
+        color='red', 
+        linestyle='--', 
+        linewidth=3,
+        label=f'Reference Perturbation: {d_pert_stiefel:.6f}',
+        zorder=10
+    )
+    
+    # Labels and title
+    plt.xlabel('Stiefel Distance (B_perturbed → B_sample)', fontsize=13)
+    plt.ylabel('Frequency (Number of Subsets)', fontsize=13)
+    plt.title(
+        'Estimation Error Distribution vs. Reference Perturbation\n'
+        '(Stiefel/Procrustes Distance)',
+        fontsize=15, 
+        fontweight='bold'
+    )
+    
+    # Add statistics box
+    mean_err = d_sample_stiefel.mean()
+    std_err = d_sample_stiefel.std()
+    min_err = d_sample_stiefel.min()
+    max_err = d_sample_stiefel.max()
+    
+    stats_text = (
+        f'Estimation Error Statistics:\n'
+        f'Mean:  {mean_err:.6f}\n'
+        f'Std:   {std_err:.6f}\n'
+        f'Min:   {min_err:.6f}\n'
+        f'Max:   {max_err:.6f}\n'
+        f'\n'
+        f'Reference Perturbation:\n'
+        f'Distance: {d_pert_stiefel:.6f}\n'
+        f'\n'
+        f'Ratio (Mean Error / Perturbation):\n'
+        f'{mean_err / d_pert_stiefel:.3f}x'
+    )
+    
+    plt.text(
+        0.98, 0.97, stats_text,
+        transform=plt.gca().transAxes,
+        fontsize=11,
+        verticalalignment='top',
+        horizontalalignment='right',
+        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+        family='monospace'
+    )
+    
+    # Legend
+    plt.legend(fontsize=11, loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save
+    fname_stiefel = output_dir / 'histogram_stiefel_distances.png'
+    plt.savefig(fname_stiefel, dpi=300, bbox_inches='tight')
+    print(f"   ✓ Saved: {fname_stiefel}")
+    plt.close()
+    
+    # ============================================================
+    # Grassmannian Distance Histogram
+    # ============================================================
+    plt.figure(figsize=(12, 7))
+    
+    # Create histogram of estimation errors
+    counts, bins, patches = plt.hist(
+        d_sample_grass, 
+        bins=30, 
+        alpha=0.7, 
+        color='seagreen',
+        edgecolor='black',
+        linewidth=1.2,
+        label='Estimation Error Distribution'
+    )
+    
+    # Add vertical line for reference perturbation distance
+    plt.axvline(
+        d_pert_grass, 
+        color='red', 
+        linestyle='--', 
+        linewidth=3,
+        label=f'Reference Perturbation: {d_pert_grass:.6f}',
+        zorder=10
+    )
+    
+    # Labels and title
+    plt.xlabel('Grassmannian Distance (B_perturbed → B_sample)', fontsize=13)
+    plt.ylabel('Frequency (Number of Subsets)', fontsize=13)
+    plt.title(
+        'Estimation Error Distribution vs. Reference Perturbation\n'
+        '(Grassmannian Subspace Distance)',
+        fontsize=15, 
+        fontweight='bold'
+    )
+    
+    # Add statistics box
+    mean_err = d_sample_grass.mean()
+    std_err = d_sample_grass.std()
+    min_err = d_sample_grass.min()
+    max_err = d_sample_grass.max()
+    
+    stats_text = (
+        f'Estimation Error Statistics:\n'
+        f'Mean:  {mean_err:.6f}\n'
+        f'Std:   {std_err:.6f}\n'
+        f'Min:   {min_err:.6f}\n'
+        f'Max:   {max_err:.6f}\n'
+        f'\n'
+        f'Reference Perturbation:\n'
+        f'Distance: {d_pert_grass:.6f}\n'
+        f'\n'
+        f'Ratio (Mean Error / Perturbation):\n'
+        f'{mean_err / d_pert_grass:.3f}x'
+    )
+    
+    plt.text(
+        0.98, 0.97, stats_text,
+        transform=plt.gca().transAxes,
+        fontsize=11,
+        verticalalignment='top',
+        horizontalalignment='right',
+        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8),
+        family='monospace'
+    )
+    
+    # Legend
+    plt.legend(fontsize=11, loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save
+    fname_grass = output_dir / 'histogram_grassmannian_distances.png'
     plt.savefig(fname_grass, dpi=300, bbox_inches='tight')
     print(f"   ✓ Saved: {fname_grass}")
     plt.close()
@@ -572,6 +855,7 @@ def main():
     
     # Create visualizations
     create_scatter_plots(results['distances'], output_dir)
+    create_distance_histograms(results['distances'], output_dir)  # NEW: Histogram with reference line
     create_histogram_full(results['returns'], output_dir)
     
     # Create subset histograms
