@@ -30,6 +30,12 @@ def svd_decomposition(returns: np.ndarray, k: int, center: bool = True) -> Facto
     _, s, Vt = np.linalg.svd(X, full_matrices=False)
     factor_variances = (s[:k]**2) / (T - 1)
     B = Vt[:k, :]
+    
+    # Sign normalization: flip factors with negative mean loadings
+    row_means = B.mean(axis=1)  # Mean across assets for each factor
+    sign_flips = np.where(row_means < 0, -1, 1)  # -1 if mean < 0, else +1
+    B = B * sign_flips[:, np.newaxis]  # Broadcast and flip
+    
     F = np.diag(factor_variances)
     emp_var = np.var(X, axis=0, ddof=1)
     model_var = np.sum((B.T ** 2) * factor_variances, axis=1)

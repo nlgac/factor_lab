@@ -180,8 +180,14 @@ def compute_true_eigenvalues(
     vals = vals[::-1]
     vecs = vecs[:, ::-1]
     
+    # Sign normalization: flip eigenvectors with negative mean
+    evecs_rows = vecs.T  # Shape (k_top, p)
+    row_means = evecs_rows.mean(axis=1)  # Mean across assets for each eigenvector
+    sign_flips = np.where(row_means < 0, -1, 1)  # -1 if mean < 0, else +1
+    evecs_rows = evecs_rows * sign_flips[:, np.newaxis]  # Broadcast and flip
+    
     # Return eigenvectors as row vectors (k_top, p)
-    return vals, vecs.T
+    return vals, evecs_rows
 
 
 class ImplicitEigenAnalysis(SimulationAnalysis):
