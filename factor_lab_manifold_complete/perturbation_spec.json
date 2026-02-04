@@ -1,0 +1,12 @@
+{
+  "p_assets": 1000,
+  "k_factors": 3,
+  "n_total": 6300,
+  "n_subset": 63,
+  "perturbation_size": 0.001,
+  "factor_variances": [0.0324, 0.01, 0.0025],
+  "idio_variance": 0.01,
+  "loading_mean": 0.0,
+  "loading_std": 1.0,
+  "random_seed": 42
+}

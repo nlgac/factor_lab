@@ -78,7 +78,7 @@ coverage.xml
 *.xlsx
 *.pptx
 *.csv
-*.json
+# *.json
 
 # Other files
 *.log

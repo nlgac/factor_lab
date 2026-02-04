@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "description": "Factor Model with Gram-Schmidt and Fat-Tailed Simulation",
+    "p_assets": 500,
+    "n_periods": 63
+  },
+  "factor_loadings": [
+    {
+      "name": "Factor 1",
+      "distribution": "normal",
+      "params": { "loc": 1.0, "scale": 0.25 }
+    },
+    {
+      "name": "Factor 2",
+      "distribution": "normal",
+      "params": { "loc": 0.0, "scale": 1.0 },
+      "transform": "gram_schmidt"
+    }
+  ],
+  "covariance": {
+    "F_diagonal": ["0.18^2", "0.05^2"],
+    "D_diagonal": 0.16
+  },
+  "simulations": [
+    {
+      "name": "Gaussian",
+      "type": "normal",
+      "notes": "Baseline standard normal simulation"
+    },
+    {
+      "name": "Student-t",
+      "type": "student_t",
+      "params": { "df_factors": 5, "df_idio": 4 },
+      "notes": "Fat-tailed simulation"
+    }
+  ]
+}
