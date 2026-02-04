@@ -79,7 +79,72 @@ from factor_lab.analyses.manifold import (
 
 @dataclass
 class PerturbationSpec:
-    """Specification for perturbation study."""
+    """
+    Specification for perturbation study.
+    
+    This class defines all parameters for the perturbation study and automatically
+    adjusts factor_variances to match k_factors in __post_init__.
+    
+    Parameters
+    ----------
+    p_assets : int
+        Number of assets in the portfolio
+    k_factors : int
+        Number of factors in the factor model
+    n_total : int, default=6300
+        Total number of time periods to simulate
+    n_subset : int, default=63
+        Size of each subset for estimation (n_total should be divisible by n_subset)
+    perturbation_size : float, default=0.1
+        Size of perturbation (epsilon parameter for orthogonal transformation)
+    factor_variances : List[float] or None, default=None
+        Variances for each factor. This list is automatically adjusted in __post_init__:
+        - If len < k_factors: Extended by repeating last variance
+        - If len > k_factors: Extra variances kept but only first k_factors used
+        - If None: Defaults used in create_factor_model (decreasing variances)
+    idio_variance : float, default=0.01
+        Idiosyncratic variance (same for all assets)
+    loading_mean : float, default=0.0
+        Mean of factor loadings distribution
+    loading_std : float, default=1.0
+        Standard deviation of factor loadings distribution
+    random_seed : int, default=42
+        Random seed for reproducibility
+    
+    Examples
+    --------
+    # Example 1: Fewer variances than factors (will extend)
+    spec = PerturbationSpec(
+        p_assets=500,
+        k_factors=5,
+        factor_variances=[0.04, 0.02, 0.01]
+    )
+    # Result: factor_variances = [0.04, 0.02, 0.01, 0.01, 0.01]
+    
+    # Example 2: More variances than factors (will truncate)
+    spec = PerturbationSpec(
+        p_assets=500,
+        k_factors=2,
+        factor_variances=[0.04, 0.02, 0.01, 0.005]
+    )
+    # Result: factor_variances = [0.04, 0.02]
+    
+    # Example 3: Exact match (no change)
+    spec = PerturbationSpec(
+        p_assets=500,
+        k_factors=3,
+        factor_variances=[0.04, 0.02, 0.01]
+    )
+    # Result: factor_variances = [0.04, 0.02, 0.01]
+    
+    # Example 4: None (uses defaults)
+    spec = PerturbationSpec(
+        p_assets=500,
+        k_factors=3,
+        factor_variances=None
+    )
+    # Result: Uses [0.18^2/1, 0.18^2/2, 0.18^2/3]
+    """
     p_assets: int
     k_factors: int
     n_total: int = 6300
@@ -90,6 +155,41 @@ class PerturbationSpec:
     loading_mean: float = 0.0
     loading_std: float = 1.0
     random_seed: int = 42
+    
+    def __post_init__(self):
+        """
+        Extend factor_variances if needed.
+        
+        If factor_variances has fewer elements than k_factors,
+        extend it by repeating the last variance.
+        
+        If factor_variances has MORE elements than k_factors,
+        they are kept in the spec but only the first k_factors
+        are used when constructing the F matrix.
+        
+        Examples
+        --------
+        Extension:
+            k_factors = 5
+            factor_variances = [0.0324, 0.01, 0.0025]
+            → Extended to: [0.0324, 0.01, 0.0025, 0.0025, 0.0025]
+        
+        No truncation (extra variances kept):
+            k_factors = 2
+            factor_variances = [0.04, 0.02, 0.01, 0.005]
+            → Kept as: [0.04, 0.02, 0.01, 0.005]
+            → Only first 2 used in F matrix
+        """
+        if self.factor_variances is not None:
+            n_variances = len(self.factor_variances)
+            
+            if n_variances < self.k_factors:
+                # Extend by repeating the last variance
+                last_variance = self.factor_variances[-1]
+                n_needed = self.k_factors - n_variances
+                self.factor_variances = self.factor_variances + [last_variance] * n_needed
+                print(f"   ℹ️  Extended factor_variances from {n_variances} to {self.k_factors} values")
+                print(f"      (repeated last variance {last_variance} for remaining {n_needed} factors)")
     
     @classmethod
     def from_json(cls, filepath: str):
@@ -118,11 +218,17 @@ def create_factor_model(spec: PerturbationSpec, rng: np.random.Generator) -> Fac
     
     # Factor covariance F (k, k)
     if spec.factor_variances is None:
-        # Default: decreasing variances
+        # Default: decreasing variances following a 1/i pattern
+        # This gives factors decreasing importance: strong first factor, weaker subsequent ones
         variances = np.array([0.18**2 / (i+1) for i in range(spec.k_factors)])
     else:
+        # Use provided variances
+        # __post_init__ extends if too few, but keeps extras if too many
+        # So we slice to ensure we only use first k_factors elements
         variances = np.array(spec.factor_variances[:spec.k_factors])
     
+    # Create diagonal covariance matrix for factors
+    # F[i,i] = variance of factor i, F[i,j] = 0 for i≠j (uncorrelated factors)
     F = np.diag(variances)
     
     # Idiosyncratic covariance D (p, p)
@@ -921,7 +1027,18 @@ Output Levels:
     "loading_mean": 0.0,
     "loading_std": 1.0,
     "random_seed": 42
-}""")
+}
+
+Notes on factor_variances:
+- If fewer values than k_factors: Last value is repeated
+  Example: k_factors=5, [0.04, 0.01] → [0.04, 0.01, 0.01, 0.01, 0.01]
+  
+- If more values than k_factors: Truncated to k_factors
+  Example: k_factors=2, [0.04, 0.02, 0.01] → [0.04, 0.02]
+  
+- If omitted: Uses default decreasing variances
+  Example: k_factors=3 → [0.0324, 0.0162, 0.0108]
+""")
         sys.exit(1)
     
     # Load specification
