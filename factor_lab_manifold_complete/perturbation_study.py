@@ -20,20 +20,43 @@ Is the estimation error from finite samples comparable to
 a controlled rotational perturbation of the factor loadings?
 
 Usage:
-    python perturbation_study.py perturbation_spec.json
+    python perturbation_study.py <spec.json> [--output {minimal,results,subsets,all}]
+    
+    Arguments:
+        spec.json              Configuration file (required)
+        
+    Options:
+        --output OUTPUT        Controls which files are generated (default: minimal)
+                               minimal  - Core visualizations only (scatter + histograms)
+                               results  - minimal + perturbation_results.npz + CSV files
+                               subsets  - minimal + histograms_subsets.png
+                               all      - All outputs (everything)
+    
+    Examples:
+        python perturbation_study.py config.json
+        python perturbation_study.py config.json --output all
+        python perturbation_study.py config.json --output results
     
 Output Files:
-    - perturbation_results.npz: Complete results (all arrays)
-    - scatter_stiefel.png: Stiefel distance scatter plot
-    - scatter_grassmannian.png: Grassmannian distance scatter plot
-    - histogram_stiefel_distances.png: Estimation error distribution (Stiefel)
-    - histogram_grassmannian_distances.png: Estimation error distribution (Grassmannian)
-    - histogram_full.png: Full sample returns distribution
-    - histograms_subsets.png: 100 subset histograms (small multiples)
+    Core (always created with --output minimal or higher):
+        - scatter_stiefel.png: Stiefel distance scatter plot
+        - scatter_grassmannian.png: Grassmannian distance scatter plot
+        - histogram_stiefel_distances.png: Estimation error distribution (Stiefel)
+        - histogram_grassmannian_distances.png: Estimation error distribution (Grassmannian)
+        - histogram_full.png: Full sample returns distribution
+    
+    Optional (created with --output results or all):
+        - perturbation_results.npz: Complete results (all arrays)
+        - full_sample_stats.csv: Statistical summary
+        - distances.csv: Distance measurements
+    
+    Optional (created with --output subsets or all):
+        - histograms_subsets.png: 100 subset histograms (small multiples)
 """
 
 import sys
 import json
+import argparse
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
@@ -194,7 +217,9 @@ def simulate_returns(model: FactorModelData, n_periods: int, rng: np.random.Gene
 
 def compute_distances(B_true: np.ndarray, B_test: np.ndarray) -> Tuple[float, float]:
     """
-    Compute Stiefel (Procrustes) and Grassmannian distances.
+    Compute Procrustes and Grassmannian distances using factor_lab functions.
+    
+    Both distances use orthonormalized bases (standard for manifold geometry).
     
     Parameters
     ----------
@@ -205,21 +230,28 @@ def compute_distances(B_true: np.ndarray, B_test: np.ndarray) -> Tuple[float, fl
         
     Returns
     -------
-    d_stiefel : float
-        Procrustes distance (optimal alignment on Stiefel)
+    d_procrustes : float
+        Procrustes distance on Stiefel manifold (orthonormalized frames)
     d_grassmannian : float
         Grassmannian distance (subspace distance)
+        
+    Notes
+    -----
+    Both distances use orthonormal bases:
+    - Procrustes: Measures frame alignment on Stiefel manifold
+    - Grassmannian: Measures subspace distance via principal angles
+    
+    For small perturbations, these distances are often similar because:
+        d_Procrustes^2 ≈ 2k - 2*sum(cos(θ_i)) ≈ sum(θ_i^2) = d_Grassmann^2
+    
+    This is the expected mathematical behavior, not a bug.
     """
-    # Orthonormalize both
-    Q_true, _ = np.linalg.qr(B_true.T, mode='reduced')
-    Q_test, _ = np.linalg.qr(B_test.T, mode='reduced')
-    
-    # Grassmannian distance
-    d_grass, _ = compute_grassmannian_distance(Q_true.T, Q_test.T)
-    
-    # Procrustes distance (Stiefel with optimal rotation)
-    proc_result = compute_procrustes_distance(Q_true.T, Q_test.T)
+    # Use factor_lab's standard implementations
+    # Both internally orthonormalize (correct for manifold geometry)
+    proc_result = compute_procrustes_distance(B_true, B_test)
     d_proc = proc_result['distance']
+    
+    d_grass, _ = compute_grassmannian_distance(B_true, B_test)
     
     return d_proc, d_grass
 
@@ -313,7 +345,7 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
     # This is the REFERENCE distance: how far did we perturb the true model?
     # We'll compare estimation errors to this reference distance.
     d_pert_stiefel, d_pert_grass = compute_distances(B, B_perturbed)
-    print(f"   ✓ Stiefel distance (B → B_perturbed): {d_pert_stiefel:.6f}")
+    print(f"   ✓ Procrustes distance (B → B_perturbed): {d_pert_stiefel:.6f}")
     print(f"   ✓ Grassmannian distance (B → B_perturbed): {d_pert_grass:.6f}")
     
     # Create perturbed model for simulation
@@ -378,7 +410,7 @@ def run_perturbation_study(spec: PerturbationSpec) -> Dict:
     
     # Summary statistics
     print(f"\n📊 DISTANCE STATISTICS")
-    print(f"\n   Stiefel Distance:")
+    print(f"\n   Procrustes Distance:")
     print(f"      Estimation Error (mean):  {distances[:, 0].mean():.6f}")
     print(f"      Estimation Error (std):   {distances[:, 0].std():.6f}")
     print(f"      Reference Perturbation:   {distances[0, 1]:.6f}")
@@ -422,14 +454,14 @@ def create_scatter_plots(distances: np.ndarray, output_dir: Path):
     d_sample_grass = distances[:, 2]
     d_pert_grass = distances[:, 3]
     
-    # Stiefel distance scatter
+    # Procrustes distance scatter
     plt.figure(figsize=(10, 8))
     plt.scatter(d_sample_stiefel, d_pert_stiefel, alpha=0.6, s=50)
     plt.axline((0, 0), slope=1, color='red', linestyle='--', 
                label='y = x (equal distance)', linewidth=2)
-    plt.xlabel('Sample Distance (Stiefel)', fontsize=12)
-    plt.ylabel('Perturbation Distance (Stiefel)', fontsize=12)
-    plt.title('Stiefel Distance: Sampling Error vs. Rotational Perturbation', 
+    plt.xlabel('Sample Distance (Procrustes)', fontsize=12)
+    plt.ylabel('Perturbation Distance (Procrustes)', fontsize=12)
+    plt.title('Procrustes Distance: Sampling Error vs. Rotational Perturbation', 
               fontsize=14, fontweight='bold')
     plt.legend(fontsize=10)
     plt.grid(True, alpha=0.3)
@@ -505,6 +537,14 @@ def create_distance_histograms(distances: np.ndarray, output_dir: Path):
     d_sample_grass = distances[:, 2]        # Estimation errors (Grassmannian)
     d_pert_grass = distances[0, 3]          # Reference perturbation (constant)
     
+    # VERIFICATION: Print reference distances (should be different!)
+    print(f"   Reference Distances (Red Lines):")
+    print(f"      Procrustes:  {d_pert_stiefel:.6f}")
+    print(f"      Grassmannian:        {d_pert_grass:.6f}")
+    print(f"      Difference:          {abs(d_pert_stiefel - d_pert_grass):.6f}")
+    print(f"      Ratio (Procrustes/Grass): {d_pert_stiefel / d_pert_grass:.3f}")
+    print(f"   Note: For small perturbations, these may be similar (expected behavior).")
+    
     # ============================================================
     # Stiefel Distance Histogram
     # ============================================================
@@ -527,16 +567,16 @@ def create_distance_histograms(distances: np.ndarray, output_dir: Path):
         color='red', 
         linestyle='--', 
         linewidth=3,
-        label=f'Reference Perturbation: {d_pert_stiefel:.6f}',
+        label=f'Reference $\\Delta_{{\\mathrm{{Procrustes}}}}$(B,B_pert) = {d_pert_stiefel:.6f}',
         zorder=10
     )
     
     # Labels and title
-    plt.xlabel('Stiefel Distance (B_perturbed → B_sample)', fontsize=13)
+    plt.xlabel('Procrustes Distance (B_perturbed → B_sample)', fontsize=13)
     plt.ylabel('Frequency (Number of Subsets)', fontsize=13)
     plt.title(
         'Estimation Error Distribution vs. Reference Perturbation\n'
-        '(Stiefel/Procrustes Distance)',
+        '(Procrustes Distance on Stiefel Manifold)',
         fontsize=15, 
         fontweight='bold'
     )
@@ -604,7 +644,7 @@ def create_distance_histograms(distances: np.ndarray, output_dir: Path):
         color='red', 
         linestyle='--', 
         linewidth=3,
-        label=f'Reference Perturbation: {d_pert_grass:.6f}',
+        label=f'Reference $\\Delta_{{\\mathrm{{Grassmannian}}}}$(B,B_pert) = {d_pert_grass:.6f}',
         zorder=10
     )
     
@@ -824,10 +864,52 @@ def save_results(results: Dict, output_dir: Path):
 
 
 def main():
-    """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python perturbation_study.py <spec.json>")
-        print("\nExample spec.json:")
+    """
+    Main entry point with command-line argument parsing.
+    
+    Supports selective output generation to save time on large studies.
+    """
+    # Set up argument parser
+    parser = argparse.ArgumentParser(
+        description='Factor Model Perturbation Study - Compare estimation error to controlled perturbation',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python perturbation_study.py config.json
+  python perturbation_study.py config.json --output all
+  python perturbation_study.py config.json --output results
+  python perturbation_study.py config.json --output subsets
+
+Output Levels:
+  minimal  - Core visualizations only (scatter plots + histograms) [default]
+  results  - Core + NPZ file + CSV files (for detailed analysis)
+  subsets  - Core + subset histograms (for quality checks)
+  all      - Everything (use for complete documentation)
+        """
+    )
+    
+    parser.add_argument(
+        'spec_file',
+        type=str,
+        help='JSON configuration file (required)'
+    )
+    
+    parser.add_argument(
+        '--output',
+        type=str,
+        choices=['minimal', 'results', 'subsets', 'all'],
+        default='minimal',
+        help='Controls which output files are generated (default: minimal)'
+    )
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Validate spec file exists
+    spec_path = Path(args.spec_file)
+    if not spec_path.exists():
+        print(f"ERROR: Configuration file not found: {args.spec_file}")
+        print("\nExample configuration file format:")
         print("""{
     "p_assets": 500,
     "k_factors": 3,
@@ -843,8 +925,21 @@ def main():
         sys.exit(1)
     
     # Load specification
-    spec_file = sys.argv[1]
-    spec = PerturbationSpec.from_json(spec_file)
+    spec = PerturbationSpec.from_json(args.spec_file)
+    
+    # Display output mode
+    print("\n" + "="*70)
+    print(f"  OUTPUT MODE: {args.output.upper()}")
+    print("="*70)
+    if args.output == 'minimal':
+        print("  Creating core visualizations only (fastest)")
+    elif args.output == 'results':
+        print("  Creating core + results files (NPZ + CSV)")
+    elif args.output == 'subsets':
+        print("  Creating core + subset histograms")
+    elif args.output == 'all':
+        print("  Creating all outputs (complete documentation)")
+    print()
     
     # Create output directory
     output_dir = Path('perturbation_output')
@@ -853,34 +948,72 @@ def main():
     # Run study
     results = run_perturbation_study(spec)
     
-    # Create visualizations
+    # ======================================================================
+    # CORE VISUALIZATIONS (always created)
+    # ======================================================================
+    print(f"\n📊 CREATING CORE VISUALIZATIONS")
+    
     create_scatter_plots(results['distances'], output_dir)
-    create_distance_histograms(results['distances'], output_dir)  # NEW: Histogram with reference line
+    create_distance_histograms(results['distances'], output_dir)
     create_histogram_full(results['returns'], output_dir)
     
-    # Create subset histograms
-    n_subsets = spec.n_total // spec.n_subset
-    returns_subsets = [
-        results['returns'][i*spec.n_subset:(i+1)*spec.n_subset]
-        for i in range(n_subsets)
-    ]
-    create_histograms_subsets(returns_subsets, output_dir)
+    # ======================================================================
+    # OPTIONAL: Subset histograms (time-consuming for many subsets)
+    # ======================================================================
+    if args.output in ['subsets', 'all']:
+        print(f"\n📊 CREATING SUBSET HISTOGRAMS (--output {args.output})")
+        n_subsets = spec.n_total // spec.n_subset
+        returns_subsets = [
+            results['returns'][i*spec.n_subset:(i+1)*spec.n_subset]
+            for i in range(n_subsets)
+        ]
+        create_histograms_subsets(returns_subsets, output_dir)
+    else:
+        print(f"\n⊘  SKIPPING subset histograms (use --output subsets or --output all to include)")
     
-    # Save results
-    save_results(results, output_dir)
+    # ======================================================================
+    # OPTIONAL: Results files (large NPZ + CSV files)
+    # ======================================================================
+    if args.output in ['results', 'all']:
+        print(f"\n💾 SAVING RESULTS FILES (--output {args.output})")
+        save_results(results, output_dir)
+    else:
+        print(f"\n⊘  SKIPPING results files (use --output results or --output all to include)")
     
+    # ======================================================================
+    # COMPLETION SUMMARY
+    # ======================================================================
     print("\n" + "="*70)
     print("  ✅ PERTURBATION STUDY COMPLETE")
     print("="*70)
     print(f"\nOutput directory: {output_dir}/")
+    print(f"Output mode: {args.output}")
     print("\nFiles created:")
-    print("  • perturbation_results.npz    - Complete results")
-    print("  • scatter_stiefel.png         - Stiefel distance scatter")
-    print("  • scatter_grassmannian.png    - Grassmannian distance scatter")
-    print("  • histogram_full.png          - Full sample histogram")
-    print("  • histograms_subsets.png      - 100 subset histograms")
-    print("  • full_sample_stats.csv       - Sample statistics")
-    print("  • distances.csv               - Distance measurements")
+    
+    # Always created (core)
+    print("\n  Core Visualizations:")
+    print("    • scatter_stiefel.png              - Stiefel distance scatter")
+    print("    • scatter_grassmannian.png         - Grassmannian distance scatter")
+    print("    • histogram_stiefel_distances.png  - Stiefel error distribution")
+    print("    • histogram_grassmannian_distances.png - Grassmannian error distribution")
+    print("    • histogram_full.png               - Full sample histogram")
+    
+    # Conditionally created
+    if args.output in ['subsets', 'all']:
+        print("\n  Subset Diagnostics:")
+        print("    • histograms_subsets.png           - 100 subset histograms")
+    
+    if args.output in ['results', 'all']:
+        print("\n  Results Files:")
+        print("    • perturbation_results.npz         - Complete results (all arrays)")
+        print("    • full_sample_stats.csv            - Sample statistics")
+        print("    • distances.csv                    - Distance measurements")
+    
+    # Suggestions
+    if args.output == 'minimal':
+        print("\n  💡 Tip: Use --output all for complete documentation")
+        print("          Use --output results to save arrays for further analysis")
+    
     print()
 
 
