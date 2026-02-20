@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-build_and_simulate.py - Integrated Factor Model Builder & Analyzer
-===================================================================
+build_and_simulate.py - FINAL WORKING VERSION
+==============================================
+
+Imports the same way your successful test did.
 
 Usage: python build_and_simulate.py model_spec.json
 """
@@ -14,13 +16,24 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Union
 import numpy as np, scipy.linalg
 
-from factor_lab import (FactorModelData, svd_decomposition, ReturnsSimulator,
-                        DistributionFactory, save_model)
+# Import the same way your test did
+from factor_lab import (
+    FactorModelData, 
+    svd_decomposition, 
+    ReturnsSimulator,
+    FactorModelBuilder as NewFactorModelBuilder,
+    FlexibleReturnsSimulator,
+    create_sampler,
+    save_model
+)
+
 from factor_lab.analysis import SimulationContext
 from factor_lab.analyses import Analyses
-from factor_lab.visualization import (create_manifold_dashboard, 
-                                      create_interactive_plotly_dashboard,
-                                      print_verbose_results)
+from factor_lab.visualization import (
+    create_manifold_dashboard, 
+    create_interactive_plotly_dashboard,
+    print_verbose_results
+)
 
 @dataclass
 class DistConfig:
@@ -64,18 +77,36 @@ class JsonParser:
         with open(filepath, 'r') as f:
             data = json.load(f)
         meta = data.get("meta", {})
-        factors = [DistConfig(name=f.get("distribution", "normal"), params=f.get("params", {}),
-                             transform=f.get("transform")) for f in data.get("factor_loadings", [])]
+        factors = [
+            DistConfig(
+                name=f.get("distribution", "normal"), 
+                params=f.get("params", {}),
+                transform=f.get("transform")
+            ) 
+            for f in data.get("factor_loadings", [])
+        ]
         cov_data = data.get("covariance", {})
         f_vars = [cls._parse_numeric(x) for x in cov_data.get("F_diagonal", [])]
         d_var = cls._parse_numeric(cov_data.get("D_diagonal", 0.1))
-        sims = [SimConfig(name=s.get("name"), dist_type=s.get("type", "normal"),
-                         params=s.get("params", {})) for s in data.get("simulations", [])]
-        return ModelSpec(p_assets=meta.get("p_assets", 100), sim_n_periods=meta.get("n_periods", 100),
-                        factor_loadings=factors, factor_variances=f_vars,
-                        idio_variance=d_var, simulations=sims)
+        sims = [
+            SimConfig(
+                name=s.get("name"), 
+                dist_type=s.get("type", "normal"),
+                params=s.get("params", {})
+            ) 
+            for s in data.get("simulations", [])
+        ]
+        return ModelSpec(
+            p_assets=meta.get("p_assets", 100), 
+            sim_n_periods=meta.get("n_periods", 100),
+            factor_loadings=factors, 
+            factor_variances=f_vars,
+            idio_variance=d_var, 
+            simulations=sims
+        )
 
 class FactorModelBuilder:
+    """Model builder (maintains compatibility with old JSON config)."""
     def __init__(self, rng: np.random.Generator):
         self.rng = rng
     
@@ -85,72 +116,95 @@ class FactorModelBuilder:
     def build(self, spec: ModelSpec) -> FactorModelData:
         print(f"\n🏗️  Building: p={spec.p_assets}, k={spec.k_factors}")
         B = np.zeros((spec.k_factors, spec.p_assets))
+        
         for i, config in enumerate(spec.factor_loadings):
-            loc, scale = config.params.get("loc", 0.0), config.params.get("scale", 1.0)
+            loc = config.params.get("loc", 0.0)
+            scale = config.params.get("scale", 1.0)
             raw = self.rng.normal(loc, scale, spec.p_assets)
+            
             if config.transform == "gram_schmidt" and i > 0:
-                print(f"   ↳ Factor {i+1}: Gram-Schmidt")
+                print(f"   ↳ Factor {i+1}: Gram-Schmidt orthogonalization")
                 B[i, :] = self._gram_schmidt_project(raw, B[0, :])
             else:
                 B[i, :] = raw
-        F, D = np.diag(spec.factor_variances), np.diag(np.full(spec.p_assets, spec.idio_variance))
+        
+        F = np.diag(spec.factor_variances)
+        D = np.diag(np.full(spec.p_assets, spec.idio_variance))
+        
         print(f"   ✓ Built successfully")
         return FactorModelData(B=B, F=F, D=D)
 
 class AnalysisEngine:
+    """Analysis engine using NEW FlexibleReturnsSimulator API."""
+    
     def __init__(self, model, spec, rng):
-        self.model, self.spec, self.rng = model, spec, rng
-        self.factory = DistributionFactory(rng)
+        self.model = model
+        self.spec = spec
+        self.rng = rng
+    
+    def _create_return_samplers(self, sim_config):
+        """Create return distribution samplers from simulation config."""
+        factory = lambda name, **p: create_sampler(name, self.rng, **p)
+        
+        if sim_config.dist_type == "normal":
+            # Normal returns
+            factor_sampler = factory("normal", loc=0, scale=1)
+            idio_sampler = factory("normal", loc=0, scale=1)
+        
+        elif sim_config.dist_type == "student_t":
+            # Student-t returns
+            df_factors = sim_config.params.get("df_factors", 5)
+            df_idio = sim_config.params.get("df_idio", 7)
+            
+            factor_sampler = factory("student_t", df=df_factors, loc=0, scale=1)
+            idio_sampler = factory("student_t", df=df_idio, loc=0, scale=1)
+        
+        else:
+            # Default to normal
+            print(f"   ⚠ Unknown distribution '{sim_config.dist_type}', using normal")
+            factor_sampler = factory("normal", loc=0, scale=1)
+            idio_sampler = factory("normal", loc=0, scale=1)
+        
+        return factor_sampler, idio_sampler
     
     def run_simulation_and_analyze(self, sim_config):
         print(f"\n{'='*70}\n  {sim_config.name} ({sim_config.dist_type})\n{'='*70}")
         
-        simulator = ReturnsSimulator(self.model, rng=self.rng)
+        # NEW API: Create flexible simulator
+        simulator = FlexibleReturnsSimulator(rng=self.rng)
         
-        # Configure distributions based on sim_config
-        if sim_config.dist_type != "normal":
-            try:
-                # Handle factor distribution
-                if 'df_factors' in sim_config.params:
-                    # Student t for factors
-                    df_factors = sim_config.params['df_factors']
-                    factor_sampler = self.factory.create("student_t", df=df_factors)
-                    simulator.set_factor_distribution(factor_sampler)
-                    print(f"   ℹ️  Using t(df={df_factors}) for factors")
-                
-                # Handle idiosyncratic distribution
-                if 'df_idio' in sim_config.params:
-                    # Student t for idiosyncratic
-                    df_idio = sim_config.params['df_idio']
-                    idio_sampler = self.factory.create("student_t", df=df_idio)
-                    simulator.set_idio_distribution(idio_sampler)
-                    print(f"   ℹ️  Using t(df={df_idio}) for idiosyncratic")
-                
-                # If no separate params, apply to factors only
-                if 'df_factors' not in sim_config.params and 'df_idio' not in sim_config.params:
-                    if 'df' in sim_config.params:
-                        df = sim_config.params['df']
-                        sampler = self.factory.create("student_t", df=df)
-                        simulator.set_factor_distribution(sampler)
-                        print(f"   ℹ️  Using t(df={df}) for factors")
-                        
-            except Exception as e:
-                print(f"   ⚠️  Error setting distribution: {e}, using normal")
+        # Get return distribution samplers
+        factor_sampler, idio_sampler = self._create_return_samplers(sim_config)
         
-        results = simulator.simulate(self.spec.sim_n_periods)
+        # Simulate with NEW API
+        results = simulator.simulate(
+            model=self.model,
+            n_periods=self.spec.sim_n_periods,
+            factor_return_samplers=factor_sampler,
+            idio_return_sampler=idio_sampler
+        )
+        
         returns = results['security_returns']
         
         print(f"\n✓ Simulated: {returns.shape}")
         est_model = svd_decomposition(returns, k=self.model.k)
         
-        context = SimulationContext(model=self.model, security_returns=returns,
-                                   factor_returns=results['factor_returns'],
-                                   idio_returns=results['idio_returns'])
+        context = SimulationContext(
+            model=self.model, 
+            security_returns=returns,
+            factor_returns=results['factor_returns'],
+            idio_returns=results['idio_returns']
+        )
         
         print(f"\n🔬 Analyzing...")
-        analyses = [("Manifold", Analyses.manifold_distances()),
-                   ("Eigenvalue", Analyses.eigenvalue_analysis(k_top=self.model.k, compare_eigenvectors=True)),
-                   ("Eigenvector", Analyses.eigenvector_comparison(k=self.model.k))]
+        analyses = [
+            ("Manifold", Analyses.manifold_distances()),
+            ("Eigenvalue", Analyses.eigenvalue_analysis(
+                k_top=self.model.k, 
+                compare_eigenvectors=True
+            )),
+            ("Eigenvector", Analyses.eigenvector_comparison(k=self.model.k)),
+        ]
         
         all_results = {}
         for name, analysis in analyses:
@@ -163,58 +217,52 @@ class AnalysisEngine:
         safe_name = sim_config.name.replace(" ", "_").lower()
         create_manifold_dashboard(all_results, Path(f"output/dash_{safe_name}.png"))
         try:
-            create_interactive_plotly_dashboard(all_results, Path(f"output/dash_{safe_name}.html"))
-        except: pass
+            create_interactive_plotly_dashboard(
+                all_results, 
+                Path(f"output/dash_{safe_name}.html")
+            )
+        except: 
+            pass
         
-        # Save comprehensive NPZ file (matching Gemini's format)
+        # Save comprehensive NPZ file
         print(f"\n💾 SAVING COMPREHENSIVE RESULTS")
         
-        # Compute orthonormalized B (true_ortho_B)
+        # Compute orthonormalized B
         Q_true, _ = scipy.linalg.qr(self.model.B.T, mode='economic')
         true_ortho_B = Q_true.T  # (k, p)
         
-        # Extract eigenvalues and eigenvectors from results
+        # Extract results
         true_eigenvalues = all_results.get('true_eigenvalues', np.array([]))
         true_eigenvectors = all_results.get('true_eigenvectors', np.array([]))
         sample_eigenvalues = all_results.get('sample_eigenvalues', np.array([]))
         sample_eigenvectors = all_results.get('sample_eigenvectors', np.array([]))
         
-        # Build comprehensive save dict (Gemini's format)
+        # Build comprehensive save dict
         save_dict = {
-            # Raw data
             'security_returns': returns,
-            
-            # True model
             'true_B': self.model.B,
-            'true_ortho_B': true_ortho_B,  # Orthonormalized version
+            'true_ortho_B': true_ortho_B,
             'true_F': self.model.F,
             'true_D': self.model.D,
             'true_eigenvalues': true_eigenvalues,
             'true_eigenvectors': true_eigenvectors,
-            
-            # Sample model
             'sample_B': est_model.B,
             'sample_F': est_model.F,
             'sample_D': est_model.D,
             'sample_eigenvalues': sample_eigenvalues,
             'sample_eigenvectors': sample_eigenvectors,
-            
-            # Manifold distances (with Gemini's naming)
             'dist_grassmannian': all_results.get('dist_grassmannian', np.nan),
             'dist_stiefel_procrustes': all_results.get('dist_procrustes', np.nan),
             'dist_stiefel_chordal': all_results.get('dist_chordal', np.nan),
             'principal_angles': all_results.get('principal_angles', np.array([])),
         }
         
-        # Add any other numeric results
         for key, value in all_results.items():
             if key not in save_dict and isinstance(value, (int, float, np.ndarray)):
                 save_dict[key] = value
         
-        # Save
         fname = f"simulation_{safe_name}.npz"
         np.savez_compressed(fname, **save_dict)
-        
         save_model(self.model, "factor_model.npz")
         
         print(f"   ✓ Comprehensive data: {fname}")
@@ -230,15 +278,21 @@ class AnalysisEngine:
         return all_results
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config_file", type=Path)
-    parser.add_argument("--seed", type=int, default=42)
+    parser = argparse.ArgumentParser(
+        description="Build factor model and run simulations (NEW API)"
+    )
+    parser.add_argument("config_file", type=Path, help="JSON configuration file")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
     
     if not args.config_file.exists():
         sys.exit(f"❌ File not found: {args.config_file}")
     
-    print("="*70 + "\n  FACTOR MODEL BUILDER & SIMULATOR\n" + "="*70)
+    print("="*70)
+    print("  FACTOR MODEL BUILDER & SIMULATOR (NEW API)")
+    print("  Using FlexibleReturnsSimulator")
+    print("="*70)
+    
     rng = np.random.default_rng(args.seed)
     spec = JsonParser.parse(args.config_file)
     model = FactorModelBuilder(rng).build(spec)
