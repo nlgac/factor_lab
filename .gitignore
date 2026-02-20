@@ -3,6 +3,10 @@
 *patch*
 *temp*
 *~backup*
+*build*
+*cleanup*
+*desktop*
+*suspended*
 ~*
 .~*
 #build*
