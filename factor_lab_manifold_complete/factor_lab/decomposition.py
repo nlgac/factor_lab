@@ -15,7 +15,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator
 from loguru import logger
 
-from .types import FactorModelData, CovarianceTransform, TransformType
+from .factor_types import FactorModelData
 
 # =============================================================================
 # ENUMS (Required by __init__.py)
