@@ -1,0 +1,32 @@
+# Backup files
+*.backup
+*.backup_*
+*_old.py
+*_new.py
+*_working.py
+*_fixed.py
+*.pyc
+__pycache__/
+
+# Temporary files
+quick_fix.py
+fix_init.py
+install_updates*.py
+verify_install.py
+check_imports.py
+
+# Output files
+output/
+*.npz
+*.png
+*.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
