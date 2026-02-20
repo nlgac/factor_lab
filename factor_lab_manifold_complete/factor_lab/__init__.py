@@ -1,24 +1,30 @@
-"""Factor Lab Manifold Analysis - Standalone Package"""
-__version__ = "2.2.0"
+# factor_lab/__init__.py
 
-from .types import (
-    FactorModelData, 
-    svd_decomposition,
-    ReturnsSimulator,
-    DistributionFactory,
-    save_model
-)
-from .analysis import SimulationAnalysis, SimulationContext
-from .analyses import (
-    Analyses,
-    ManifoldDistanceAnalysis,
-    ImplicitEigenAnalysis,
-    EigenvectorAlignment,
-)
+# Core data structures
+from .factor_types import FactorModelData
+
+# Estimation
+from .estimation import svd_decomposition
+
+# Simulation
+from .simulation import ReturnsSimulator
+
+# Distributions
+from .distributions import create_sampler, list_available_distributions
+
+# I/O
+from .model_io import save_model, load_model
+
+# For backward compatibility, you can alias:
+from .types import DistributionFactory  # Import the CLASS from types.py
 
 __all__ = [
-    'FactorModelData', 'svd_decomposition', 'ReturnsSimulator',
-    'DistributionFactory', 'save_model', 'SimulationAnalysis',
-    'SimulationContext', 'Analyses', 'ManifoldDistanceAnalysis',
-    'ImplicitEigenAnalysis', 'EigenvectorAlignment',
+    'FactorModelData',
+    'svd_decomposition',
+    'ReturnsSimulator',
+    'create_sampler',
+    'DistributionFactory',  # Alias for compatibility
+    'save_model',
+    'load_model',
+    'list_available_distributions',
 ]

@@ -106,6 +106,37 @@ class AnalysisEngine:
         print(f"\n{'='*70}\n  {sim_config.name} ({sim_config.dist_type})\n{'='*70}")
         
         simulator = ReturnsSimulator(self.model, rng=self.rng)
+        
+        # Configure distributions based on sim_config
+        if sim_config.dist_type != "normal":
+            try:
+                # Handle factor distribution
+                if 'df_factors' in sim_config.params:
+                    # Student t for factors
+                    df_factors = sim_config.params['df_factors']
+                    factor_sampler = self.factory.create("student_t", df=df_factors)
+                    simulator.set_factor_distribution(factor_sampler)
+                    print(f"   ℹ️  Using t(df={df_factors}) for factors")
+                
+                # Handle idiosyncratic distribution
+                if 'df_idio' in sim_config.params:
+                    # Student t for idiosyncratic
+                    df_idio = sim_config.params['df_idio']
+                    idio_sampler = self.factory.create("student_t", df=df_idio)
+                    simulator.set_idio_distribution(idio_sampler)
+                    print(f"   ℹ️  Using t(df={df_idio}) for idiosyncratic")
+                
+                # If no separate params, apply to factors only
+                if 'df_factors' not in sim_config.params and 'df_idio' not in sim_config.params:
+                    if 'df' in sim_config.params:
+                        df = sim_config.params['df']
+                        sampler = self.factory.create("student_t", df=df)
+                        simulator.set_factor_distribution(sampler)
+                        print(f"   ℹ️  Using t(df={df}) for factors")
+                        
+            except Exception as e:
+                print(f"   ⚠️  Error setting distribution: {e}, using normal")
+        
         results = simulator.simulate(self.spec.sim_n_periods)
         returns = results['security_returns']
         
