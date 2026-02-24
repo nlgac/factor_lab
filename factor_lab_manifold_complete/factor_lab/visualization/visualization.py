@@ -39,24 +39,43 @@ def create_manifold_dashboard(results: Dict[str, Any], output_path: Optional[Pat
     set_style()
     
     fig = plt.figure(figsize=(20, 12))
-    gs = fig.add_gridspec(3, 4, hspace=0.3, wspace=0.3)
-    
-    # 1. Eigenvalue Comparison
+    # First row/column: larger square cell for eigenvalue scatter; same scale + aligned grid
+    gs = fig.add_gridspec(
+        3, 4, hspace=0.3, wspace=0.3,
+        height_ratios=[1.25, 1, 1],
+        width_ratios=[0.9, 1, 1, 1],
+    )
+
+    # 1. Eigenvalue Comparison (scatter: ground truth vs sample, y=x reference)
     if 'true_eigenvalues' in results and 'sample_eigenvalues' in results:
         ax = fig.add_subplot(gs[0, 0])
-        true_ev = results['true_eigenvalues']
-        sample_ev = results['sample_eigenvalues']
-        
-        x = np.arange(1, len(true_ev) + 1)
-        ax.plot(x, true_ev, 'o-', label='True (Implicit)', linewidth=2, markersize=8)
-        ax.plot(x, sample_ev, 's-', label='Sample (PCA)', linewidth=2, markersize=8)
-        
-        ax.set_xlabel('Eigenvalue Index', fontsize=12)
-        ax.set_ylabel('Eigenvalue', fontsize=12)
+        true_ev = np.atleast_1d(results['true_eigenvalues'])
+        sample_ev = np.atleast_1d(results['sample_eigenvalues'])
+        n = min(len(true_ev), len(sample_ev))
+        true_ev, sample_ev = true_ev[:n], sample_ev[:n]
+
+        ax.scatter(true_ev, sample_ev, s=60, alpha=0.8, label='Eigenvalues', zorder=2)
+        for i in range(n):
+            ax.annotate(str(i + 1), (true_ev[i], sample_ev[i]), xytext=(5, 5), textcoords='offset points',
+                        fontsize=10, fontweight='bold', ha='left', va='bottom')
+        lim_lo = 0
+        data_hi = max(true_ev.max(), sample_ev.max())
+        span = max(data_hi - lim_lo, 1e-10)
+        margin = 0.12 * span
+        lim_hi = data_hi + margin
+        ax.plot([lim_lo, lim_hi], [lim_lo, lim_hi], 'k--', linewidth=2, label='y = x', zorder=1)
+        ax.set_xlim(lim_lo, lim_hi)
+        ax.set_ylim(lim_lo, lim_hi)
+        # Same ticks on x and y so grid is square and aligned
+        ticks = np.linspace(lim_lo, lim_hi, 6)
+        ax.set_xticks(ticks)
+        ax.set_yticks(ticks)
+        ax.set_xlabel('Ground truth eigenvalue', fontsize=12)
+        ax.set_ylabel('Sample eigenvalue', fontsize=12)
         ax.set_title('Eigenvalue Spectrum Comparison', fontweight='bold', fontsize=14)
         ax.legend()
         ax.grid(True, alpha=0.3)
-        ax.set_yscale('log')
+        ax.set_aspect('equal', adjustable='box')
     
     # 2. Principal Angles
     if 'principal_angles' in results:
@@ -97,50 +116,46 @@ def create_manifold_dashboard(results: Dict[str, Any], output_path: Optional[Pat
             ax.text(bar.get_x() + bar.get_width()/2., height,
                    f'{val:.4f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    # 4. Eigenvalue Errors
+    # 4. Eigenvalue Errors (bar chart, integer x-axis)
     if 'eigenvalue_errors' in results:
         ax = fig.add_subplot(gs[0, 3])
         errors = results['eigenvalue_errors']
-        
-        x = np.arange(1, len(errors) + 1)
-        ax.plot(x, errors, 'o-', linewidth=2, markersize=8, color='#e74c3c')
-        ax.axhline(0, color='black', linestyle='--', linewidth=2, alpha=0.5)
-        ax.fill_between(x, 0, errors, alpha=0.3, color='#e74c3c')
-        
+        x = np.arange(1, len(errors) + 1, dtype=int)
+        ax.bar(x, errors, alpha=0.7, color='#e74c3c', edgecolor='black', linewidth=1)
+        ax.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.5)
         ax.set_xlabel('Eigenvalue Index', fontsize=12)
         ax.set_ylabel('Error (Sample - True)', fontsize=12)
         ax.set_title('Eigenvalue Errors', fontweight='bold', fontsize=14)
-        ax.grid(True, alpha=0.3)
+        ax.set_xticks(x)
+        ax.grid(True, alpha=0.3, axis='y')
     
-    # 5. Eigenvector Correlations
+    # 5. Eigenvector Correlations (integer x-axis)
     if 'vector_correlations' in results:
         ax = fig.add_subplot(gs[1, 0])
         corrs = results['vector_correlations']
-        
+        x = np.arange(1, len(corrs) + 1, dtype=int)
         colors = ['#2ecc71' if c > 0.9 else '#f39c12' if c > 0.7 else '#e74c3c' for c in corrs]
-        bars = ax.bar(np.arange(1, len(corrs) + 1), corrs, color=colors, 
-                     alpha=0.7, edgecolor='black', linewidth=1.5)
+        ax.bar(x, corrs, color=colors, alpha=0.7, edgecolor='black', linewidth=1.5)
         ax.axhline(0.9, color='green', linestyle='--', alpha=0.5, linewidth=2, label='90% threshold')
         ax.axhline(0.7, color='orange', linestyle='--', alpha=0.5, linewidth=2, label='70% threshold')
-        
         ax.set_xlabel('Eigenvector Index', fontsize=12)
         ax.set_ylabel('Absolute Correlation', fontsize=12)
         ax.set_title('Eigenvector Correlations', fontweight='bold', fontsize=14)
         ax.set_ylim([0, 1.05])
+        ax.set_xticks(x)
         ax.legend()
         ax.grid(True, alpha=0.3, axis='y')
     
-    # 6. Relative Eigenvalue Errors
+    # 6. Relative Eigenvalue Errors (integer x-axis)
     if 'eigenvalue_relative_errors' in results:
         ax = fig.add_subplot(gs[1, 1])
         rel_errors = results['eigenvalue_relative_errors']
-        
-        x = np.arange(1, len(rel_errors) + 1)
-        ax.bar(x, np.abs(rel_errors) * 100, alpha=0.7, color='#3498db', edgecolor='black')
-        
+        x = np.arange(1, len(rel_errors) + 1, dtype=int)
+        ax.bar(x, np.abs(rel_errors) * 100, alpha=0.7, color='#3498db', edgecolor='black', linewidth=1)
         ax.set_xlabel('Eigenvalue Index', fontsize=12)
         ax.set_ylabel('Relative Error (%)', fontsize=12)
         ax.set_title('Relative Eigenvalue Errors', fontweight='bold', fontsize=14)
+        ax.set_xticks(x)
         ax.grid(True, alpha=0.3, axis='y')
     
     # 7. Summary Statistics Box
@@ -163,36 +178,59 @@ def create_manifold_dashboard(results: Dict[str, Any], output_path: Optional[Pat
     ax.text(0.1, 0.5, summary_text, fontsize=14, family='monospace',
             verticalalignment='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
-    # 8. Loading Heatmap (if available)
+    # 8. Eigenvector Loadings: Factor 1 and Factor 2 — grouped bars per asset (True vs Sample), same y-scale
     if 'true_eigenvectors' in results and 'sample_eigenvectors' in results:
-        ax = fig.add_subplot(gs[2, :2])
-        true_ev = results['true_eigenvectors']
-        
-        # Show first few eigenvectors
-        n_show = min(3, true_ev.shape[0])
-        n_assets = min(50, true_ev.shape[1])
-        
-        sns.heatmap(true_ev[:n_show, :n_assets], 
-                   cmap='RdBu_r', center=0, ax=ax,
-                   cbar_kws={'label': 'Loading'})
-        ax.set_xlabel('Asset Index', fontsize=12)
-        ax.set_ylabel('Eigenvector', fontsize=12)
-        ax.set_title('True Eigenvector Loadings (Heatmap)', fontweight='bold', fontsize=14)
-    
-    # 9. Comparison Heatmap
-    if 'sample_eigenvectors' in results:
-        ax = fig.add_subplot(gs[2, 2:])
-        sample_ev = results['sample_eigenvectors']
-        
-        n_show = min(3, sample_ev.shape[0])
-        n_assets = min(50, sample_ev.shape[1])
-        
-        sns.heatmap(sample_ev[:n_show, :n_assets],
-                   cmap='RdBu_r', center=0, ax=ax,
-                   cbar_kws={'label': 'Loading'})
-        ax.set_xlabel('Asset Index', fontsize=12)
-        ax.set_ylabel('Eigenvector', fontsize=12)
-        ax.set_title('Sample Eigenvector Loadings (Heatmap)', fontweight='bold', fontsize=14)
+        true_ev = np.atleast_2d(results['true_eigenvectors'])
+        sample_ev = np.atleast_2d(results['sample_eigenvectors'])
+        n_factors = min(true_ev.shape[0], sample_ev.shape[0])
+        n_assets = min(true_ev.shape[1], sample_ev.shape[1])
+        x_assets = np.arange(1, n_assets + 1)
+        bar_width = 0.35  # half-width for each bar so two bars sit side-by-side per asset
+
+        # Shared y limits across Factor 1 and Factor 2
+        all_vals = [true_ev[0, :n_assets], sample_ev[0, :n_assets]]
+        if n_factors >= 2:
+            all_vals.extend([true_ev[1, :n_assets], sample_ev[1, :n_assets]])
+        y_min = min(v.min() for v in all_vals)
+        y_max = max(v.max() for v in all_vals)
+        span = max(y_max - y_min, 1e-10)
+        margin = 0.08 * span
+        y_lim_lo, y_lim_hi = y_min - margin, y_max + margin
+
+        # Left: Factor 1 — grouped bars (True, Sample) per asset
+        ax1 = fig.add_subplot(gs[2, :2])
+        ax1.bar(x_assets - bar_width, true_ev[0, :n_assets], width=2 * bar_width * 0.9, label='True',
+                color='#3498db', alpha=0.85, edgecolor='white', linewidth=0.5)
+        ax1.bar(x_assets + bar_width, sample_ev[0, :n_assets], width=2 * bar_width * 0.9, label='Sample',
+                color='#e67e22', alpha=0.85, edgecolor='white', linewidth=0.5)
+        ax1.axhline(0, color='black', linestyle='-', linewidth=0.5, alpha=0.6)
+        ax1.set_xlabel('Asset index', fontsize=12)
+        ax1.set_ylabel('Loading', fontsize=12)
+        ax1.set_title('Factor 1: True vs Sample Loadings', fontweight='bold', fontsize=14)
+        ax1.legend(loc='upper right', fontsize=10)
+        ax1.set_ylim(y_lim_lo, y_lim_hi)
+        ax1.set_xlim(x_assets[0] - 2 * bar_width - 0.5, x_assets[-1] + 2 * bar_width + 0.5)
+        ax1.grid(True, alpha=0.3, axis='y')
+
+        # Right: Factor 2 — same bar style, same y scale
+        ax2 = fig.add_subplot(gs[2, 2:])
+        if n_factors >= 2:
+            ax2.bar(x_assets - bar_width, true_ev[1, :n_assets], width=2 * bar_width * 0.9, label='True',
+                   color='#3498db', alpha=0.85, edgecolor='white', linewidth=0.5)
+            ax2.bar(x_assets + bar_width, sample_ev[1, :n_assets], width=2 * bar_width * 0.9, label='Sample',
+                   color='#e67e22', alpha=0.85, edgecolor='white', linewidth=0.5)
+            ax2.axhline(0, color='black', linestyle='-', linewidth=0.5, alpha=0.6)
+            ax2.set_xlabel('Asset index', fontsize=12)
+            ax2.set_ylabel('Loading', fontsize=12)
+            ax2.set_title('Factor 2: True vs Sample Loadings', fontweight='bold', fontsize=14)
+            ax2.legend(loc='upper right', fontsize=10)
+            ax2.set_ylim(y_lim_lo, y_lim_hi)
+            ax2.set_xlim(x_assets[0] - 2 * bar_width - 0.5, x_assets[-1] + 2 * bar_width + 0.5)
+            ax2.grid(True, alpha=0.3, axis='y')
+        else:
+            ax2.axis('off')
+            ax2.text(0.5, 0.5, 'Only one factor in model', ha='center', va='center',
+                     fontsize=14, transform=ax2.transAxes)
     
     plt.suptitle('Manifold Analysis Dashboard', fontsize=18, fontweight='bold', y=0.98)
     
