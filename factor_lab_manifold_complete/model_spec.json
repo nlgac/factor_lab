@@ -19,7 +19,14 @@
   ],
   "covariance": {
     "F_diagonal": ["0.18^2", "0.05^2"],
-    "D_diagonal": 0.16
+    "D_diagonal": {
+      "distribution": "uniform",
+      "params": { "low": 0.1, "high": 0.7 }
+    }
+  },
+  "_covariance_D_examples": {
+    "homoskedastic": "D_diagonal: 0.16",
+    "heteroskedastic": "D_diagonal: { \"distribution\": \"uniform\", \"params\": { \"low\": 0.1, \"high\": 0.7 } }"
   },
   "simulations": [
     {

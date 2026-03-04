@@ -52,13 +52,19 @@ class ModelSpec:
     p_assets: int
     factor_loadings: List[DistConfig]
     factor_variances: List[float]
-    idio_variance: float
-    sim_n_periods: int
-    simulations: List[SimConfig]
+    idio_variance: Optional[float] = None  # homoskedastic: single variance for all assets
+    idio_dist: Optional[DistConfig] = None  # heteroskedastic: draw one variance per asset from this dist
+    sim_n_periods: int = 63
+    simulations: List[SimConfig] = field(default_factory=list)
     
     @property
     def k_factors(self) -> int:
         return len(self.factor_loadings)
+    
+    @property
+    def is_homoskedastic(self) -> bool:
+        """True if idiosyncratic variance is constant across assets."""
+        return self.idio_dist is None
 
 class JsonParser:
     @staticmethod
@@ -87,21 +93,33 @@ class JsonParser:
         ]
         cov_data = data.get("covariance", {})
         f_vars = [cls._parse_numeric(x) for x in cov_data.get("F_diagonal", [])]
-        d_var = cls._parse_numeric(cov_data.get("D_diagonal", 0.1))
+        d_spec = cov_data.get("D_diagonal", 0.1)
+        # D_diagonal: number -> homoskedastic; object with distribution/params -> heteroskedastic
+        if isinstance(d_spec, dict) and "distribution" in d_spec:
+            idio_variance = None
+            idio_dist = DistConfig(
+                name=d_spec.get("distribution", "uniform"),
+                params=d_spec.get("params", {}),
+                transform=None
+            )
+        else:
+            idio_variance = cls._parse_numeric(d_spec) if not isinstance(d_spec, dict) else 0.1
+            idio_dist = None
         sims = [
             SimConfig(
-                name=s.get("name"), 
+                name=s.get("name"),
                 dist_type=s.get("type", "normal"),
                 params=s.get("params", {})
-            ) 
+            )
             for s in data.get("simulations", [])
         ]
         return ModelSpec(
-            p_assets=meta.get("p_assets", 100), 
+            p_assets=meta.get("p_assets", 100),
             sim_n_periods=meta.get("n_periods", 100),
-            factor_loadings=factors, 
+            factor_loadings=factors,
             factor_variances=f_vars,
-            idio_variance=d_var, 
+            idio_variance=idio_variance,
+            idio_dist=idio_dist,
             simulations=sims
         )
 
@@ -129,7 +147,17 @@ class FactorModelBuilder:
                 B[i, :] = raw
         
         F = np.diag(spec.factor_variances)
-        D = np.diag(np.full(spec.p_assets, spec.idio_variance))
+        if spec.is_homoskedastic:
+            if spec.idio_variance is None:
+                raise ValueError("covariance.D_diagonal must be a number for homoskedastic idio variance")
+            D = np.diag(np.full(spec.p_assets, spec.idio_variance))
+            print(f"   ↳ Idio: homoskedastic (σ² = {spec.idio_variance})")
+        else:
+            sampler = create_sampler(spec.idio_dist.name, self.rng, **spec.idio_dist.params)
+            idio_variances = sampler(spec.p_assets)
+            idio_variances = np.maximum(idio_variances, 1e-10)  # ensure positive
+            D = np.diag(idio_variances)
+            print(f"   ↳ Idio: heteroskedastic ({spec.idio_dist.name} {spec.idio_dist.params}, min={idio_variances.min():.3f}, max={idio_variances.max():.3f})")
         
         print(f"   ✓ Built successfully")
         return FactorModelData(B=B, F=F, D=D)
