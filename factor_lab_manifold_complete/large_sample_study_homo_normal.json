@@ -1,0 +1,16 @@
+{
+  "p_assets": 5000,
+  "subsample_sizes": [100, 500, 1000, 5000],
+  "k_factors": 2,
+  "n_windows": 100,
+  "window_size": 63,
+  "factor_variances": [0.16, 0.05],
+  "factor_loadings_distribution": "normal",
+  "specific_variance_type":  "homoskedastic",
+  "idio_variance": 0.01,
+  "loading_mean": 0,
+  "loading_std": 1,
+  "t_df": 4,
+  "perturbation_epsilons": [0.01, 0.05, 0.1],
+  "random_seed": 42
+}
