@@ -499,39 +499,37 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
             figsize=(4 * n_eps, 3.5 * n_p),
             squeeze=False,
         )
-        fig.suptitle(f"Distance comparison – {metric_name}", fontsize=14, y=1.01)
+        fig.suptitle(f"Sample vs perturbation distance to truth – {metric_name}",
+                     fontsize=13, y=1.01)
 
         for row_i, p in enumerate(spec.subsample_sizes):
-            s = np.array(sample_truth[p][samp_key])    # sampling error across windows
+            s = np.array(sample_truth[p][samp_key])  # (n_windows,)
 
             for col_j, eps in enumerate(spec.perturbation_epsilons):
                 ax = axes[row_i][col_j]
-                d  = np.array(truth_perturb[(eps, p)][perturb_key])  # perturbation draws
+                d  = np.array(truth_perturb[(eps, p)][perturb_key])
 
-                # Shared bin edges so both histograms are on the same scale
-                all_vals = np.concatenate([s, d])
-                bins = np.linspace(all_vals.min(), all_vals.max(), 30)
+                # Density-normalised so both distributions are visually comparable
+                # despite 100 vs 2000 samples
+                ax.hist(d, bins=30, density=True, alpha=0.6, color="darkorange",
+                        label=f"perturb ε={eps}")
+                ax.hist(s, bins=30, density=True, alpha=0.6, color="steelblue",
+                        label="sampling error")
 
-                ax.hist(s, bins=bins, alpha=0.6, color="steelblue",
-                        label=f"sampling (n={len(s)})")
-                ax.hist(d, bins=bins, alpha=0.6, color="darkorange",
-                        label=f"perturb ε={eps} (n={len(d)})")
-
-                # Dashed vertical lines at the mean of each distribution
+                # Mean lines
+                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2)
                 ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2)
-                ax.axvline(d.mean(), color="darkorange",  linestyle="--", linewidth=1.2)
 
                 ax.set_title(f"p={p}, ε={eps}", fontsize=9)
-                ax.set_xlabel("distance")
-                ax.set_ylabel("count")
+                ax.set_xlabel("distance to truth")
+                ax.set_ylabel("density")
 
-                # Compact stats annotation in top-right corner
                 stats_txt = (
-                    f"samp  μ={s.mean():.3f} σ²={s.var():.2e}\n"
-                    f"perturb μ={d.mean():.3f} σ²={d.var():.2e}"
+                    f"perturb μ={d.mean():.4f}\n"
+                    f"sample  μ={s.mean():.4f}"
                 )
                 ax.text(0.97, 0.97, stats_txt, transform=ax.transAxes,
-                        fontsize=6.5, va="top", ha="right",
+                        fontsize=7, va="top", ha="right",
                         bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
 
                 if row_i == 0 and col_j == 0:
