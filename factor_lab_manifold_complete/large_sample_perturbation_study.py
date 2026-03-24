@@ -512,13 +512,13 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
                 # Density-normalised so both distributions are visually comparable
                 # despite 100 vs 2000 samples
                 ax.hist(d, bins=30, density=True, alpha=0.6, color="darkorange",
-                        label=f"perturb ε={eps}")
+                        label=f"perturb ε={eps}, truth->perturb")
                 ax.hist(s, bins=30, density=True, alpha=0.6, color="steelblue",
-                        label="sampling error")
+                        label="sampling error, truth -> sample")
 
                 # Mean lines
-                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2)
-                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2)
+                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth->perturb mean distance')
+                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label='truth -> sample mean distance')
 
                 ax.set_title(f"p={p}, ε={eps}", fontsize=9)
                 ax.set_xlabel("distance to truth")
@@ -614,6 +614,7 @@ def main():
 
     config_path = Path(args.config_file)
     spec = SuperSetSpec.from_json(config_path)
+    
 
     # Output folder is named after the config file (without extension)
     output_dir = config_path.parent / config_path.stem
