@@ -29,7 +29,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
-
+from scipy.stats import gaussian_kde
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -161,12 +161,16 @@ def create_factor_model(spec: SuperSetSpec, rng: np.random.Generator) -> FactorM
     if spec.factor_loadings_distribution == "normal":
         B = rng.normal(spec.loading_mean, spec.loading_std,
                        (spec.k_factors, spec.p_assets))
+        
     elif spec.factor_loadings_distribution == "heavy-tailed":
         # Scale t draws so the marginal std matches loading_std
         scale = spec.loading_std * np.sqrt((spec.t_df - 2) / spec.t_df)
         B = (rng.standard_t(df=spec.t_df, size=(spec.k_factors, spec.p_assets))
              * scale + spec.loading_mean)
 
+    # --- normalize rows of B to be unit length
+    B = orthonormalize(B).T  # (k, p) with orthonormal rows (factors uncorrelated at unit variance)
+    
     # --- Factor covariance F (k, k) ---
     if spec.factor_variances is None:
         # Geometrically decreasing variances as a sensible default
@@ -327,7 +331,7 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
         n_windows * 20 values per (eps, p) pair.
 
     'sample_perturb_distance_results'
-        {(eps, p): {'grassmann_sampling_perturb': [...], ...}}
+        {(eps, p): {'grassmann_sampling': [...], ...}}
         n_windows * 20 values per (eps, p) pair.
     """
     print("\n" + "=" * 70)
@@ -360,8 +364,8 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
     # Distance from the SVD estimate to a geodesic perturbation of B_true
     sample_perturb_distance_results = {
-        (eps, p): {"grassmann_sampling_perturb": [], "procrustes_sampling_perturb": [],
-                   "chordal_sampling_perturb": []}
+        (eps, p): {"grassmann_perturb": [], "procrustes_perturb": [],
+                   "chordal_perturb": []}
         for eps in spec.perturbation_epsilons
         for p   in spec.subsample_sizes
     }
@@ -400,9 +404,9 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
                     # Distance from the SVD estimate to the perturbed frame
                     dist_ests = compute_all_distances(B_estimated, random_frame)
-                    sample_perturb_distance_results[(eps, p)]["grassmann_sampling_perturb"].append(dist_ests['grassmannian'])
-                    sample_perturb_distance_results[(eps, p)]["procrustes_sampling_perturb"].append(dist_ests['procrustes'])
-                    sample_perturb_distance_results[(eps, p)]["chordal_sampling_perturb"].append(dist_ests['chordal'])
+                    sample_perturb_distance_results[(eps, p)]["grassmann_perturb"].append(dist_ests['grassmannian'])
+                    sample_perturb_distance_results[(eps, p)]["procrustes_perturb"].append(dist_ests['procrustes'])
+                    sample_perturb_distance_results[(eps, p)]["chordal_perturb"].append(dist_ests['chordal'])
 
     return {
         "sample_truth_distance_results":   sample_truth_distance_results,
@@ -488,6 +492,7 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
     The last matplotlib Figure created (one per metric).
     """
     sample_truth  = out_dict["sample_truth_distance_results"]
+    sample_perturb = out_dict["sample_perturb_distance_results"]
     truth_perturb = out_dict["truth_perturb_distance_results"]
 
     n_p   = len(spec.subsample_sizes)
@@ -499,26 +504,34 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
             figsize=(4 * n_eps, 3.5 * n_p),
             squeeze=False,
         )
-        fig.suptitle(f"Sample vs perturbation distance to truth – {metric_name}",
+        fig.suptitle(f"Sample vs Perturbation/Target and Truth vs. Perturbation/Target – {metric_name}",
                      fontsize=13, y=1.01)
 
         for row_i, p in enumerate(spec.subsample_sizes):
-            s = np.array(sample_truth[p][samp_key])  # (n_windows,)
 
             for col_j, eps in enumerate(spec.perturbation_epsilons):
+                s = np.array(sample_perturb[(eps,p)][perturb_key])  # (n_windows,)
+
                 ax = axes[row_i][col_j]
                 d  = np.array(truth_perturb[(eps, p)][perturb_key])
-
+                
+                #shared bins from Freedman-Diaconis rule applied to combined data for better visual comparison
+                shared_bins = np.histogram_bin_edges(np.concatenate([s, d]), bins='fd')
+                
                 # Density-normalised so both distributions are visually comparable
-                # despite 100 vs 2000 samples
-                ax.hist(d, bins=30, density=True, alpha=0.6, color="darkorange",
-                        label=f"perturb ε={eps}, truth->perturb")
-                ax.hist(s, bins=30, density=True, alpha=0.6, color="steelblue",
+                ax.hist(d, bins=shared_bins, density=True, alpha=0.6, color="darkorange",
+                        label=f"perturb ε={eps}, truth -> perturb/target")
+                ax.hist(s, bins=shared_bins, density=True, alpha=0.6, color="steelblue",
                         label="sampling error, truth -> sample")
 
+                #overlay KDE curves for smoother comparison
+                xs = np.linspace(shared_bins[0], shared_bins[-1], 300)
+                ax.plot(xs, gaussian_kde(d)(xs), color='darkorange', lw=2)
+                ax.plot(xs, gaussian_kde(s)(xs), color='steelblue', lw=2)
+                
                 # Mean lines
-                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth->perturb mean distance')
-                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label='truth -> sample mean distance')
+                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth -> perturb/target mean distance')
+                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label='sample -> perturb/target mean distance')
 
                 ax.set_title(f"p={p}, ε={eps}", fontsize=9)
                 ax.set_xlabel("distance to truth")
