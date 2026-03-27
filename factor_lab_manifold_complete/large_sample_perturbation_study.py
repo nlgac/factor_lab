@@ -425,8 +425,10 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
     Summarise run_perturbation_study output into a tidy DataFrame.
 
     Each row is one (metric, p, eps) combination with columns:
-        sampling_mean, sampling_median, sampling_var  – across n_windows samples
-        perturb_mean,  perturb_median,  perturb_var   – across n_windows * 20 draws
+        sampling_mean, sampling_median, sampling_var, sampling_min, sampling_max
+            – across n_windows samples
+        perturb_mean, perturb_median, perturb_var, perturb_min, perturb_max
+            – across n_windows * 20 draws
 
     Parameters
     ----------
@@ -453,9 +455,13 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
                     "sampling_mean":   s.mean(),
                     "sampling_median": np.median(s),
                     "sampling_var":    s.var(),
+                    "sampling_min":    float(s.min()),
+                    "sampling_max":    float(s.max()),
                     "perturb_mean":    d.mean(),
                     "perturb_median":  np.median(d),
                     "perturb_var":     d.var(),
+                    "perturb_min":     float(d.min()),
+                    "perturb_max":     float(d.max()),
                 })
 
     return pd.DataFrame(rows)
@@ -502,6 +508,27 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
         fig.suptitle(f"Sample vs perturbation distance to truth – {metric_name}",
                      fontsize=13, y=1.01)
 
+        # Shared distance range and bin edges across all panels in this figure
+        xmax = 0.0
+        for p in spec.subsample_sizes:
+            s = np.array(sample_truth[p][samp_key])
+            xmax = max(xmax, float(s.max()))
+            for eps in spec.perturbation_epsilons:
+                d = np.array(truth_perturb[(eps, p)][perturb_key])
+                xmax = max(xmax, float(d.max()))
+        xmax = max(xmax * 1.05, 1e-12)
+        bins = np.linspace(0.0, xmax, 100)
+
+        ymax = 0.0
+        for p in spec.subsample_sizes:
+            s = np.array(sample_truth[p][samp_key])
+            for eps in spec.perturbation_epsilons:
+                d = np.array(truth_perturb[(eps, p)][perturb_key])
+                hd, _ = np.histogram(d, bins=bins, density=True)
+                hs, _ = np.histogram(s, bins=bins, density=True)
+                ymax = max(ymax, float(hd.max()), float(hs.max()))
+        ymax = max(ymax * 1.05, 1e-12)
+
         for row_i, p in enumerate(spec.subsample_sizes):
             s = np.array(sample_truth[p][samp_key])  # (n_windows,)
 
@@ -511,10 +538,13 @@ def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
 
                 # Density-normalised so both distributions are visually comparable
                 # despite 100 vs 2000 samples
-                ax.hist(d, bins=30, density=True, alpha=0.6, color="darkorange",
+                ax.hist(d, bins=bins, density=True, alpha=0.6, color="darkorange",
                         label=f"perturb ε={eps}, truth->perturb")
-                ax.hist(s, bins=30, density=True, alpha=0.6, color="steelblue",
+                ax.hist(s, bins=bins, density=True, alpha=0.6, color="steelblue",
                         label="sampling error, truth -> sample")
+
+                ax.set_xlim(0.0, xmax)
+                ax.set_ylim(0.0, ymax)
 
                 # Mean lines
                 ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth->perturb mean distance')
