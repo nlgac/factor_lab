@@ -23,8 +23,8 @@ def distance_histograms(out_dict: dict, subsample_sizes:
     Layout:  rows = subsample sizes (p),  cols = perturbation epsilons (eps)
 
     Each panel overlays:
-      blue   – sampling error distances (n_windows values, one per window)
-      orange – perturbation distances at that eps  (n_windows * 20 values)
+      orange – truth -> target distances at that eps (n_windows * 20 values)
+      blue   – sample -> target distances at that eps (n_windows * 20 values)
 
     Dashed vertical lines mark the means of each distribution.  A stats
     annotation in the top-right corner shows mean and variance.
@@ -57,7 +57,7 @@ def distance_histograms(out_dict: dict, subsample_sizes:
             figsize=(4 * n_eps, 3.5 * n_p),
             squeeze=False,
         )
-        fig.suptitle(f"Sample vs Perturbation/Target and Truth vs. Perturbation/Target – {metric_name}",
+        fig.suptitle(f"Sample -> target vs Truth -> target distances – {metric_name}",
                      fontsize=13, y=1.01)
 
         for row_i, p in enumerate(subsample_sizes):
@@ -73,9 +73,9 @@ def distance_histograms(out_dict: dict, subsample_sizes:
                 
                 # Density-normalised so both distributions are visually comparable
                 ax.hist(d, bins=shared_bins, density=True, alpha=0.6, color="darkorange",
-                        label=f"perturb ε={eps}, truth -> perturb/target")
+                        label=f"target ε={eps}, truth -> target")
                 ax.hist(s, bins=shared_bins, density=True, alpha=0.6, color="steelblue",
-                        label="sampling error, truth -> sample")
+                        label="sample -> target")
 
                 #overlay KDE curves for smoother comparison
                 xs = np.linspace(shared_bins[0], shared_bins[-1], 300)
@@ -83,16 +83,16 @@ def distance_histograms(out_dict: dict, subsample_sizes:
                 ax.plot(xs, gaussian_kde(s)(xs), color='steelblue', lw=2)
                 
                 # Mean lines
-                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth -> perturb/target mean distance')
-                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label='sample -> perturb/target mean distance')
+                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2, label="truth -> target mean distance")
+                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label="sample -> target mean distance")
 
                 ax.set_title(f"p={p}, ε={eps}", fontsize=9)
-                ax.set_xlabel("distance to truth")
+                ax.set_xlabel("distance to target")
                 ax.set_ylabel("density")
 
                 stats_txt = (
-                    f"perturb μ={d.mean():.4f}\n"
-                    f"sample  μ={s.mean():.4f}"
+                    f"truth→target  μ={d.mean():.4f}\n"
+                    f"sample→target μ={s.mean():.4f}"
                 )
                 ax.text(0.97, 0.97, stats_txt, transform=ax.transAxes,
                         fontsize=7, va="top", ha="right",
@@ -127,10 +127,10 @@ def distance_histograms_shared_axes(
     That makes cross-panel comparisons across (p, ε) much easier.
 
     Panels overlay:
-      - truth → perturb distances (orange)
-      - truth → sample-estimate distances (blue)
+      - truth → target distances (orange)
+      - sample → target distances (blue)
     """
-    sample_truth = out_dict["sample_truth_distance_results"]
+    sample_perturb = out_dict["sample_perturb_distance_results"]
     truth_perturb = out_dict["truth_perturb_distance_results"]
 
     n_p = len(subsample_sizes)
@@ -144,7 +144,7 @@ def distance_histograms_shared_axes(
             squeeze=False,
         )
         fig.suptitle(
-            f"Sample vs perturbation distance to truth – {metric_name}",
+            f"Sample->target vs truth->target distances – {metric_name}",
             fontsize=13,
             y=1.01,
         )
@@ -152,10 +152,10 @@ def distance_histograms_shared_axes(
         # Determine shared x-range (distance) across all panels in this metric
         xmax = 0.0
         for p in subsample_sizes:
-            s = np.array(sample_truth[p][samp_key])
-            xmax = max(xmax, float(s.max()))
             for eps in perturbation_epsilons:
+                s = np.array(sample_perturb[(eps, p)][perturb_key])
                 d = np.array(truth_perturb[(eps, p)][perturb_key])
+                xmax = max(xmax, float(s.max()))
                 xmax = max(xmax, float(d.max()))
         xmax = max(xmax * 1.05, 1e-12)
         bins = np.linspace(0.0, xmax, 31)
@@ -163,8 +163,8 @@ def distance_histograms_shared_axes(
         # Determine shared y-range (density) across all panels in this metric
         ymax = 0.0
         for p in subsample_sizes:
-            s = np.array(sample_truth[p][samp_key])
             for eps in perturbation_epsilons:
+                s = np.array(sample_perturb[(eps, p)][perturb_key])
                 d = np.array(truth_perturb[(eps, p)][perturb_key])
                 hd, _ = np.histogram(d, bins=bins, density=True)
                 hs, _ = np.histogram(s, bins=bins, density=True)
@@ -172,10 +172,9 @@ def distance_histograms_shared_axes(
         ymax = max(ymax * 1.05, 1e-12)
 
         for row_i, p in enumerate(subsample_sizes):
-            s = np.array(sample_truth[p][samp_key])
-
             for col_j, eps in enumerate(perturbation_epsilons):
                 ax = axes[row_i][col_j]
+                s = np.array(sample_perturb[(eps, p)][perturb_key])
                 d = np.array(truth_perturb[(eps, p)][perturb_key])
 
                 ax.hist(
@@ -184,7 +183,7 @@ def distance_histograms_shared_axes(
                     density=True,
                     alpha=0.6,
                     color="darkorange",
-                    label=f"perturb ε={eps}, truth→perturb",
+                    label=f"target ε={eps}, truth→target",
                 )
                 ax.hist(
                     s,
@@ -192,7 +191,7 @@ def distance_histograms_shared_axes(
                     density=True,
                     alpha=0.6,
                     color="steelblue",
-                    label="sampling error, truth→sample",
+                    label="sample→target",
                 )
 
                 ax.set_xlim(0.0, xmax)
@@ -204,23 +203,23 @@ def distance_histograms_shared_axes(
                     color="darkorange",
                     linestyle="--",
                     linewidth=1.2,
-                    label="truth→perturb mean distance",
+                    label="truth→target mean distance",
                 )
                 ax.axvline(
                     s.mean(),
                     color="steelblue",
                     linestyle="--",
                     linewidth=1.2,
-                    label="truth→sample mean distance",
+                    label="sample→target mean distance",
                 )
 
                 ax.set_title(f"p={p}, ε={eps}", fontsize=9)
-                ax.set_xlabel("distance to truth")
+                ax.set_xlabel("distance")
                 ax.set_ylabel("density")
 
                 stats_txt = (
-                    f"perturb μ={d.mean():.4f}\n"
-                    f"sample  μ={s.mean():.4f}"
+                    f"truth→target μ={d.mean():.4f}\n"
+                    f"sample→target μ={s.mean():.4f}"
                 )
                 ax.text(
                     0.97,
