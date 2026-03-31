@@ -36,6 +36,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.linalg import expm
 import scipy.stats
+from tqdm import tqdm
 
 from factor_lab import (
     FactorModelData,
@@ -342,7 +343,8 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
     model  = create_factor_model(spec, rng)
     B_true = model.B   # (k, p_assets) – the ground-truth loading matrix
-
+    k = spec.k_factors
+    T = spec.window_size
     # Simulate all windows up front so the same returns are reused across p values
     all_returns = simulate_returns(model, n_periods=spec.n_windows,
                                    window_size=spec.window_size, rng=rng)
@@ -372,11 +374,31 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
     for p in spec.subsample_sizes:
         print(f"\n📊 Sample size: p = {p}")
+        
+        # Get True model of size p
+        B_true_p = B_true[:, :p]  # (k, p) — true loadings for this subsample
+        F_original = model.F[:p,:p]
+        Model_Covar = B_true_p.T @ F_original @ B_true_p
+
+        # SVD decomposition to get true orthonormal basis
+        _, s, Vt = np.linalg.svd(Model_Covar, full_matrices=False)
+            
+        # Extract top k components
+        F_star = (s[:k] ** 2) 
+        C = Vt[:k, :]  # Shape: (k, p)
+            
+        # Sign normalization: ensure each factor has positive mean
+        for i in range(k):
+            if C[i, :].mean() < 0:
+                C[i, :] *= -1
 
         for t in range(spec.n_windows):
             # Use only the first p assets from this window's returns
             returns = all_returns[t][:, :p]
-            B_true_p = B_true[:, :p]  # (k, p) — true loadings for this subsample
+
+
+            
+            
 
             # SVD estimate of the factor loading subspace from finite sample
             model_estimated = svd_decomposition(returns, k=spec.k_factors)
@@ -393,11 +415,11 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
                 for _ in range(20):
                     # Perturb the p-asset slice so all frames live in R^p
                     random_frame = construct_epsilon_distance_perturbation(
-                        eps, B_true_p.T, direction_rng
+                        eps, C.T, direction_rng
                     )  # (k, p)
 
                     # Distance from true subspace to the perturbed frame
-                    dists_truth = compute_all_distances(B_true_p, random_frame)
+                    dists_truth = compute_all_distances(C, random_frame)
                     truth_perturb_distance_results[(eps, p)]["grassmann_perturb"].append(dists_truth['grassmannian'])
                     truth_perturb_distance_results[(eps, p)]["procrustes_perturb"].append(dists_truth['procrustes'])
                     truth_perturb_distance_results[(eps, p)]["chordal_perturb"].append(dists_truth['chordal'])
