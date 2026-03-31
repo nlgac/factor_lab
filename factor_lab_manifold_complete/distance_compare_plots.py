@@ -1,6 +1,6 @@
 
-from seaborn.objects import Path
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import gaussian_kde
@@ -105,6 +105,144 @@ def distance_histograms(out_dict: dict, subsample_sizes:
         if output_dir is not None:
             fig.savefig(output_dir / f"distance_comparison_{metric_name}.png",
                         dpi=150, bbox_inches="tight")
+        plt.show()
+
+    return fig
+
+
+def distance_histograms_shared_axes(
+    out_dict: dict,
+    subsample_sizes: list,
+    perturbation_epsilons: list,
+    output_dir: Path = None,
+) -> plt.Figure:
+    """
+    Produce one histogram-grid figure per distance metric with shared axes.
+
+    This version forces every subplot in the figure (fixed metric) to share:
+      - the same x-range (distance axis)
+      - the same y-range (density axis)
+      - the same histogram bin edges
+
+    That makes cross-panel comparisons across (p, ε) much easier.
+
+    Panels overlay:
+      - truth → perturb distances (orange)
+      - truth → sample-estimate distances (blue)
+    """
+    sample_truth = out_dict["sample_truth_distance_results"]
+    truth_perturb = out_dict["truth_perturb_distance_results"]
+
+    n_p = len(subsample_sizes)
+    n_eps = len(perturbation_epsilons)
+
+    for metric_name, samp_key, perturb_key in METRICS:
+        fig, axes = plt.subplots(
+            n_p,
+            n_eps,
+            figsize=(4 * n_eps, 3.5 * n_p),
+            squeeze=False,
+        )
+        fig.suptitle(
+            f"Sample vs perturbation distance to truth – {metric_name}",
+            fontsize=13,
+            y=1.01,
+        )
+
+        # Determine shared x-range (distance) across all panels in this metric
+        xmax = 0.0
+        for p in subsample_sizes:
+            s = np.array(sample_truth[p][samp_key])
+            xmax = max(xmax, float(s.max()))
+            for eps in perturbation_epsilons:
+                d = np.array(truth_perturb[(eps, p)][perturb_key])
+                xmax = max(xmax, float(d.max()))
+        xmax = max(xmax * 1.05, 1e-12)
+        bins = np.linspace(0.0, xmax, 31)
+
+        # Determine shared y-range (density) across all panels in this metric
+        ymax = 0.0
+        for p in subsample_sizes:
+            s = np.array(sample_truth[p][samp_key])
+            for eps in perturbation_epsilons:
+                d = np.array(truth_perturb[(eps, p)][perturb_key])
+                hd, _ = np.histogram(d, bins=bins, density=True)
+                hs, _ = np.histogram(s, bins=bins, density=True)
+                ymax = max(ymax, float(hd.max()), float(hs.max()))
+        ymax = max(ymax * 1.05, 1e-12)
+
+        for row_i, p in enumerate(subsample_sizes):
+            s = np.array(sample_truth[p][samp_key])
+
+            for col_j, eps in enumerate(perturbation_epsilons):
+                ax = axes[row_i][col_j]
+                d = np.array(truth_perturb[(eps, p)][perturb_key])
+
+                ax.hist(
+                    d,
+                    bins=bins,
+                    density=True,
+                    alpha=0.6,
+                    color="darkorange",
+                    label=f"perturb ε={eps}, truth→perturb",
+                )
+                ax.hist(
+                    s,
+                    bins=bins,
+                    density=True,
+                    alpha=0.6,
+                    color="steelblue",
+                    label="sampling error, truth→sample",
+                )
+
+                ax.set_xlim(0.0, xmax)
+                ax.set_ylim(0.0, ymax)
+
+                # Mean lines
+                ax.axvline(
+                    d.mean(),
+                    color="darkorange",
+                    linestyle="--",
+                    linewidth=1.2,
+                    label="truth→perturb mean distance",
+                )
+                ax.axvline(
+                    s.mean(),
+                    color="steelblue",
+                    linestyle="--",
+                    linewidth=1.2,
+                    label="truth→sample mean distance",
+                )
+
+                ax.set_title(f"p={p}, ε={eps}", fontsize=9)
+                ax.set_xlabel("distance to truth")
+                ax.set_ylabel("density")
+
+                stats_txt = (
+                    f"perturb μ={d.mean():.4f}\n"
+                    f"sample  μ={s.mean():.4f}"
+                )
+                ax.text(
+                    0.97,
+                    0.97,
+                    stats_txt,
+                    transform=ax.transAxes,
+                    fontsize=7,
+                    va="top",
+                    ha="right",
+                    bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7),
+                )
+
+                if row_i == 0 and col_j == 0:
+                    ax.legend(fontsize=7)
+
+        fig.tight_layout()
+        if output_dir is not None:
+            fig.savefig(
+                output_dir / f"distance_comparison_{metric_name}.png",
+                dpi=150,
+                bbox_inches="tight",
+            )
         plt.show()
 
     return fig

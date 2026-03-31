@@ -429,8 +429,10 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
     Summarise run_perturbation_study output into a tidy DataFrame.
 
     Each row is one (metric, p, eps) combination with columns:
-        sampling_mean, sampling_median, sampling_var  – across n_windows samples
-        perturb_mean,  perturb_median,  perturb_var   – across n_windows * 20 draws
+        sampling_mean, sampling_median, sampling_var, sampling_min, sampling_max
+            – across n_windows samples
+        perturb_mean, perturb_median, perturb_var, perturb_min, perturb_max
+            – across n_windows * 20 draws
 
     Parameters
     ----------
@@ -457,9 +459,13 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
                     "sampling_mean":   s.mean(),
                     "sampling_median": np.median(s),
                     "sampling_var":    s.var(),
+                    "sampling_min":    float(s.min()),
+                    "sampling_max":    float(s.max()),
                     "perturb_mean":    d.mean(),
                     "perturb_median":  np.median(d),
                     "perturb_var":     d.var(),
+                    "perturb_min":     float(d.min()),
+                    "perturb_max":     float(d.max()),
                 })
 
     return pd.DataFrame(rows)
@@ -558,7 +564,12 @@ def main():
     plt.switch_backend("Agg")
     subsample_sizes   = spec.subsample_sizes
     perturbation_epsilons = spec.perturbation_epsilons
-    dcp.distance_histograms(results, subsample_sizes, perturbation_epsilons, output_dir=output_dir)
+    dcp.distance_histograms_shared_axes(
+        results,
+        subsample_sizes,
+        perturbation_epsilons,
+        output_dir=output_dir,
+    )
     print(f"\nPlots saved to: {output_dir}")
 
 
