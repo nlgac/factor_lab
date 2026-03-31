@@ -29,7 +29,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
-
+from scipy.stats import gaussian_kde
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -161,12 +161,16 @@ def create_factor_model(spec: SuperSetSpec, rng: np.random.Generator) -> FactorM
     if spec.factor_loadings_distribution == "normal":
         B = rng.normal(spec.loading_mean, spec.loading_std,
                        (spec.k_factors, spec.p_assets))
+        
     elif spec.factor_loadings_distribution == "heavy-tailed":
         # Scale t draws so the marginal std matches loading_std
         scale = spec.loading_std * np.sqrt((spec.t_df - 2) / spec.t_df)
         B = (rng.standard_t(df=spec.t_df, size=(spec.k_factors, spec.p_assets))
              * scale + spec.loading_mean)
 
+    # --- normalize rows of B to be unit length
+    B = orthonormalize(B).T  # (k, p) with orthonormal rows (factors uncorrelated at unit variance)
+    
     # --- Factor covariance F (k, k) ---
     if spec.factor_variances is None:
         # Geometrically decreasing variances as a sensible default
@@ -327,7 +331,7 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
         n_windows * 20 values per (eps, p) pair.
 
     'sample_perturb_distance_results'
-        {(eps, p): {'grassmann_sampling_perturb': [...], ...}}
+        {(eps, p): {'grassmann_sampling': [...], ...}}
         n_windows * 20 values per (eps, p) pair.
     """
     print("\n" + "=" * 70)
@@ -360,8 +364,8 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
     # Distance from the SVD estimate to a geodesic perturbation of B_true
     sample_perturb_distance_results = {
-        (eps, p): {"grassmann_sampling_perturb": [], "procrustes_sampling_perturb": [],
-                   "chordal_sampling_perturb": []}
+        (eps, p): {"grassmann_perturb": [], "procrustes_perturb": [],
+                   "chordal_perturb": []}
         for eps in spec.perturbation_epsilons
         for p   in spec.subsample_sizes
     }
@@ -400,9 +404,9 @@ def run_perturbation_study(spec: SuperSetSpec) -> Dict[str, dict]:
 
                     # Distance from the SVD estimate to the perturbed frame
                     dist_ests = compute_all_distances(B_estimated, random_frame)
-                    sample_perturb_distance_results[(eps, p)]["grassmann_sampling_perturb"].append(dist_ests['grassmannian'])
-                    sample_perturb_distance_results[(eps, p)]["procrustes_sampling_perturb"].append(dist_ests['procrustes'])
-                    sample_perturb_distance_results[(eps, p)]["chordal_sampling_perturb"].append(dist_ests['chordal'])
+                    sample_perturb_distance_results[(eps, p)]["grassmann_perturb"].append(dist_ests['grassmannian'])
+                    sample_perturb_distance_results[(eps, p)]["procrustes_perturb"].append(dist_ests['procrustes'])
+                    sample_perturb_distance_results[(eps, p)]["chordal_perturb"].append(dist_ests['chordal'])
 
     return {
         "sample_truth_distance_results":   sample_truth_distance_results,
@@ -425,10 +429,8 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
     Summarise run_perturbation_study output into a tidy DataFrame.
 
     Each row is one (metric, p, eps) combination with columns:
-        sampling_mean, sampling_median, sampling_var, sampling_min, sampling_max
-            – across n_windows samples
-        perturb_mean, perturb_median, perturb_var, perturb_min, perturb_max
-            – across n_windows * 20 draws
+        sampling_mean, sampling_median, sampling_var  – across n_windows samples
+        perturb_mean,  perturb_median,  perturb_var   – across n_windows * 20 draws
 
     Parameters
     ----------
@@ -455,123 +457,14 @@ def analyze_results(out_dict: dict, spec: SuperSetSpec) -> pd.DataFrame:
                     "sampling_mean":   s.mean(),
                     "sampling_median": np.median(s),
                     "sampling_var":    s.var(),
-                    "sampling_min":    float(s.min()),
-                    "sampling_max":    float(s.max()),
                     "perturb_mean":    d.mean(),
                     "perturb_median":  np.median(d),
                     "perturb_var":     d.var(),
-                    "perturb_min":     float(d.min()),
-                    "perturb_max":     float(d.max()),
                 })
 
     return pd.DataFrame(rows)
 
 
-def plot_distance_comparison(out_dict: dict, spec: SuperSetSpec,
-                             output_dir: Path = None) -> plt.Figure:
-    """
-    Produce one histogram-grid figure per distance metric.
-
-    Layout:  rows = subsample sizes (p),  cols = perturbation epsilons (eps)
-
-    Each panel overlays:
-      blue   – sampling error distances (n_windows values, one per window)
-      orange – perturbation distances at that eps  (n_windows * 20 values)
-
-    Dashed vertical lines mark the means of each distribution.  A stats
-    annotation in the top-right corner shows mean and variance.
-
-    Parameters
-    ----------
-    out_dict   : dict       output of run_perturbation_study
-    spec       : SuperSetSpec
-    output_dir : Path or None
-        If provided, each figure is saved as
-        ``output_dir/distance_comparison_<metric>.png``.
-
-    Returns
-    -------
-    The last matplotlib Figure created (one per metric).
-    """
-    sample_truth  = out_dict["sample_truth_distance_results"]
-    truth_perturb = out_dict["truth_perturb_distance_results"]
-
-    n_p   = len(spec.subsample_sizes)
-    n_eps = len(spec.perturbation_epsilons)
-
-    for metric_name, samp_key, perturb_key in METRICS:
-        fig, axes = plt.subplots(
-            n_p, n_eps,
-            figsize=(4 * n_eps, 3.5 * n_p),
-            squeeze=False,
-        )
-        fig.suptitle(f"Sample vs perturbation distance to truth – {metric_name}",
-                     fontsize=13, y=1.01)
-
-        # Shared distance range and bin edges across all panels in this figure
-        xmax = 0.0
-        for p in spec.subsample_sizes:
-            s = np.array(sample_truth[p][samp_key])
-            xmax = max(xmax, float(s.max()))
-            for eps in spec.perturbation_epsilons:
-                d = np.array(truth_perturb[(eps, p)][perturb_key])
-                xmax = max(xmax, float(d.max()))
-        xmax = max(xmax * 1.05, 1e-12)
-        bins = np.linspace(0.0, xmax, 100)
-
-        ymax = 0.0
-        for p in spec.subsample_sizes:
-            s = np.array(sample_truth[p][samp_key])
-            for eps in spec.perturbation_epsilons:
-                d = np.array(truth_perturb[(eps, p)][perturb_key])
-                hd, _ = np.histogram(d, bins=bins, density=True)
-                hs, _ = np.histogram(s, bins=bins, density=True)
-                ymax = max(ymax, float(hd.max()), float(hs.max()))
-        ymax = max(ymax * 1.05, 1e-12)
-
-        for row_i, p in enumerate(spec.subsample_sizes):
-            s = np.array(sample_truth[p][samp_key])  # (n_windows,)
-
-            for col_j, eps in enumerate(spec.perturbation_epsilons):
-                ax = axes[row_i][col_j]
-                d  = np.array(truth_perturb[(eps, p)][perturb_key])
-
-                # Density-normalised so both distributions are visually comparable
-                # despite 100 vs 2000 samples
-                ax.hist(d, bins=bins, density=True, alpha=0.6, color="darkorange",
-                        label=f"perturb ε={eps}, truth->perturb")
-                ax.hist(s, bins=bins, density=True, alpha=0.6, color="steelblue",
-                        label="sampling error, truth -> sample")
-
-                ax.set_xlim(0.0, xmax)
-                ax.set_ylim(0.0, ymax)
-
-                # Mean lines
-                ax.axvline(d.mean(), color="darkorange", linestyle="--", linewidth=1.2,label='truth->perturb mean distance')
-                ax.axvline(s.mean(), color="steelblue",  linestyle="--", linewidth=1.2, label='truth -> sample mean distance')
-
-                ax.set_title(f"p={p}, ε={eps}", fontsize=9)
-                ax.set_xlabel("distance to truth")
-                ax.set_ylabel("density")
-
-                stats_txt = (
-                    f"perturb μ={d.mean():.4f}\n"
-                    f"sample  μ={s.mean():.4f}"
-                )
-                ax.text(0.97, 0.97, stats_txt, transform=ax.transAxes,
-                        fontsize=7, va="top", ha="right",
-                        bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
-
-                if row_i == 0 and col_j == 0:
-                    ax.legend(fontsize=7)
-
-        fig.tight_layout()
-        if output_dir is not None:
-            fig.savefig(output_dir / f"distance_comparison_{metric_name}.png",
-                        dpi=150, bbox_inches="tight")
-        plt.show()
-
-    return fig
 
 
 def construct_epsilon_distance_perturbation(
@@ -637,6 +530,7 @@ def construct_epsilon_distance_perturbation(
 
 def main():
     import argparse
+    import distance_compare_plots as dcp
 
     parser = argparse.ArgumentParser(description="Large-sample perturbation study")
     parser.add_argument("config_file", type=str, help="JSON configuration file")
@@ -662,7 +556,9 @@ def main():
 
     # Save histogram plots (non-interactive backend for CLI use)
     plt.switch_backend("Agg")
-    plot_distance_comparison(results, spec, output_dir=output_dir)
+    subsample_sizes   = spec.subsample_sizes
+    perturbation_epsilons = spec.perturbation_epsilons
+    dcp.distance_histograms(results, subsample_sizes, perturbation_epsilons, output_dir=output_dir)
     print(f"\nPlots saved to: {output_dir}")
 
 
