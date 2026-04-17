@@ -1,0 +1,14 @@
+{
+  "p_assets": 500,
+  "k_factors": 2,
+  "n_values": [21, 42, 63, 126],
+  "theta_values": [0.001, 0.005, 0.01],
+  "n_simulations": 100,
+  "distributions": ["gaussian", "t"],
+  "factor_variances": [0.0324, 0.0025],
+  "idio_variance": 0.01,
+  "loading_mean": 0,
+  "loading_std": 1,
+  "t_df": 4,
+  "random_seed": 42
+}
