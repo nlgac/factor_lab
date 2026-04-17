@@ -1,5 +1,5 @@
 """
-returns_simulator.py - Returns Simulation
+flexible_simulator.py - Returns Simulation
 
 Simulates returns from factor models using arbitrary distributions.
 
@@ -37,13 +37,11 @@ Usage
 >>> returns = results['security_returns']  # (1000, 100)
 """
 
-from typing import Union, List, Callable, Optional, Dict
+from typing import Union, List, Optional, Dict
 import numpy as np
 
 from .factor_types import FactorModelData
-
-# Universal sampler interface
-Sampler = Callable[[int], np.ndarray]
+from .distributions import resolve_samplers, Sampler
 
 
 class ReturnsSimulator:
@@ -266,7 +264,7 @@ class ReturnsSimulator:
         k, p = model.k, model.p
         
         # Resolve factor_return_samplers to list of k samplers
-        factor_samplers_list = self._resolve_to_list(
+        factor_samplers_list = resolve_samplers(
             factor_return_samplers, k, "factor_return_samplers"
         )
         
@@ -386,52 +384,3 @@ class ReturnsSimulator:
         idio_returns = raw_returns * idio_stds[np.newaxis, :]
         
         return idio_returns
-    
-    def _resolve_to_list(
-        self,
-        sampler_spec: Union[Sampler, List[Sampler]],
-        expected_length: int,
-        param_name: str
-    ) -> List[Sampler]:
-        """
-        Resolve sampler specification to list of samplers.
-        
-        Same as in FactorModelBuilder - handles broadcasting.
-        
-        Parameters
-        ----------
-        sampler_spec : Sampler or List[Sampler]
-            Either a single sampler or list of samplers
-        expected_length : int
-            Required list length (k for factor returns)
-        param_name : str
-            Parameter name for error messages
-            
-        Returns
-        -------
-        samplers : List[Sampler]
-            List of exactly expected_length samplers
-        """
-        if isinstance(sampler_spec, list):
-            if len(sampler_spec) != expected_length:
-                raise ValueError(
-                    f"{param_name}: expected list of length {expected_length}, "
-                    f"got {len(sampler_spec)}"
-                )
-            
-            for i, sampler in enumerate(sampler_spec):
-                if not callable(sampler):
-                    raise TypeError(
-                        f"{param_name}[{i}] is not callable: {type(sampler)}"
-                    )
-            
-            return sampler_spec
-        
-        elif callable(sampler_spec):
-            return [sampler_spec] * expected_length
-        
-        else:
-            raise TypeError(
-                f"{param_name} must be callable or list of callables, "
-                f"got {type(sampler_spec)}"
-            )

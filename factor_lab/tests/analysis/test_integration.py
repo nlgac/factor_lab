@@ -1,338 +1,325 @@
 """
-test_integration.py - Comprehensive Integration Tests
-======================================================
+test_integration.py  (tests/analysis/)
 
-Tests the complete workflow including:
-- JSON parsing
-- Model building
-- Simulation
-- Analysis pipeline
-- Visualization
+Integration tests for the full pipeline:
+- build_simulate_analyze and build_simulate_analyze_from_model
+- run_analyses dispatch (valid names; unknown name raises ValueError)
+- create_simulation_context
+- End-to-end workflow
+- Context caching
+- Custom analyses
 """
-
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import json
 import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from factor_lab import FactorModelData, ReturnsSimulator
+from factor_lab import FactorModelData
 from factor_lab.analysis import SimulationContext
 from factor_lab.analyses import Analyses
+from factor_lab.distributions import create_sampler
+from factor_lab.integration import (
+    build_simulate_analyze,
+    build_simulate_analyze_from_model,
+    create_simulation_context,
+    run_analyses,
+)
 
+# make_simulator is provided as a helper from conftest (not a fixture,
+# so we import it directly)
+from conftest import make_simulator
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_context(k=2, p=30, T=100, seed=0):
+    rng = np.random.default_rng(seed)
+    B = rng.standard_normal((k, p))
+    F = np.diag(rng.uniform(0.01, 0.1, k))
+    D = np.diag(np.full(p, 0.01))
+    model = FactorModelData(B=B, F=F, D=D)
+    results = make_simulator(model, rng).simulate(T)
+    return SimulationContext(
+        model=model,
+        security_returns=results['security_returns'],
+        factor_returns=results['factor_returns'],
+        idio_returns=results['idio_returns'],
+    )
+
+
+def _factory(rng):
+    return lambda name, **p: create_sampler(name, rng, **p)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline entry points
+# ---------------------------------------------------------------------------
+
+class TestBuildSimulateAnalyze:
+
+    def test_returns_expected_keys(self):
+        rng = np.random.default_rng(0)
+        f = _factory(rng)
+        results = build_simulate_analyze(
+            p=30, k=2,
+            beta_samplers=f("normal"),
+            idio_vol_sampler=f("constant", value=0.03),
+            factor_variances=[0.04, 0.01],
+            n_periods=100,
+            factor_return_samplers=f("normal"),
+            idio_return_sampler=f("normal"),
+            rng=rng,
+        )
+        for key in ('true_model', 'estimated_model', 'simulation_results',
+                    'context', 'duration', 'timestamp', 'dist_grassmannian'):
+            assert key in results, f"Missing key: {key}"
+
+    def test_duration_is_non_negative(self):
+        rng = np.random.default_rng(1)
+        f = _factory(rng)
+        results = build_simulate_analyze(
+            p=20, k=2,
+            beta_samplers=f("normal"),
+            idio_vol_sampler=f("constant", value=0.03),
+            factor_variances=[0.04, 0.01],
+            n_periods=50,
+            factor_return_samplers=f("normal"),
+            idio_return_sampler=f("normal"),
+            rng=rng,
+        )
+        assert results['duration'] >= 0
+
+    def test_all_analyses(self):
+        rng = np.random.default_rng(2)
+        f = _factory(rng)
+        results = build_simulate_analyze(
+            p=30, k=2,
+            beta_samplers=f("normal"),
+            idio_vol_sampler=f("constant", value=0.03),
+            factor_variances=[0.04, 0.01],
+            n_periods=100,
+            factor_return_samplers=f("normal"),
+            idio_return_sampler=f("normal"),
+            analyses=['all'],
+            rng=rng,
+        )
+        assert 'dist_grassmannian' in results
+        assert 'mean_correlation' in results
+
+    def test_from_model_reuses_structure(self):
+        rng = np.random.default_rng(3)
+        f = _factory(rng)
+        from factor_lab.model_builder import FactorModelBuilder
+        model = FactorModelBuilder(rng=rng).build(
+            p=20, k=2,
+            beta_samplers=f("normal"),
+            idio_vol_sampler=f("constant", value=0.03),
+            factor_variances=[0.04, 0.01],
+        )
+        r1 = build_simulate_analyze_from_model(
+            model, 80, f("normal"), f("normal"), rng=rng)
+        r2 = build_simulate_analyze_from_model(
+            model, 80, f("student_t", df=5), f("student_t", df=7), rng=rng)
+        assert r1['true_model'] is model
+        assert r2['true_model'] is model
+        assert r1['dist_grassmannian'] != r2['dist_grassmannian']
+
+
+# ---------------------------------------------------------------------------
+# run_analyses dispatch
+# ---------------------------------------------------------------------------
+
+class TestRunAnalyses:
+
+    def test_manifold_only(self):
+        ctx = _make_context()
+        results = run_analyses(ctx, ['manifold'])
+        assert 'dist_grassmannian' in results
+        assert 'mean_correlation' not in results
+
+    def test_eigenvalue_only(self):
+        ctx = _make_context()
+        results = run_analyses(ctx, ['eigenvalue'])
+        assert 'dist_grassmannian' not in results
+
+    def test_all_three(self):
+        ctx = _make_context()
+        results = run_analyses(ctx, ['manifold', 'eigenvalue', 'eigenvector'])
+        assert 'dist_grassmannian' in results
+        assert 'mean_correlation' in results
+
+    def test_unknown_analysis_raises(self):
+        ctx = _make_context()
+        with pytest.raises(ValueError, match="Unknown analyses"):
+            run_analyses(ctx, ['manifold', 'bogus'])
+
+    def test_empty_list_returns_empty(self):
+        ctx = _make_context()
+        assert run_analyses(ctx, []) == {}
+
+
+# ---------------------------------------------------------------------------
+# create_simulation_context
+# ---------------------------------------------------------------------------
+
+class TestCreateSimulationContext:
+
+    def test_properties(self):
+        rng = np.random.default_rng(0)
+        k, p, T = 2, 20, 50
+        B = rng.standard_normal((k, p))
+        model = FactorModelData(B=B, F=np.eye(k) * 0.1, D=np.eye(p) * 0.01)
+        sim_results = {
+            'security_returns': rng.standard_normal((T, p)),
+            'factor_returns':   rng.standard_normal((T, k)),
+            'idio_returns':     rng.standard_normal((T, p)),
+        }
+        ctx = create_simulation_context(model, sim_results)
+        assert ctx.T == T
+        assert ctx.p == p
+        assert ctx.k == k
+
+
+# ---------------------------------------------------------------------------
+# Legacy workflow (FlexibleReturnsSimulator via adapter)
+# ---------------------------------------------------------------------------
 
 class TestCompleteWorkflow:
-    """Test the complete analysis workflow end-to-end."""
-    
+
     def test_basic_workflow(self):
-        """Test basic workflow: build → simulate → analyze."""
-        # 1. Create model
         k, p, T = 2, 30, 100
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        # 2. Simulate
-        simulator = ReturnsSimulator(model)
-        results = simulator.simulate(n_periods=T)
-        
-        # 3. Create context
+        rng = np.random.default_rng(0)
+        B = rng.standard_normal((k, p))
+        model = FactorModelData(B=B, F=np.diag([0.1, 0.05]),
+                                D=np.diag(np.full(p, 0.01)))
+        results = make_simulator(model, rng).simulate(T)
         context = SimulationContext(
             model=model,
             security_returns=results['security_returns'],
             factor_returns=results['factor_returns'],
             idio_returns=results['idio_returns'],
         )
-        
-        # 4. Run all analyses
         manifold = Analyses.manifold_distances().analyze(context)
-        eigen = Analyses.eigenvalue_analysis(k_top=k).analyze(context)
-        eigvec = Analyses.eigenvector_comparison(k=k).analyze(context)
-        
-        # 5. Verify results
+        eigen    = Analyses.eigenvalue_analysis(k_top=k).analyze(context)
+        eigvec   = Analyses.eigenvector_comparison(k=k).analyze(context)
         assert 'dist_grassmannian' in manifold
         assert 'eigenvalue_rmse' in eigen
         assert 'mean_correlation' in eigvec
-        
-        # All metrics should be reasonable
         assert 0 <= manifold['dist_grassmannian'] <= 5
-        assert 0 <= eigen['eigenvalue_rmse']
         assert 0 <= eigvec['mean_correlation'] <= 1
-    
-    def test_json_config_parsing(self):
-        """Test JSON configuration parsing."""
-        config = {
-            "meta": {
-                "p_assets": 50,
-                "n_periods": 100
-            },
-            "factor_loadings": [
-                {"distribution": "normal", "params": {"loc": 0, "scale": 1}},
-                {"distribution": "normal", "params": {"loc": 0, "scale": 0.5}}
-            ],
-            "covariance": {
-                "F_diagonal": ["0.1^2", "0.05^2"],
-                "D_diagonal": "0.01^2"
-            },
-            "simulations": [
-                {"name": "Test", "type": "normal"}
-            ]
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(config, f)
-            config_path = Path(f.name)
-        
-        try:
-            # This would require build_and_simulate.py to be importable
-            # For now, just verify the JSON is valid
-            with open(config_path) as f:
-                loaded = json.load(f)
-            assert loaded['meta']['p_assets'] == 50
-            assert loaded['covariance']['F_diagonal'][0] == "0.1^2"
-        finally:
-            config_path.unlink()
-    
-    def test_multiple_simulations(self):
-        """Test running multiple simulation scenarios."""
+
+    def test_multiple_simulations_vary(self):
         k, p, T = 2, 20, 50
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        # Run multiple simulations
-        all_results = []
-        for _ in range(3):
-            simulator = ReturnsSimulator(model)
-            results = simulator.simulate(n_periods=T)
-            
-            context = SimulationContext(
+        rng0 = np.random.default_rng(99)
+        B = rng0.standard_normal((k, p))
+        model = FactorModelData(B=B, F=np.diag([0.1, 0.05]),
+                                D=np.diag(np.full(p, 0.01)))
+        distances = []
+        for seed in range(3):
+            rng = np.random.default_rng(seed)
+            results = make_simulator(model, rng).simulate(T)
+            ctx = SimulationContext(
                 model=model,
                 security_returns=results['security_returns'],
                 factor_returns=results['factor_returns'],
                 idio_returns=results['idio_returns'],
             )
-            
-            manifold = Analyses.manifold_distances().analyze(context)
-            all_results.append(manifold['dist_grassmannian'])
-        
-        # Results should vary across simulations
-        assert len(set(all_results)) > 1
-    
+            distances.append(
+                Analyses.manifold_distances().analyze(ctx)['dist_grassmannian']
+            )
+        assert len(set(distances)) > 1
+
     def test_large_scale(self):
-        """Test analysis works for larger problems."""
         k, p, T = 5, 100, 200
-        B = np.random.randn(k, p)
-        F = np.diag(np.random.uniform(0.01, 0.1, k))
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        simulator = ReturnsSimulator(model)
-        results = simulator.simulate(n_periods=T)
-        
-        context = SimulationContext(
+        rng = np.random.default_rng(0)
+        B = rng.standard_normal((k, p))
+        F = np.diag(rng.uniform(0.01, 0.1, k))
+        model = FactorModelData(B=B, F=F, D=np.diag(np.full(p, 0.01)))
+        results = make_simulator(model, rng).simulate(T)
+        ctx = SimulationContext(
             model=model,
             security_returns=results['security_returns'],
             factor_returns=results['factor_returns'],
             idio_returns=results['idio_returns'],
         )
-        
-        # Should complete without error
-        manifold = Analyses.manifold_distances().analyze(context)
-        eigen = Analyses.eigenvalue_analysis(k_top=k).analyze(context)
-        eigvec = Analyses.eigenvector_comparison(k=k).analyze(context)
-        
-        assert all(k in manifold for k in ['dist_grassmannian', 'dist_procrustes', 'dist_chordal'])
+        manifold = Analyses.manifold_distances().analyze(ctx)
+        eigen    = Analyses.eigenvalue_analysis(k_top=k).analyze(ctx)
+        eigvec   = Analyses.eigenvector_comparison(k=k).analyze(ctx)
+        assert all(k_ in manifold for k_ in
+                   ['dist_grassmannian', 'dist_procrustes', 'dist_chordal'])
         assert 'eigenvalue_rmse' in eigen
         assert 'mean_correlation' in eigvec
 
 
-class TestContextCaching:
-    """Test SimulationContext caching behavior."""
-    
-    def test_sample_covariance_cached(self):
-        """Sample covariance should be cached after first computation."""
-        k, p, T = 2, 20, 50
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        # First call computes
-        cov1 = context.sample_covariance()
-        
-        # Second call should return cached value
-        cov2 = context.sample_covariance()
-        
-        # Should be identical (same object)
-        assert cov1 is cov2
-    
-    def test_pca_decomposition_cached(self):
-        """PCA decomposition should be cached by n_components."""
-        k, p, T = 3, 30, 100
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05, 0.02])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        # PCA with k=2
-        pca2_1 = context.pca_decomposition(n_components=2)
-        pca2_2 = context.pca_decomposition(n_components=2)
-        
-        # Should be cached
-        assert pca2_1.B is pca2_2.B
-        
-        # PCA with k=3 should be different
-        pca3 = context.pca_decomposition(n_components=3)
-        assert pca3.B is not pca2_1.B
+# ---------------------------------------------------------------------------
+# Context caching
+# ---------------------------------------------------------------------------
 
+class TestContextCaching:
+
+    def test_sample_covariance_cached(self):
+        ctx = _make_context()
+        assert ctx.sample_covariance() is ctx.sample_covariance()
+
+    def test_pca_decomposition_cached_by_k(self):
+        ctx = _make_context(k=3, p=30, T=100)
+        pca2a = ctx.pca_decomposition(n_components=2)
+        pca2b = ctx.pca_decomposition(n_components=2)
+        pca3  = ctx.pca_decomposition(n_components=3)
+        assert pca2a.B is pca2b.B
+        assert pca3.B is not pca2a.B
+
+
+# ---------------------------------------------------------------------------
+# Custom analyses
+# ---------------------------------------------------------------------------
 
 class TestCustomAnalyses:
-    """Test custom analysis functionality."""
-    
+
     def test_custom_lambda(self):
-        """Test custom analysis with lambda."""
-        k, p, T = 2, 20, 50
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        # Custom analysis
-        custom = Analyses.custom(lambda ctx: {
-            'frobenius_B': float(np.linalg.norm(ctx.model.B, 'fro')),
-            'trace_F': float(np.trace(ctx.model.F)),
+        ctx = _make_context()
+        custom = Analyses.custom(lambda c: {
+            'frobenius_B': float(np.linalg.norm(c.model.B, 'fro')),
+            'trace_F':     float(np.trace(c.model.F)),
         })
-        
-        results = custom.analyze(context)
-        
-        assert 'frobenius_B' in results
-        assert 'trace_F' in results
+        results = custom.analyze(ctx)
         assert results['frobenius_B'] > 0
         assert results['trace_F'] > 0
-    
-    def test_custom_function(self):
-        """Test custom analysis with function."""
-        k, p, T = 2, 20, 50
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        def my_analysis(ctx):
-            pca = ctx.pca_decomposition(n_components=ctx.model.k)
-            error = np.linalg.norm(ctx.model.B - pca.B, 'fro')
-            return {'loading_error': float(error)}
-        
-        custom = Analyses.custom(my_analysis)
-        results = custom.analyze(context)
-        
-        assert 'loading_error' in results
-        assert results['loading_error'] >= 0
 
+    def test_custom_function(self):
+        ctx = _make_context()
+        def my_analysis(c):
+            pca = c.pca_decomposition(n_components=c.model.k)
+            return {'loading_error': float(np.linalg.norm(c.model.B - pca.B, 'fro'))}
+        assert Analyses.custom(my_analysis).analyze(ctx)['loading_error'] >= 0
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
 
 class TestErrorHandling:
-    """Test error handling and edge cases."""
-    
-    def test_invalid_k_components(self):
-        """Test handling of invalid k in analyses."""
-        k, p, T = 2, 20, 50
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        # k > model.k should handle gracefully
-        # (may raise error or truncate, depending on implementation)
-        # Just verify it doesn't crash catastrophically
-        try:
-            analysis = Analyses.eigenvector_comparison(k=10)
-            # May work with truncation or may raise ValueError
-        except ValueError:
-            pass  # Expected
-    
+
     def test_very_small_sample(self):
-        """Test handling of very small sample size."""
-        k, p, T = 2, 10, 15  # T < p
-        B = np.random.randn(k, p)
-        F = np.diag([0.1, 0.05])
-        D = np.diag(np.full(p, 0.01))
-        model = FactorModelData(B=B, F=F, D=D)
-        
-        returns = np.random.randn(T, p)
-        factors = np.random.randn(T, k)
-        idio = np.random.randn(T, p)
-        
-        context = SimulationContext(
-            model=model,
-            security_returns=returns,
-            factor_returns=factors,
-            idio_returns=idio,
-        )
-        
-        # Should handle gracefully
-        manifold = Analyses.manifold_distances().analyze(context)
-        assert 'dist_grassmannian' in manifold
+        ctx = _make_context(k=2, p=10, T=15)
+        assert 'dist_grassmannian' in Analyses.manifold_distances().analyze(ctx)
+
+    def test_json_round_trip(self):
+        config = {"meta": {"p_assets": 50, "n_periods": 100}}
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config, f)
+            path = Path(f.name)
+        try:
+            with open(path) as f:
+                loaded = json.load(f)
+            assert loaded['meta']['p_assets'] == 50
+        finally:
+            path.unlink()
 
 
 if __name__ == '__main__':

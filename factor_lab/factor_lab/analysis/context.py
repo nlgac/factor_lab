@@ -12,10 +12,7 @@ from datetime import datetime
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..types import FactorModelData
-    from ..model_spec_parser import ModelSpecification, SimulationSpec
-    from ..covariance_comparison import CovarianceComparisonResult
-    from ..normality_tests import TestSuiteResults
+    from ..factor_types import FactorModelData
 
 __all__ = ['SimulationContext']
 
@@ -39,15 +36,15 @@ class SimulationContext:
         Simulated factor returns.
     idio_returns : np.ndarray, shape (T, p)
         Simulated idiosyncratic returns.
-    spec : ModelSpecification, optional
+    spec : Any, optional
         Model specification (if available).
-    sim_spec : SimulationSpec, optional
+    sim_spec : Any, optional
         Simulation specification (if available).
-    test_results : Dict[str, TestSuiteResults], optional
+    test_results : Any, optional
         Normality test results (if run).
     covariance_validation : Any, optional
         Covariance validation result (if run).
-    ground_truth_comparison : CovarianceComparisonResult, optional
+    ground_truth_comparison : Any, optional
         Ground truth comparison result (if run).
     timestamp : datetime
         When the simulation was run.
@@ -83,13 +80,13 @@ class SimulationContext:
     idio_returns: np.ndarray
     
     # Optional metadata
-    spec: Optional['ModelSpecification'] = None
-    sim_spec: Optional['SimulationSpec'] = None
+    spec: Optional[Any] = None
+    sim_spec: Optional[Any] = None
     
     # Optional validation results
-    test_results: Optional[Dict[str, 'TestSuiteResults']] = None
+    test_results: Optional[Any] = None
     covariance_validation: Optional[Any] = None
-    ground_truth_comparison: Optional['CovarianceComparisonResult'] = None
+    ground_truth_comparison: Optional[Any] = None
     
     # Timing metadata
     timestamp: datetime = field(default_factory=datetime.now)
@@ -163,7 +160,7 @@ class SimulationContext:
         Results are cached by n_components. Subsequent calls with
         the same n_components return the cached result.
         """
-        from ..types import svd_decomposition
+        from ..decomposition import svd_decomposition
         
         n_components = n_components or self.model.k
         

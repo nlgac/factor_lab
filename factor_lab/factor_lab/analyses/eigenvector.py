@@ -198,9 +198,14 @@ class EigenvectorAlignment(SimulationAnalysis):
         true_evecs = true_evecs[:n, :]
         sample_evecs = sample_evecs[:n, :]
         
-        # Optionally align signs
+        # Align signs to true eigenvectors, then enforce positive mean.
+        # compute_true_eigenvalues already normalises true_evecs to positive
+        # mean; we apply the same convention to sample_evecs so both outputs
+        # share a consistent sign convention regardless of dot-product edge cases.
         if self.align_signs:
             sample_evecs = self._align_signs(true_evecs, sample_evecs)
+        signs = np.where(sample_evecs.mean(axis=1) < 0, -1, 1)
+        sample_evecs = sample_evecs * signs[:, np.newaxis]
         
         # Initialize results
         results = {

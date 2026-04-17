@@ -31,7 +31,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg import LinearOperator, ArpackNoConvergence
 
 from ..analysis import SimulationAnalysis, SimulationContext
-from ..types import FactorModelData
+from ..factor_types import FactorModelData
 
 __all__ = [
     'compute_true_eigenvalues',

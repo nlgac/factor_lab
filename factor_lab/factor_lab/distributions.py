@@ -165,6 +165,41 @@ def create_sampler(
         ) from e
 
 
+def resolve_samplers(
+    sampler_spec: Sampler | list[Sampler],
+    expected_length: int,
+    param_name: str,
+) -> list[Sampler]:
+    """
+    Resolve a sampler spec to a list of exactly *expected_length* samplers.
+
+    A single callable is broadcast; a list is validated for length and
+    callability. Used by both FactorModelBuilder and ReturnsSimulator so
+    the logic lives in one place.
+
+    Example:
+        resolve_samplers(normal_sampler, 3, "beta_samplers")
+        # → [normal_sampler, normal_sampler, normal_sampler]
+    """
+    if isinstance(sampler_spec, list):
+        if len(sampler_spec) != expected_length:
+            raise ValueError(
+                f"{param_name}: expected list of length {expected_length}, "
+                f"got {len(sampler_spec)}"
+            )
+        for i, s in enumerate(sampler_spec):
+            if not callable(s):
+                raise TypeError(f"{param_name}[{i}] is not callable: {type(s)}")
+        return sampler_spec
+    elif callable(sampler_spec):
+        return [sampler_spec] * expected_length
+    else:
+        raise TypeError(
+            f"{param_name} must be callable or list of callables, "
+            f"got {type(sampler_spec)}"
+        )
+
+
 def list_available_distributions() -> list[str]:
     """
     List all built-in distributions.

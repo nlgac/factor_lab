@@ -37,13 +37,11 @@ Usage
 >>> # Can reuse this model with different return distributions!
 """
 
-from typing import Union, List, Callable, Optional
+from typing import Union, List, Optional
 import numpy as np
 
 from .factor_types import FactorModelData
-
-# Universal sampler interface: (n: int) -> np.ndarray
-Sampler = Callable[[int], np.ndarray]
+from .distributions import resolve_samplers, Sampler
 
 
 class FactorModelBuilder:
@@ -250,7 +248,7 @@ class FactorModelBuilder:
             raise ValueError("All factor variances must be positive")
         
         # Resolve beta_samplers to list of k samplers
-        beta_samplers_list = self._resolve_to_list(
+        beta_samplers_list = resolve_samplers(
             beta_samplers, k, "beta_samplers"
         )
         
@@ -280,64 +278,3 @@ class FactorModelBuilder:
         F = np.diag(factor_variances_array)  # Shape: (k, k)
         
         return FactorModelData(B=B, F=F, D=D)
-    
-    def _resolve_to_list(
-        self,
-        sampler_spec: Union[Sampler, List[Sampler]],
-        expected_length: int,
-        param_name: str
-    ) -> List[Sampler]:
-        """
-        Resolve sampler specification to list of samplers.
-        
-        Handles two cases:
-        1. Single sampler → broadcast to list of length expected_length
-        2. List of samplers → validate length and callability
-        
-        Parameters
-        ----------
-        sampler_spec : Sampler or List[Sampler]
-            Either a single sampler or list of samplers
-        expected_length : int
-            Required list length (k for beta_samplers)
-        param_name : str
-            Parameter name for error messages
-            
-        Returns
-        -------
-        samplers : List[Sampler]
-            List of exactly expected_length samplers
-            
-        Raises
-        ------
-        ValueError
-            If list has wrong length
-        TypeError
-            If any element is not callable
-        """
-        if isinstance(sampler_spec, list):
-            # Explicit list provided - validate
-            if len(sampler_spec) != expected_length:
-                raise ValueError(
-                    f"{param_name}: expected list of length {expected_length}, "
-                    f"got {len(sampler_spec)}"
-                )
-            
-            # Validate all elements are callable
-            for i, sampler in enumerate(sampler_spec):
-                if not callable(sampler):
-                    raise TypeError(
-                        f"{param_name}[{i}] is not callable: {type(sampler)}"
-                    )
-            
-            return sampler_spec
-        
-        elif callable(sampler_spec):
-            # Single sampler - broadcast to all factors
-            return [sampler_spec] * expected_length
-        
-        else:
-            raise TypeError(
-                f"{param_name} must be callable or list of callables, "
-                f"got {type(sampler_spec)}"
-            )

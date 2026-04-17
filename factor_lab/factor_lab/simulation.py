@@ -1,10 +1,10 @@
 """
-simulation.py - Returns Simulation (Old API - Backward Compatible)
+simulation.py - Legacy Returns Simulator (deprecated)
 
-This module provides the OLD API for ReturnsSimulator to maintain
-backward compatibility with existing tests.
+Use factor_lab.flexible_simulator.ReturnsSimulator instead.
 """
 
+import warnings
 from typing import Optional, Dict
 import numpy as np
 
@@ -15,25 +15,26 @@ __all__ = ['ReturnsSimulator']
 
 class ReturnsSimulator:
     """
-    Simulate returns from factor model (OLD API).
-    
-    This class maintains backward compatibility:
-        simulator = ReturnsSimulator(model, rng=rng)
-        results = simulator.simulate(n_periods)
-    
-    Parameters
-    ----------
-    model : FactorModelData
-        The factor model
-    rng : np.random.Generator, optional
-        Random number generator
+    Simulate returns from a factor model (legacy API — deprecated).
+
+    Use FlexibleReturnsSimulator from factor_lab.flexible_simulator instead:
+
+        from factor_lab.flexible_simulator import ReturnsSimulator
+        simulator = ReturnsSimulator(rng=rng)
+        results = simulator.simulate(model, n_periods, factor_samplers, idio_sampler)
     """
-    
+
     def __init__(
         self,
         model: FactorModelData,
         rng: Optional[np.random.Generator] = None
     ):
+        warnings.warn(
+            "factor_lab.simulation.ReturnsSimulator is deprecated. "
+            "Use factor_lab.flexible_simulator.ReturnsSimulator instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.model = model
         self.rng = rng if rng is not None else np.random.default_rng()
     

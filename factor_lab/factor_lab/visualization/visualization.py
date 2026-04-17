@@ -237,9 +237,11 @@ def create_manifold_dashboard(results: Dict[str, Any], output_path: Optional[Pat
         for factor in range(n_factors):
             marker = markers[factor]
             color = colors[factor]
-            ax.scatter(true_ev[factor, :n_assets], sample_ev[factor, :n_assets],
-                    label=f'Factor {factor + 1}', marker=marker, s=100, alpha=0.7,
-                    color=color, edgecolors='black' if marker == 'o' else color, linewidth=1)
+            kw = dict(label=f'Factor {factor + 1}', marker=marker, s=100,
+                      alpha=0.7, color=color)
+            if marker == 'o':
+                kw.update(edgecolors='black', linewidth=1)
+            ax.scatter(true_ev[factor, :n_assets], sample_ev[factor, :n_assets], **kw)
             
             # Add asset labels
             #for i in range(n_assets):

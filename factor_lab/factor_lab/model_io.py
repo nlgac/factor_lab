@@ -1,14 +1,11 @@
 """
-io.py - File I/O for Factor Models
+model_io.py - File I/O for Factor Models
 
 Save and load factor models to/from disk.
 """
 
 import numpy as np
-try:
-    from .factor_types import FactorModelData
-except ImportError:
-    from factor_types import FactorModelData
+from .factor_types import FactorModelData
 
 
 def save_model(model: FactorModelData, filename: str) -> None:
