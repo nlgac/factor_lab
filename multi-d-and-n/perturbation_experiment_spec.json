@@ -1,0 +1,17 @@
+{
+  "all_assets": 10000,
+  "p_subsample_sizes": [100, 500, 1000, 5000, 10000],
+  "k_factors": 2,
+  "total_windows": 100, 
+  "n_days_per_window": 63,
+  "factor_volatilities": [0.16, 0.05],
+  "factor_loadings_distribution": "normal",
+  "specific_variance_type":  "homoskedastic",
+  "specific_volatility": 0.5,
+  "loading_mean": 0,
+  "loading_std": 1,
+  "t_df": 4,
+  "number_of_perturbations": 10,
+  "perturbation_epsilons": [0.1, 0.5, 1.0],
+  "random_seed": 42
+}
