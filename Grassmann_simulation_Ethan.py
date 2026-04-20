@@ -209,8 +209,8 @@ g.fig.suptitle(f'Grassmann Distance: Sample vs Target and Truth (k={k})', fontsi
 g.fig.subplots_adjust(top=0.90)
 if g._legend:
     g._legend.set_title('')
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_panel.png", dpi=220, bbox_inches='tight')
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_panel.svg", bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_panel.png", dpi=220, bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_panel.svg", bbox_inches='tight')
 plt.show()
 
 #Theorem 3.1 plot
@@ -230,8 +230,8 @@ ax.legend(title='')
 plt.tight_layout()
 ax.set_xticks(ax.get_xticks())
 ax.set_xticklabels([str(int(float(t.get_text()))) for t in ax.get_xticklabels()])
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_thm31_check.png", dpi=220, bbox_inches='tight')
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_thm31_check.svg", bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_thm31_check.png", dpi=220, bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_thm31_check.svg", bbox_inches='tight')
 plt.show()
 # Extract individual panels
 for n_val, r_val in [(63, 0.5), (63, 0.7), (63, 0.9), (126, 0.5), (126, 0.7), (126, 0.9)]:
@@ -254,8 +254,8 @@ for n_val, r_val in [(63, 0.5), (63, 0.7), (63, 0.9), (126, 0.5), (126, 0.7), (1
     if ax.get_legend():
         ax.get_legend().set_title('')
     plt.tight_layout()
-    plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_n{n_val}_r{r_val}_target{r_val}.png", dpi=220, bbox_inches='tight')
-    plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_n{n_val}_r{r_val}_target{r_val}.svg", bbox_inches='tight')
+    plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_n{n_val}_r{r_val}_target{r_val}.png", dpi=220, bbox_inches='tight')
+    plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_n{n_val}_r{r_val}_target{r_val}.svg", bbox_inches='tight')
     plt.show()
 # ── Pathwise distance plot ────────────────────────────────────────────────────
 pathwise_records = []
@@ -286,6 +286,6 @@ ax.set_xlabel('Ambient dimension (p)')
 ax.set_ylabel('|LHS - RHS|')
 ax.set_title(f'Pathwise Distance: k={k}, n={ns[0]}, ε={max(radii)}')
 plt.tight_layout()
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_pathwise.png", dpi=220, bbox_inches='tight')
-plt.savefig(f"/Users/ethanlin/Downloads/factor_lab_my_copy/k_{k}_specific_{np.sqrt(idio_variance):.2f}_pathwise.svg", bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_pathwise.png", dpi=220, bbox_inches='tight')
+plt.savefig(f"k_{k}_specific_{np.sqrt(idio_variance):.2f}_pathwise.svg", bbox_inches='tight')
 plt.show()
