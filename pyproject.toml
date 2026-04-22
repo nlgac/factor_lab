@@ -3,18 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "factor-lab-manifold-complete"
-version = "2.2.0"
-description = "Production-ready manifold-based analysis for high-dimensional factor models with memory-efficient eigenvalue computation and advanced geometric methods"
-readme = "README.md"
+name = "factor-lab"
+version = "3.0.0"
+description = "Manifold-based analysis for high-dimensional factor models with memory-efficient eigenvalue computation and advanced geometric methods"
+readme = "docs/README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Factor Lab Team", email = "your.email@example.com"}
+    {name = "Ken Ngun"}
 ]
-maintainers = [
-    {name = "Factor Lab Team", email = "your.email@example.com"}
-]
+
 keywords = [
     "factor-models",
     "manifold-geometry",
@@ -25,10 +23,11 @@ keywords = [
     "grassmannian",
     "random-matrix-theory",
     "dimensionality-reduction",
-    "covariance-estimation"
+    "covariance-estimation",
 ]
+
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
@@ -51,15 +50,14 @@ dependencies = [
     "scipy>=1.7.0",
     "matplotlib>=3.3.0",
     "seaborn>=0.11.0",
+    "tqdm>= 4.67.0" 
 ]
 
 [project.optional-dependencies]
-# Interactive visualizations
 plotly = [
     "plotly>=5.0.0",
 ]
 
-# Development dependencies
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=3.0.0",
@@ -68,14 +66,12 @@ dev = [
     "ruff>=0.0.260",
 ]
 
-# Documentation dependencies
 docs = [
     "sphinx>=4.0.0",
     "sphinx-rtd-theme>=1.0.0",
     "myst-parser>=0.18.0",
 ]
 
-# All optional dependencies
 all = [
     "plotly>=5.0.0",
     "pytest>=7.0.0",
@@ -88,19 +84,14 @@ all = [
     "myst-parser>=0.18.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/yourusername/factor-lab-manifold-complete"
-Documentation = "https://github.com/yourusername/factor-lab-manifold-complete#readme"
-Repository = "https://github.com/yourusername/factor-lab-manifold-complete"
-"Bug Tracker" = "https://github.com/yourusername/factor-lab-manifold-complete/issues"
-Changelog = "https://github.com/yourusername/factor-lab-manifold-complete/releases"
-
-[project.scripts]
-# Command-line scripts (if you want to add any)
-# factor-lab-demo = "factor_lab.cli:demo_main"
-
 [tool.setuptools]
-packages = ["factor_lab", "factor_lab.analysis", "factor_lab.analyses", "factor_lab.visualization"]
+packages = [
+    "factor_lab",
+    "factor_lab.analysis",
+    "factor_lab.analyses",
+    "factor_lab.visualization",
+]
+package-dir = {"" = "."}
 
 [tool.setuptools.package-data]
 factor_lab = ["py.typed"]
@@ -114,9 +105,6 @@ addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
-    "--cov=factor_lab",
-    "--cov-report=term-missing",
-    "--cov-report=html",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -145,11 +133,10 @@ exclude_lines = [
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ["py38", "py39", "py310", "py311", "py312"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
-  # directories
   \.eggs
   | \.git
   | \.hg
