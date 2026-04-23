@@ -630,12 +630,12 @@ def _default_sampler_factories(k: int) -> dict:
             lambda rng: create_sampler('normal', rng, loc=0.0, scale=1.0),
             lambda rng: create_sampler('normal', rng, loc=0.0, scale=1.0),
         ],
-        idio_vol_sampler_factory=lambda rng: create_sampler('uniform', rng, low=0.1, high=5.0),
-        factor_variances=[0.05**2, 0.1**2, 0.1**2],
+        idio_vol_sampler_factory=lambda rng: create_sampler('uniform', rng, low=0.2, high=0.8),
+        factor_variances=[0.16**2, 0.07**2, 0.03**2],
         factor_return_sampler_factories=[
             lambda rng: create_sampler('normal', rng) for _ in range(k)
         ],
-        idio_return_sampler_factory=lambda rng: create_sampler('normal', rng),
+        idio_return_sampler_factory=lambda rng: create_sampler('normal', rng, loc=0.0, scale=0.5),
     )
 
 
@@ -723,6 +723,14 @@ def build_spec_from_json(path: str | Path, seed_model: int = 42, seed_targets: i
     seed_targets = raw.get('seed_targets', seed_targets)
     k = raw.get('k_factors', 3)
 
+    # Build sampler factories from defaults, then override factor_variances
+    # if the JSON supplies it. The override must happen after the factories
+    # dict is built — _default_sampler_factories includes factor_variances,
+    # so passing both ** and an explicit kwarg causes a duplicate-keyword error.
+    factories = _default_sampler_factories(k=k)
+    if 'factor_variances' in raw:
+        factories['factor_variances'] = raw['factor_variances']
+
     return SimSpec(
         max_num_sec=knobs['max_num_sec'],
         nums_sec=tuple(knobs['nums_sec']),
@@ -733,8 +741,7 @@ def build_spec_from_json(path: str | Path, seed_model: int = 42, seed_targets: i
         k_factors=k,
         seed_model=seed_model,
         seed_targets=seed_targets,
-        **_default_sampler_factories(k=k),
-        **(dict(factor_variances=raw['factor_variances']) if 'factor_variances' in raw else {}),
+        **factories,
     )
 
 
