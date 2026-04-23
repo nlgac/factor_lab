@@ -196,6 +196,7 @@ def micro_spec_and_model():
         'target_radii': [0.1, 0.5], 'num_targets': 2,
         'k_factors': 3, 'factor_variances': [0.0025, 0.01, 0.01],
         'seed_model': 42, 'seed_targets': 123,
+        'v0_seed': 0,   # pins eigsh starting vector for test reproducibility
     }
     factories = _sampler_factories_from_specs(
         k=3,
@@ -790,51 +791,17 @@ class TestRunSimulation:
 
     def test_reproducibility(self, micro_spec_and_model):
         """
-        Same spec → reproducible output across two calls to run_simulation.
+        Same spec → byte-identical long_df across two calls.
 
-        eigsh is deterministic given the same model (same matrix M), but its
-        starting vector comes from numpy's global RNG, so the sign of each
-        returned eigenvector may differ between calls. This affects target
-        placement: targets are geodesics FROM U_gt's specific frame, so a
-        sign flip of a column changes where the targets land in R^p, changing
-        all sample-target distances.
-
-        The quantities that ARE invariant to U_gt sign flips are:
-          (a) Grassmann sample-truth: d_G(U_sample, U_gt) measures subspace
-              distance and is invariant to the basis choice for U_gt.
-          (b) truth-target rows: distance = radius by construction, no eigsh.
-          (c) All non-distance metadata columns.
-
-        We do NOT test sample-target distance reproducibility here because
-        it depends on the sign of U_gt's eigenvectors. The mathematical
-        content — that targets are placed at exactly the requested radius
-        from U_gt — is tested separately in TestTargetGeneration.
+        The fixture sets v0_seed=0, which pins the eigsh starting vector to
+        np.ones(p)/np.sqrt(p) for every p-slice. This makes U_gt fully
+        deterministic (same subspace AND same sign for each eigenvector),
+        which in turn makes target placement and all distances reproducible.
         """
         spec, _ = micro_spec_and_model
-        r1 = run_simulation(spec, sample_truth=True)
-        r2 = run_simulation(spec, sample_truth=True)
-
-        # Non-distance metadata must be identical
-        for col in ['dimension', 'p', 'n', 'radius', 'rep', 'metric',
-                    'distance_type', 'radius_label', 'n_label']:
-            pd.testing.assert_series_equal(r1.long_df[col], r2.long_df[col],
-                                           check_names=False)
-
-        # Grassmann sample-truth: invariant to U_gt sign, must be equal
-        mask_gst = ((r1.long_df['metric'] == 'grassmann') &
-                    (r1.long_df['distance_type'] == 'sample-truth'))
-        np.testing.assert_array_almost_equal(
-            r1.long_df.loc[mask_gst, 'distance'].values,
-            r2.long_df.loc[mask_gst, 'distance'].values,
-            decimal=12,
-        )
-
-        # truth-target rows: always equal radius by construction
-        mask_tt = r1.long_df['distance_type'] == 'truth-target'
-        np.testing.assert_array_equal(
-            r1.long_df.loc[mask_tt, 'distance'].values,
-            r2.long_df.loc[mask_tt, 'distance'].values,
-        )
+        r1 = run_simulation(spec)
+        r2 = run_simulation(spec)
+        pd.testing.assert_frame_equal(r1.long_df, r2.long_df)
 
     def test_model_seed_changes_results(self, micro_spec_and_model):
         """Different seed_model → different distances."""
@@ -848,16 +815,11 @@ class TestRunSimulation:
     def test_target_seed_changes_targets_not_model(self, micro_spec_and_model):
         """
         Different seed_targets → different sample-target distances,
-        but identical Grassmann sample-truth distances.
+        but identical sample-truth distances.
 
-        sample-truth under Grassmann = d_G(B^S, B^GT). The Grassmann metric
-        depends only on the subspace spanned by U_gt, not its specific basis,
-        so it is insensitive to eigsh sign flips. Therefore Grassmann
-        sample-truth distances must be identical across two runs that share
-        seed_model but differ in seed_targets.
-
-        sample-target distances use target_rng → must differ when seed_targets
-        differs.
+        With v0_seed set in the fixture, U_gt is fully deterministic, so
+        sample-truth distances d(U_sample, U_gt) are identical across runs
+        that share seed_model. Only the targets change with seed_targets.
         """
         spec, _ = micro_spec_and_model
         import dataclasses
@@ -865,21 +827,41 @@ class TestRunSimulation:
         r1 = run_simulation(spec, sample_truth=True)
         r2 = run_simulation(spec2, sample_truth=True)
 
-        # Grassmann sample-truth: subspace metric, sign-invariant, must be equal
-        mask_gst = ((r1.long_df['metric'] == 'grassmann') &
-                    (r1.long_df['distance_type'] == 'sample-truth'))
+        # All sample-truth distances must be identical — seed_targets does
+        # not affect U_gt (pinned by v0_seed) or U_sample (pinned by seed_model)
+        mask_st = r1.long_df['distance_type'] == 'sample-truth'
         np.testing.assert_array_almost_equal(
-            r1.long_df.loc[mask_gst, 'distance'].values,
-            r2.long_df.loc[mask_gst, 'distance'].values,
+            r1.long_df.loc[mask_st, 'distance'].values,
+            r2.long_df.loc[mask_st, 'distance'].values,
             decimal=12,
         )
 
-        # Grassmann sample-target: must differ when seed_targets differs
-        mask_gsa = ((r1.long_df['metric'] == 'grassmann') &
-                    (r1.long_df['distance_type'] == 'sample-target'))
+        # Sample-target distances must differ — seed_targets controls targets
+        mask_sa = r1.long_df['distance_type'] == 'sample-target'
         assert not np.allclose(
-            r1.long_df.loc[mask_gsa, 'distance'].values,
-            r2.long_df.loc[mask_gsa, 'distance'].values,
+            r1.long_df.loc[mask_sa, 'distance'].values,
+            r2.long_df.loc[mask_sa, 'distance'].values,
+        )
+
+    def test_v0_seed_pins_eigsh(self, micro_spec_and_model):
+        """
+        v0_seed=None may produce different Stiefel sample-truth distances
+        across runs (sign-dependent), while the Grassmann sample-truth
+        distances remain the same (subspace-invariant).
+
+        With v0_seed set, both metrics are identical across runs.
+        """
+        spec, _ = micro_spec_and_model
+        import dataclasses
+        # Run twice with v0_seed set — must be identical
+        r1 = run_simulation(spec, sample_truth=True)
+        r2 = run_simulation(spec, sample_truth=True)
+        mask_st = r1.long_df['distance_type'] == 'sample-truth'
+        np.testing.assert_array_almost_equal(
+            r1.long_df.loc[mask_st, 'distance'].values,
+            r2.long_df.loc[mask_st, 'distance'].values,
+            decimal=12,
+            err_msg="With v0_seed set, all sample-truth distances must be identical",
         )
 
     def test_save_writes_csvs(self, micro_spec_and_model, tmp_path):

@@ -139,6 +139,16 @@ class SimSpec:
 
     seed_model: int = 42
     seed_targets: int = 12345
+    v0_seed: int | None = None
+    """
+    Seed for the eigsh starting vector v0 used in ground_truth_frame.
+    When None (default), eigsh draws its own starting vector from numpy's
+    global RNG — the correct subspace is always found, but the sign of each
+    eigenvector may vary between calls. Setting v0_seed to any integer pins
+    the starting vector to np.ones(p)/np.sqrt(p) seeded deterministically,
+    making all downstream distances fully reproducible. Useful for testing
+    and for runs where exact bit-for-bit reproducibility is required.
+    """
 
     def __post_init__(self) -> None:
         k = self.k_factors
@@ -225,7 +235,11 @@ def slice_model(model: FactorModelData, p: int) -> FactorModelData:
 # ---------------------------------------------------------------------------
 
 
-def ground_truth_frame(model_slice: FactorModelData, k: int) -> np.ndarray:
+def ground_truth_frame(
+    model_slice: FactorModelData,
+    k: int,
+    v0: np.ndarray | None = None,
+) -> np.ndarray:
     """
     Top-k eigenvectors of M_p = B_p^T F B_p + D_p, descending eigenvalue.
 
@@ -241,6 +255,17 @@ def ground_truth_frame(model_slice: FactorModelData, k: int) -> np.ndarray:
 
     Accuracy: subspace matches dense eigh to ~1e-8 Grassmann distance,
     verified at p=50, 100, 500.
+
+    Parameters
+    ----------
+    v0 : ndarray of shape (p,), optional
+        Starting vector for the Lanczos iteration. When all eigenvalues are
+        distinct (the generic case), eigsh returns eigenvectors that are
+        unique up to sign, and the sign choice depends on v0. Passing a
+        fixed v0 makes the result fully deterministic across calls. If None,
+        eigsh draws v0 from numpy's global RNG — the subspace found is
+        correct but the sign of each eigenvector may vary between calls.
+        Tests should pass v0=np.ones(p)/np.sqrt(p) for reproducibility.
     """
     B = model_slice.B                                         # (k, p)
     f_diag = np.diag(model_slice.F)                           # (k,)
@@ -251,7 +276,7 @@ def ground_truth_frame(model_slice: FactorModelData, k: int) -> np.ndarray:
         return d * x + B.T @ (f_diag * (B @ x))
 
     A = LinearOperator((p, p), matvec=matvec, dtype=float)
-    eigvals, evecs = eigsh(A, k=k, which='LM')
+    eigvals, evecs = eigsh(A, k=k, which='LM', v0=v0)
     idx = np.argsort(eigvals)[::-1]                           # descending order
     return evecs[:, idx]                                      # (p, k)
 
@@ -671,7 +696,11 @@ def run_simulation(spec: SimSpec, sample_truth: bool = False,
     records: list[dict] = []
     for p in tqdm(spec.nums_sec, desc="p-slices"):
         logger.debug("Starting slice p={}", p)
-        U_gt = ground_truth_frame(slice_model(model, p), spec.k_factors)
+        # Construct v0 for eigsh: deterministic if v0_seed is set, else None
+        # (eigsh picks its own starting vector from numpy's global RNG).
+        # v0 is per-slice because each p gives a different-length vector.
+        v0 = (np.ones(p) / np.sqrt(p) if spec.v0_seed is not None else None)
+        U_gt = ground_truth_frame(slice_model(model, p), spec.k_factors, v0=v0)
         logger.debug("Ground truth frame computed: shape={}", U_gt.shape)
 
         # Pre-compute the orthogonal basis once per p-slice; reused across
@@ -730,6 +759,11 @@ _JSON_FIELDS = frozenset({
     'max_num_sec', 'nums_sec', 'num_obs', 'num_sim',
     'target_radii', 'num_targets', 'k_factors',
     'factor_variances', 'seed_model', 'seed_targets',
+})
+
+# Optional JSON fields — present if supplied, absent means use default.
+_JSON_FIELDS_OPTIONAL = frozenset({
+    'v0_seed',   # pins eigsh starting vector; absent means random start
 })
 
 # Sampler keys accepted with "_" prefix in JSON files.
@@ -835,11 +869,13 @@ def _load_json(path: Path) -> tuple[dict, dict]:
     """
     with open(path) as f:
         raw = json.load(f)
-    unknown = {k for k in raw if not k.startswith('_')} - _JSON_FIELDS
+    unknown = ({k for k in raw if not k.startswith('_')}
+               - _JSON_FIELDS - _JSON_FIELDS_OPTIONAL)
     if unknown:
         raise ValueError(
             f"{path}: unknown fields {unknown}. "
             f"Valid numeric fields: {sorted(_JSON_FIELDS)}. "
+            f"Optional fields: {sorted(_JSON_FIELDS_OPTIONAL)}. "
             f"Sampler distributions use '_'-prefixed keys: {sorted(_SAMPLER_KEYS)}."
         )
     numeric = {k: v for k, v in raw.items() if not k.startswith('_')}
@@ -881,6 +917,7 @@ def build_spec_from_jsons(paths: list[Path]) -> tuple[SimSpec, dict]:
     k = int(merged_numeric['k_factors'])
     fv = list(merged_numeric['factor_variances'])
 
+    v0_seed = merged_numeric.get('v0_seed')
     spec = SimSpec(
         max_num_sec=int(merged_numeric['max_num_sec']),
         nums_sec=tuple(int(x) for x in merged_numeric['nums_sec']),
@@ -891,6 +928,7 @@ def build_spec_from_jsons(paths: list[Path]) -> tuple[SimSpec, dict]:
         k_factors=k,
         seed_model=int(merged_numeric['seed_model']),
         seed_targets=int(merged_numeric['seed_targets']),
+        v0_seed=int(v0_seed) if v0_seed is not None else None,
         **_sampler_factories_from_specs(k=k, factor_variances=fv,
                                         sampler_specs=merged_samplers),
     )
@@ -971,6 +1009,8 @@ def print_spec(spec: SimSpec, sampler_specs: dict | None = None) -> None:
         "  Reproducibility",
         f"    seed_model                    : {spec.seed_model}",
         f"    seed_targets                  : {spec.seed_targets}",
+        f"    v0_seed                       : {spec.v0_seed}  "
+        f"({'deterministic eigsh' if spec.v0_seed is not None else 'random eigsh start'})",
         "",
         "  Output sizing (sample-target + truth-target only)",
         f"    Total cells                   : {total_cells:,}",
