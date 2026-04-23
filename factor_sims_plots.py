@@ -34,10 +34,12 @@ from loguru import logger
 # Plot constants — change here to restyle globally
 # ---------------------------------------------------------------------------
 
-# Distance types to include in every plot. truth-target is a flat reference
-# line by construction (distance == radius always), so it adds no information
-# as a box plot and is excluded by default.
-_PLOT_DISTANCE_TYPES: tuple[str, ...] = ("sample-target",)
+# Default distance types for plots.
+# truth-target is excluded: it equals radius by construction, so its box plot
+# would be a flat line already shown by the dashed reference line.
+# sample-truth is excluded by default; include via --sample-truth / sample_truth=True.
+_PLOT_DISTANCE_TYPES_DEFAULT: tuple[str, ...] = ("sample-target",)
+_PLOT_DISTANCE_TYPES_WITH_TRUTH: tuple[str, ...] = ("sample-target", "sample-truth")
 
 _PLOT_STYLE: dict = dict(style="whitegrid", context="paper")
 
@@ -48,7 +50,8 @@ _CATPLOT_KW: dict = dict(
     hue="distance_type",
     col="radius_label",
     row="metric",
-    sharey=False,
+    sharey="row",
+    sharex = True,
     height=3.0,
     aspect=1.1,
     linewidth=0.8,
@@ -66,9 +69,10 @@ _SAVE_DPI: int = 220
 # ---------------------------------------------------------------------------
 
 
-def plot_results(results, output_dir: str | Path = "factor_sims_output/figures") -> None:
+def plot_results(results, output_dir: str | Path = "factor_sims_output/figures",
+                 sample_truth: bool = False) -> None:
     """
-    Produce and save one figure per metric from a SimResults object.
+    Produce and save the distance figure from a SimResults object.
 
     Parameters
     ----------
@@ -76,19 +80,23 @@ def plot_results(results, output_dir: str | Path = "factor_sims_output/figures")
         Output of factor_sims.run_simulation().
     output_dir : str or Path
         Directory for saved figures. Created if it does not exist.
+    sample_truth : bool
+        When True, include sample-truth distances as an additional hue level.
+        Pass True when run_simulation was called with sample_truth=True.
 
     Example
     -------
-        results = run_simulation(build_spec('toy'))
-        plot_results(results, 'output/figures')
+        results = run_simulation(spec, sample_truth=True)
+        plot_results(results, 'output/figures', sample_truth=True)
         # writes output/figures/distances.png
         #   rows: grassmann, stiefel-canonical
         #   cols: r=0.1, r=0.5, r=1.0
+        #   hue: sample-target, sample-truth
     """
-    plot_dataframe(results.long_df, output_dir)
+    plot_dataframe(results.long_df, output_dir, sample_truth=sample_truth)
 
 
-def plot_dataframe(df: pd.DataFrame, output_dir: str | Path = "figures") -> None:
+def plot_dataframe(df: pd.DataFrame, output_dir: str | Path = "figures", sample_truth: bool = False) -> None:
     """
     Produce and save a single figure with one row per metric and one column
     per target radius.
@@ -120,8 +128,9 @@ def plot_dataframe(df: pd.DataFrame, output_dir: str | Path = "figures") -> None
     logger.info("Plotting {} metric(s) as rows: {}", len(metrics), metrics)
 
     save_path = output_dir / "distances.png"
-    logger.info("Rendering combined figure -> {}", save_path)
-    _plot_all_metrics(df, save_path)
+    distance_types = _PLOT_DISTANCE_TYPES_WITH_TRUTH if sample_truth else _PLOT_DISTANCE_TYPES_DEFAULT
+    logger.info("Rendering combined figure -> {} (hue: {})", save_path, distance_types)
+    _plot_all_metrics(df, save_path, distance_types=distance_types)
     logger.info("Saved {}", save_path)
 
 
@@ -130,9 +139,10 @@ def plot_dataframe(df: pd.DataFrame, output_dir: str | Path = "figures") -> None
 # ---------------------------------------------------------------------------
 
 
-def _plot_all_metrics(df: pd.DataFrame, save_path: Path) -> None:
+def _plot_all_metrics(df: pd.DataFrame, save_path: Path,
+                      distance_types: tuple[str, ...] = _PLOT_DISTANCE_TYPES_DEFAULT) -> None:
     """Produce and save the combined figure: rows=metrics, cols=radii."""
-    plot_df = _filter_plot_data(df, metric=None)
+    plot_df = _filter_plot_data(df, distance_types=distance_types)
     if plot_df.empty:
         logger.warning("No plottable data found, skipping.")
         return
@@ -141,7 +151,7 @@ def _plot_all_metrics(df: pd.DataFrame, save_path: Path) -> None:
     radius_map = _build_radius_map(plot_df)
 
     sns.set_theme(**_PLOT_STYLE)
-    g = _build_catplot(plot_df, col_order, row_order)
+    g = _build_catplot(plot_df, col_order, row_order, distance_types=distance_types)
     _annotate_axes(g, col_order, radius_map)
     _set_figure_titles(g, col_order, row_order)
 
@@ -150,9 +160,10 @@ def _plot_all_metrics(df: pd.DataFrame, save_path: Path) -> None:
     plt.close(g.fig)
 
 
-def _filter_plot_data(df: pd.DataFrame, metric: str | None = None) -> pd.DataFrame:
-    """Subset to rows for the configured distance types (all metrics if metric is None)."""
-    mask = df["distance_type"].isin(_PLOT_DISTANCE_TYPES)
+def _filter_plot_data(df: pd.DataFrame, metric: str | None = None,
+                      distance_types: tuple[str, ...] = _PLOT_DISTANCE_TYPES_DEFAULT) -> pd.DataFrame:
+    """Subset to rows for the given distance types (all metrics if metric is None)."""
+    mask = df["distance_type"].isin(distance_types)
     if metric is not None:
         mask &= df["metric"] == metric
     return df[mask].copy()
@@ -178,6 +189,7 @@ def _build_catplot(
     plot_df: pd.DataFrame,
     col_order: list[str],
     row_order: list[str],
+    distance_types: tuple[str, ...] = _PLOT_DISTANCE_TYPES_DEFAULT,
 ) -> sns.FacetGrid:
     """Construct the seaborn FacetGrid."""
     return sns.catplot(
@@ -186,7 +198,7 @@ def _build_catplot(
             **_CATPLOT_KW,
             "col_order": col_order,
             "row_order": row_order,
-            "hue_order": list(_PLOT_DISTANCE_TYPES),
+            "hue_order": list(distance_types),
         },
     )
 
@@ -230,10 +242,22 @@ def main() -> None:
     """Re-plot from a saved distances_all.csv file."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Re-plot factor_sims distance output.")
+    parser = argparse.ArgumentParser(
+        description="Re-plot factor_sims distance output from a saved CSV.",
+        epilog="""
+examples:
+  python factor_sims_plots.py distances_all.csv
+  python factor_sims_plots.py distances_all.csv --output my_figures/
+  python factor_sims_plots.py distances_all.csv --sample-truth
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("csv_file", type=Path, help="Path to distances_all.csv")
     parser.add_argument("--output", type=Path, default=Path("figures"),
                         help="Output directory for figures (default: figures/)")
+    parser.add_argument("--sample-truth", action="store_true",
+                        help="Include sample-truth distances as a hue level "
+                             "(only meaningful if the CSV contains them).")
     args = parser.parse_args()
 
     if not args.csv_file.exists():
@@ -242,7 +266,7 @@ def main() -> None:
     logger.info("Loading {}", args.csv_file)
     df = pd.read_csv(args.csv_file)
     logger.info("Loaded {} rows", len(df))
-    plot_dataframe(df, args.output)
+    plot_dataframe(df, args.output, sample_truth=args.sample_truth)
     logger.info("Done.")
 
 

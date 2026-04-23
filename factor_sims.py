@@ -533,12 +533,88 @@ def _measure_one_cell(
     return records
 
 
-def run_simulation(spec: SimSpec) -> SimResults:
+def _build_rng_state_to_returns(rng: np.random.Generator, spec: SimSpec) -> None:
+    """
+    Advance rng past the model-construction draws to reach the state that
+    simulate_all_returns would see.
+
+    build_population_model draws from rng in this order:
+      - k beta samplers (each calls create_sampler which may draw internally)
+      - 1 idio_vol sampler
+      - FactorModelBuilder.build() draws for B and D
+
+    The only way to reproduce the exact state is to replay the same calls.
+    We do so by rebuilding the model with a fresh rng — the draws happen
+    identically, consuming the same number of random variates.
+    """
+    beta_samplers = [factory(rng) for factory in spec.beta_sampler_factories]
+    idio_vol_sampler = spec.idio_vol_sampler_factory(rng)
+    builder = FactorModelBuilder(rng=rng)
+    builder.build(
+        p=spec.max_num_sec,
+        k=spec.k_factors,
+        beta_samplers=beta_samplers,
+        idio_vol_sampler=idio_vol_sampler,
+        factor_variances=spec.factor_variances,
+    )
+    # rng is now at the same state as after build_population_model
+
+
+def _simulate_full_returns(
+    model: FactorModelData,
+    spec: SimSpec,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Simulate returns and return (factor_returns, idio_returns) separately.
+
+    Returns
+    -------
+    factor_returns : ndarray, shape (num_sim, num_obs, k)
+    idio_returns   : ndarray, shape (num_sim, num_obs, max_num_sec)
+    """
+    n_total = spec.num_obs * spec.num_sim
+    factor_return_samplers = [f(rng) for f in spec.factor_return_sampler_factories]
+    idio_return_sampler = spec.idio_return_sampler_factory(rng)
+    simulator = FlexibleReturnsSimulator(rng=rng)
+    result = simulator.simulate(
+        model=model,
+        n_periods=n_total,
+        factor_return_samplers=factor_return_samplers,
+        idio_return_sampler=idio_return_sampler,
+    )
+    k = spec.k_factors
+    shape_f = (spec.num_sim, spec.num_obs, k)
+    shape_e = (spec.num_sim, spec.num_obs, spec.max_num_sec)
+    factor_ret = result['factor_returns'].reshape(shape_f)
+    idio_ret   = result['idio_returns'].reshape(shape_e)
+    return factor_ret, idio_ret
+
+
+
+def run_simulation(spec: SimSpec, sample_truth: bool = False,
+                   save_model_path: Path | None = None,
+                   save_returns_path: Path | None = None) -> SimResults:
     """
     Run the full sim and return long + summary DataFrames.
 
     Two RNGs: one for model+returns (seed_model), one for target directions
     (seed_targets). Keeps target geometry stable when return seed changes.
+
+    Parameters
+    ----------
+    spec : SimSpec
+    sample_truth : bool
+        When True, also record d(B^S, B^GT) under both metrics for every
+        (p, sim) pair, replicated across all radii so the schema stays
+        uniform. Adds distance_type='sample-truth' rows to long_df.
+    save_model_path : Path or None
+        If given, save the population model (B, F, D) to this .npz file
+        immediately after construction, before any simulation.
+    save_returns_path : Path or None
+        If given, save all simulated returns to this .npz file after
+        simulation. Stores factor_returns and idio_returns separately
+        as well as security_returns. Shape: (num_sim, num_obs, max_num_sec).
     """
     total_cells = len(spec.nums_sec) * spec.num_sim * len(spec.target_radii)
     logger.info(
@@ -559,7 +635,38 @@ def run_simulation(spec: SimSpec) -> SimResults:
     # call them with separate generators seeded identically — the return
     # draws would then start at the wrong RNG state.
     model = build_population_model(spec, model_rng)
+
+    if save_model_path is not None:
+        save_model_path = Path(save_model_path)
+        save_model_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            save_model_path,
+            B=model.B,   # (k, max_num_sec) factor loadings
+            F=model.F,   # (k, k)           factor covariance
+            D=model.D,   # (max_num_sec, max_num_sec) idio covariance
+        )
+        logger.info("Saved model (B, F, D) to {}", save_model_path)
+
     all_returns = simulate_all_returns(model, spec, model_rng)
+
+    if save_returns_path is not None:
+        save_returns_path = Path(save_returns_path)
+        save_returns_path.parent.mkdir(parents=True, exist_ok=True)
+        # Re-simulate with a fresh RNG at the same state to capture
+        # factor and idio components. We reset to seed_model and
+        # fast-forward past the model-construction draws by rebuilding
+        # factories (no draws) then calling simulate directly.
+        _rng2 = np.random.default_rng(spec.seed_model)
+        # Consume the same model-construction draws to reach the correct state
+        _build_rng_state_to_returns(_rng2, spec)
+        factor_ret, idio_ret = _simulate_full_returns(model, spec, _rng2)
+        np.savez_compressed(
+            save_returns_path,
+            security_returns=all_returns,       # (num_sim, num_obs, max_num_sec)
+            factor_returns=factor_ret,           # (num_sim, num_obs, k)
+            idio_returns=idio_ret,               # (num_sim, num_obs, max_num_sec)
+        )
+        logger.info("Saved returns (security, factor, idio) to {}", save_returns_path)
 
     records: list[dict] = []
     for p in tqdm(spec.nums_sec, desc="p-slices"):
@@ -576,6 +683,13 @@ def run_simulation(spec: SimSpec) -> SimResults:
             logger.debug("  sim {}/{} at p={}", sim + 1, spec.num_sim, p)
             returns_window = all_returns[sim, :, :p]
             U_sample = sample_frame(returns_window, spec.k_factors)
+            if sample_truth:
+                records.extend(_sample_truth_records(
+                    U_gt=U_gt, U_sample=U_sample,
+                    p=p, sim=sim, k=spec.k_factors, n=spec.num_obs,
+                    target_radii=spec.target_radii,
+                ))
+
             for radius in spec.target_radii:
                 records.extend(_measure_one_cell(
                     U_gt=U_gt, U_sample=U_sample,
@@ -606,151 +720,220 @@ def run_simulation(spec: SimSpec) -> SimResults:
     return SimResults(long_df=long_df, summary_df=summary_df, spec=spec)
 
 
+
 # ---------------------------------------------------------------------------
-# Pre-configured specs: three sizes from micro (CI) to full (publication)
+# Spec building from JSON files
 # ---------------------------------------------------------------------------
 
-
-def _default_sampler_factories(k: int) -> dict:
-    """
-    Sampler FACTORIES matching the pseudo-code defaults.
-      beta:  N(1, 0.5), N(0, 1), N(0, 1)  for k=3
-      idio_vol: U(0.1, 5)
-      factor_variances: [0.05², 0.1², 0.1²]
-      factor returns & idio returns: standardized N(0, 1)
-
-    Each factory takes an rng and returns a live sampler. The rng is supplied
-    fresh by run_simulation, so reproducibility is keyed on spec.seed_model alone.
-    """
-    if k != 3:
-        raise ValueError("Default samplers are tuned for k=3; provide your own for other k.")
-    return dict(
-        beta_sampler_factories=[
-            lambda rng: create_sampler('normal', rng, loc=1.0, scale=0.5),
-            lambda rng: create_sampler('normal', rng, loc=0.0, scale=1.0),
-            lambda rng: create_sampler('normal', rng, loc=0.0, scale=1.0),
-        ],
-        idio_vol_sampler_factory=lambda rng: create_sampler('uniform', rng, low=0.2, high=0.8),
-        factor_variances=[0.16**2, 0.07**2, 0.03**2],
-        factor_return_sampler_factories=[
-            lambda rng: create_sampler('normal', rng) for _ in range(k)
-        ],
-        idio_return_sampler_factory=lambda rng: create_sampler('normal', rng, loc=0.0, scale=0.5),
-    )
-
-
-# Numeric fields that can be overridden via a JSON spec file.
-# Sampler factories are not serialisable and always use the defaults.
+# Numeric fields accepted in JSON spec files.
 _JSON_FIELDS = frozenset({
     'max_num_sec', 'nums_sec', 'num_obs', 'num_sim',
     'target_radii', 'num_targets', 'k_factors',
     'factor_variances', 'seed_model', 'seed_targets',
 })
 
-_SIZES = {
-    'micro': dict(max_num_sec=100,   nums_sec=(30, 60, 100),
-                  num_sim=3,  num_targets=3),
-    'toy':   dict(max_num_sec=500,   nums_sec=(50, 100, 250, 500),
-                  num_sim=10, num_targets=5),
-    'full':  dict(max_num_sec=10000, nums_sec=(100, 500, 1000, 3000, 5000, 10000),
-                  num_sim=100, num_targets=20),
+# Sampler keys accepted with "_" prefix in JSON files.
+# Each maps to a distribution spec dict, e.g.:
+#   {"distribution": "uniform", "low": 0.1, "high": 5.0}
+#   {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+#   {"distribution": "constant", "value": 0.5}
+_SAMPLER_KEYS = frozenset({
+    '_beta_samplers',          # list of k dicts, one per factor
+    '_idio_vol_sampler',       # single dict
+    '_factor_return_samplers', # list of k dicts, one per factor
+    '_idio_return_sampler',    # single dict
+})
+
+# Default sampler specs — used when a JSON file does not override them.
+_DEFAULT_SAMPLER_SPECS: dict = {
+    '_beta_samplers': [
+        {'distribution': 'normal', 'loc': 1.0, 'scale': 0.5},
+        {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
+        {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
+    ],
+    '_idio_vol_sampler':       {'distribution': 'uniform', 'low': 0.1, 'high': 5.0},
+    '_factor_return_samplers': [
+        {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
+        {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
+        {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
+    ],
+    '_idio_return_sampler':    {'distribution': 'normal', 'loc': 0.0, 'scale': 1.0},
 }
 
 
-def build_spec(size: str, seed_model: int = 42, seed_targets: int = 12345) -> SimSpec:
+def _factory_from_spec(spec: dict) -> SamplerFactory:
     """
-    Build one of three tiered specs.
+    Build a SamplerFactory from a distribution spec dict.
 
-      'micro': ~1 s,   for unit tests.
-      'toy':   ~11 s,  for interactive development.
-      'full':  ~5 min, the pseudo-code target (max_num_sec=10000, num_sim=100).
+    Supported distributions and their parameters:
+      normal:   loc (mean), scale (std dev)
+      uniform:  low, high
+      constant: value  (every draw returns the same value)
 
-    Runtime is dominated by stiefel_canonical_distance (~0.2 ms/call after
-    the Schur optimisation, down from ~5 ms with logm).
+    Example:
+        _factory_from_spec({'distribution': 'uniform', 'low': 0.1, 'high': 0.8})
+        # returns: lambda rng: create_sampler('uniform', rng, low=0.1, high=0.8)
     """
-    if size not in _SIZES:
-        raise ValueError(f"size must be one of {list(_SIZES)}, got {size!r}")
-    knobs = _SIZES[size]
-    return SimSpec(
-        max_num_sec=knobs['max_num_sec'],
-        nums_sec=knobs['nums_sec'],
-        num_obs=63,
-        num_sim=knobs['num_sim'],
-        target_radii=(0.1, 0.5, 1.0),
-        num_targets=knobs['num_targets'],
-        k_factors=3,
-        seed_model=seed_model,
-        seed_targets=seed_targets,
-        **_default_sampler_factories(k=3),
+    dist = spec['distribution']
+    params = {k: v for k, v in spec.items() if k != 'distribution'}
+    return lambda rng, d=dist, p=params: create_sampler(d, rng, **p)
+
+
+def _sampler_factories_from_specs(
+    k: int,
+    factor_variances: list[float],
+    sampler_specs: dict,
+) -> dict:
+    """
+    Build the full sampler factory dict from distribution spec dicts.
+
+    Parameters
+    ----------
+    k : int
+        Number of factors (must equal len of beta and factor_return spec lists).
+    factor_variances : list[float]
+        Per-factor variances (from numeric JSON fields).
+    sampler_specs : dict
+        Merged sampler specs keyed by _SAMPLER_KEYS names.
+    """
+    beta_specs = sampler_specs['_beta_samplers']
+    idio_vol_spec = sampler_specs['_idio_vol_sampler']
+    factor_ret_specs = sampler_specs['_factor_return_samplers']
+    idio_ret_spec = sampler_specs['_idio_return_sampler']
+
+    if len(beta_specs) != k:
+        raise ValueError(
+            f"_beta_samplers has {len(beta_specs)} entries but k_factors={k}. "
+            f"They must match."
+        )
+    if len(factor_ret_specs) != k:
+        raise ValueError(
+            f"_factor_return_samplers has {len(factor_ret_specs)} entries but k_factors={k}. "
+            f"They must match."
+        )
+
+    return dict(
+        beta_sampler_factories=[_factory_from_spec(s) for s in beta_specs],
+        idio_vol_sampler_factory=_factory_from_spec(idio_vol_spec),
+        factor_variances=factor_variances,
+        factor_return_sampler_factories=[_factory_from_spec(s) for s in factor_ret_specs],
+        idio_return_sampler_factory=_factory_from_spec(idio_ret_spec),
     )
 
 
-def build_spec_from_json(path: str | Path, seed_model: int = 42, seed_targets: int = 12345) -> SimSpec:
+def _load_json(path: Path) -> tuple[dict, dict]:
     """
-    Build a SimSpec from a JSON file, falling back to 'full' defaults for
-    any fields not present in the file.
+    Load one JSON spec file.
 
-    Only numeric fields can be specified in JSON; sampler factories always
-    use the defaults (k_factors must be 3).
-
-    Example JSON:
-        {
-            "max_num_sec": 2000,
-            "nums_sec": [100, 500, 1000, 2000],
-            "num_obs": 126,
-            "num_sim": 50,
-            "target_radii": [0.1, 0.3, 0.5, 1.0],
-            "num_targets": 10,
-            "k_factors": 3,
-            "factor_variances": [0.0025, 0.01, 0.01],
-            "seed_model": 99,
-            "seed_targets": 777
-        }
+    Returns
+    -------
+    numeric : dict
+        All non-prefixed fields (the _JSON_FIELDS).
+    sampler_specs : dict
+        All _-prefixed sampler keys recognised by _SAMPLER_KEYS.
+        Other _-prefixed keys (e.g. _comment) are silently ignored.
     """
     with open(path) as f:
         raw = json.load(f)
-
-    unknown = set(raw) - _JSON_FIELDS
+    unknown = {k for k in raw if not k.startswith('_')} - _JSON_FIELDS
     if unknown:
-        raise ValueError(f"Unknown fields in JSON spec: {unknown}. "
-                         f"Sampler distributions cannot be set via JSON.")
+        raise ValueError(
+            f"{path}: unknown fields {unknown}. "
+            f"Valid numeric fields: {sorted(_JSON_FIELDS)}. "
+            f"Sampler distributions use '_'-prefixed keys: {sorted(_SAMPLER_KEYS)}."
+        )
+    numeric = {k: v for k, v in raw.items() if not k.startswith('_')}
+    sampler_specs = {k: v for k, v in raw.items() if k in _SAMPLER_KEYS}
+    return numeric, sampler_specs
 
-    # Start from 'full' defaults, override with JSON values
-    knobs = dict(_SIZES['full'])
-    knobs.update({k: v for k, v in raw.items() if k in ('max_num_sec', 'nums_sec',
-                                                          'num_sim', 'num_targets')})
-    seed_model  = raw.get('seed_model', seed_model)
-    seed_targets = raw.get('seed_targets', seed_targets)
-    k = raw.get('k_factors', 3)
 
-    # Build sampler factories from defaults, then override factor_variances
-    # if the JSON supplies it. The override must happen after the factories
-    # dict is built — _default_sampler_factories includes factor_variances,
-    # so passing both ** and an explicit kwarg causes a duplicate-keyword error.
-    factories = _default_sampler_factories(k=k)
-    if 'factor_variances' in raw:
-        factories['factor_variances'] = raw['factor_variances']
+def build_spec_from_jsons(paths: list[Path]) -> tuple[SimSpec, dict]:
+    """
+    Build a SimSpec by merging one or more JSON spec files left-to-right.
 
-    return SimSpec(
-        max_num_sec=knobs['max_num_sec'],
-        nums_sec=tuple(knobs['nums_sec']),
-        num_obs=raw.get('num_obs', 63),
-        num_sim=knobs['num_sim'],
-        target_radii=tuple(raw.get('target_radii', (0.1, 0.5, 1.0))),
-        num_targets=knobs['num_targets'],
+    Later files take precedence for both numeric fields and sampler specs.
+    Returns the SimSpec and the merged sampler specs dict (for print_spec).
+
+    Example
+    -------
+        spec, sampler_specs = build_spec_from_jsons([
+            Path('defaults.json'), Path('toy.json')
+        ])
+    """
+    merged_numeric: dict = {}
+    merged_samplers: dict = dict(_DEFAULT_SAMPLER_SPECS)   # start from defaults
+
+    for path in paths:
+        numeric, sampler_specs = _load_json(path)
+        merged_numeric.update(numeric)
+        merged_samplers.update(sampler_specs)
+        logger.debug("Merged {}: numeric={}, samplers={}",
+                     path.name, sorted(numeric.keys()), sorted(sampler_specs.keys()))
+
+    missing = _JSON_FIELDS - set(merged_numeric)
+    if missing:
+        raise ValueError(
+            f"Missing required numeric fields after merging "
+            f"{[p.name for p in paths]}: {sorted(missing)}. "
+            f"Add them to one of the spec files."
+        )
+
+    k = int(merged_numeric['k_factors'])
+    fv = list(merged_numeric['factor_variances'])
+
+    spec = SimSpec(
+        max_num_sec=int(merged_numeric['max_num_sec']),
+        nums_sec=tuple(int(x) for x in merged_numeric['nums_sec']),
+        num_obs=int(merged_numeric['num_obs']),
+        num_sim=int(merged_numeric['num_sim']),
+        target_radii=tuple(float(x) for x in merged_numeric['target_radii']),
+        num_targets=int(merged_numeric['num_targets']),
         k_factors=k,
-        seed_model=seed_model,
-        seed_targets=seed_targets,
-        **factories,
+        seed_model=int(merged_numeric['seed_model']),
+        seed_targets=int(merged_numeric['seed_targets']),
+        **_sampler_factories_from_specs(k=k, factor_variances=fv,
+                                        sampler_specs=merged_samplers),
     )
+    return spec, merged_samplers
 
 
+def _fmt_dist(spec: dict) -> str:
+    """Format a distribution spec dict as a human-readable string."""
+    dist = spec.get('distribution', '?')
+    if dist == 'normal':
+        return f"N({spec.get('loc', 0)}, {spec.get('scale', 1)})"
+    if dist == 'uniform':
+        return f"U({spec.get('low', 0)}, {spec.get('high', 1)})"
+    if dist == 'constant':
+        return f"constant({spec.get('value', 0)})"
+    # fallback: show all params
+    params = ', '.join(f"{k}={v}" for k, v in spec.items() if k != 'distribution')
+    return f"{dist}({params})"
 
-def print_spec(spec: SimSpec) -> None:
-    """Print a complete human-readable summary of a SimSpec to stdout."""
+
+def print_spec(spec: SimSpec, sampler_specs: dict | None = None) -> None:
+    """
+    Print a complete human-readable summary of a SimSpec to stdout.
+
+    Parameters
+    ----------
+    spec : SimSpec
+    sampler_specs : dict or None
+        Merged sampler spec dicts returned by build_spec_from_jsons.
+        If None, falls back to the default sampler descriptions.
+    """
+    if sampler_specs is None:
+        sampler_specs = _DEFAULT_SAMPLER_SPECS
+
     k = spec.k_factors
     total_cells = len(spec.nums_sec) * spec.num_sim * len(spec.target_radii)
-    total_rows = total_cells * 2 * (spec.num_targets + 1)  # 2 metrics, +1 truth-target
+    rows_per_cell = spec.num_targets + 1
+    total_rows = total_cells * 2 * rows_per_cell
+
+    beta_strs = [_fmt_dist(s) for s in sampler_specs['_beta_samplers']]
+    idio_vol_str = _fmt_dist(sampler_specs['_idio_vol_sampler'])
+    fret_strs = [_fmt_dist(s) for s in sampler_specs['_factor_return_samplers']]
+    idio_ret_str = _fmt_dist(sampler_specs['_idio_return_sampler'])
 
     lines = [
         "",
@@ -762,13 +945,21 @@ def print_spec(spec: SimSpec) -> None:
         f"    Population size (max_num_sec) : {spec.max_num_sec:,}",
         f"    Number of factors (k)         : {k}",
         f"    Factor variances              : {spec.factor_variances}",
-        f"    Beta samplers (k={k})          : N(1.0, 0.5), N(0, 1), N(0, 1)",
-        f"    Idio vol sampler              : U(0.1, 5.0)  [per-asset variance]",
+    ]
+    for i, s in enumerate(beta_strs):
+        label = f"Beta sampler factor {i}"
+        lines.append(f"    {label:<30}: {s}")
+    lines += [
+        f"    Idio vol sampler              : {idio_vol_str}  [per-asset std dev]",
         "",
         "  Returns simulation",
         f"    Observations per window       : {spec.num_obs}",
-        f"    Factor return samplers        : N(0, 1) × {k}  [standardised]",
-        f"    Idio return sampler           : N(0, 1)   [standardised]",
+    ]
+    for i, s in enumerate(fret_strs):
+        label = f"Factor return sampler {i}"
+        lines.append(f"    {label:<30}: {s}")
+    lines += [
+        f"    Idio return sampler           : {idio_ret_str}",
         "",
         "  Experimental design",
         f"    p-slices (nums_sec)           : {list(spec.nums_sec)}",
@@ -781,18 +972,52 @@ def print_spec(spec: SimSpec) -> None:
         f"    seed_model                    : {spec.seed_model}",
         f"    seed_targets                  : {spec.seed_targets}",
         "",
-        "  Output sizing",
+        "  Output sizing (sample-target + truth-target only)",
         f"    Total cells                   : {total_cells:,}",
-        f"      = {len(spec.nums_sec)} p-slices × {spec.num_sim} sims"
-        f" × {len(spec.target_radii)} radii",
+        f"      = {len(spec.nums_sec)} p-slices x {spec.num_sim} sims"
+        f" x {len(spec.target_radii)} radii",
         f"    Rows in distances_all.csv     : {total_rows:,}",
-        f"      = {total_cells:,} cells × 2 metrics"
-        f" × ({spec.num_targets} sample-target + 1 truth-target)",
+        f"      = {total_cells:,} cells x 2 metrics"
+        f" x ({spec.num_targets} sample-target + 1 truth-target)",
+        f"    With --sample-truth: +{total_cells * 2:,} additional rows",
+        f"      = {total_cells:,} cells x 2 metrics x 1 sample-truth row",
         "",
         "=" * 62,
         "",
     ]
     print("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# sample-truth distance helpers
+# ---------------------------------------------------------------------------
+
+
+def _sample_truth_records(
+    U_gt: np.ndarray, U_sample: np.ndarray,
+    p: int, sim: int, k: int, n: int,
+    target_radii: Sequence[float],
+) -> list[dict]:
+    """
+    Compute d(B^S, B^GT) under both metrics and replicate across all radii.
+
+    The estimation error does not depend on the target radius, but replicating
+    it across radii keeps the schema uniform so the catplot can use radius as
+    a column facet with sample-truth appearing in every column. The values are
+    scalars (not arrays), so the memory cost is negligible.
+    """
+    d_grass = grassmann_distance(U_sample, U_gt)
+    d_stief = stiefel_canonical_distance(U_sample, U_gt)
+    rows = []
+    for radius in target_radii:
+        for metric, dist in (('grassmann', d_grass), ('stiefel-canonical', d_stief)):
+            rows.append(_record(
+                p=p, sim=sim, radius=radius, metric=metric,
+                distance_type='sample-truth', distance=dist,
+                k=k, n=n,
+            ))
+    return rows
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -805,20 +1030,24 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  python factor_sims.py                    # toy spec (default)
-  python factor_sims.py toy                # toy spec
-  python factor_sims.py full               # full publication spec (~5 min)
-  python factor_sims.py micro              # micro spec (~1 s, for testing)
-  python factor_sims.py my_spec.json       # custom JSON spec
-  python factor_sims.py full --output results/run1
-  python factor_sims.py my_spec.json --seed-model 99 --seed-targets 777
+  python factor_sims.py defaults.json toy.json
+  python factor_sims.py defaults.json full.json --output results/run1
+  python factor_sims.py defaults.json toy.json --sample-truth
+  python factor_sims.py defaults.json my_overrides.json --print-spec
+  python factor_sims.py defaults.json full.json --seed-model 99
+  python factor_sims.py defaults.json toy.json --save-model model.npz
+  python factor_sims.py defaults.json toy.json --save-returns returns.npz
+
+JSON files are merged left-to-right; later files take precedence.
+All required fields must be present after merging.
 """,
     )
     parser.add_argument(
-        'spec',
-        nargs='?',
-        default='toy',
-        help="Named spec ('micro', 'toy', 'full') or path to a JSON spec file. Default: toy.",
+        'specs',
+        nargs='+',
+        type=Path,
+        metavar='SPEC_JSON',
+        help="One or more JSON spec files, merged left-to-right.",
     )
     parser.add_argument(
         '--output', '-o',
@@ -830,13 +1059,32 @@ examples:
         '--seed-model',
         type=int,
         default=None,
-        help="Override seed_model (ignored when loading from JSON that sets it).",
+        help="Override seed_model from the merged spec.",
     )
     parser.add_argument(
         '--seed-targets',
         type=int,
         default=None,
-        help="Override seed_targets.",
+        help="Override seed_targets from the merged spec.",
+    )
+    parser.add_argument(
+        '--sample-truth',
+        action='store_true',
+        help="Also record d(B^S, B^GT) for each (p, sim) under both metrics.",
+    )
+    parser.add_argument(
+        '--save-model',
+        type=Path,
+        default=None,
+        metavar='FILE.npz',
+        help="Save population model (B, F, D) to a .npz file.",
+    )
+    parser.add_argument(
+        '--save-returns',
+        type=Path,
+        default=None,
+        metavar='FILE.npz',
+        help="Save simulated returns (security, factor, idio) to a .npz file.",
     )
     parser.add_argument(
         '--no-plot',
@@ -855,19 +1103,18 @@ def main() -> None:
     """CLI entry point."""
     args = _parse_args()
 
-    seed_model  = args.seed_model  or 42
-    seed_targets = args.seed_targets or 12345
-
-    spec_arg = args.spec
-    if spec_arg in _SIZES:
-        logger.info("Building '{}' spec", spec_arg)
-        spec = build_spec(spec_arg, seed_model=seed_model, seed_targets=seed_targets)
-    else:
-        path = Path(spec_arg)
+    for path in args.specs:
         if not path.exists():
-            raise FileNotFoundError(f"Spec not a named size and file not found: {path}")
-        logger.info("Loading spec from {}", path)
-        spec = build_spec_from_json(path, seed_model=seed_model, seed_targets=seed_targets)
+            raise FileNotFoundError(f"Spec file not found: {path}")
+
+    logger.info("Loading spec from: {}", [p.name for p in args.specs])
+    spec, sampler_specs = build_spec_from_jsons(args.specs)
+
+    # CLI seed overrides take final precedence over JSON values
+    if args.seed_model is not None:
+        object.__setattr__(spec, 'seed_model', args.seed_model)
+    if args.seed_targets is not None:
+        object.__setattr__(spec, 'seed_targets', args.seed_targets)
 
     logger.info(
         "Spec: max_p={}, slices={}, num_sim={}, num_obs={}, radii={}, targets={}",
@@ -875,17 +1122,23 @@ def main() -> None:
         spec.num_obs, list(spec.target_radii), spec.num_targets,
     )
 
+    print_spec(spec, sampler_specs)
     if args.print_spec:
-        print_spec(spec)
         return
 
-    results = run_simulation(spec)
+    results = run_simulation(
+        spec,
+        sample_truth=args.sample_truth,
+        save_model_path=args.save_model,
+        save_returns_path=args.save_returns,
+    )
     results.save(args.output)
 
     if not args.no_plot:
         try:
             from factor_sims_plots import plot_results
-            plot_results(results, args.output / 'figures')
+            plot_results(results, args.output / 'figures',
+                         sample_truth=args.sample_truth)
         except ImportError:
             logger.warning("factor_sims_plots not found — skipping figure generation.")
 

@@ -1,0 +1,28 @@
+{
+    "_comment": "Base defaults. Override any field in a subsequent spec file.",
+
+    "k_factors": 3,
+    "factor_variances": [0.0025, 0.01, 0.01],
+    "num_obs": 63,
+    "target_radii": [0.1, 0.5, 1.0],
+    "seed_model": 42,
+    "seed_targets": 12345,
+
+    "max_num_sec": 10000,
+    "nums_sec": [100, 500, 1000, 3000, 5000, 10000],
+    "num_sim": 100,
+    "num_targets": 20,
+
+    "_beta_samplers": [
+        {"distribution": "normal", "loc": 1.0, "scale": 0.5},
+        {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+        {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    ],
+    "_idio_vol_sampler": {"distribution": "uniform", "low": 0.1, "high": 0.8},
+    "_factor_return_samplers": [
+        {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+        {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+        {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    ],
+    "_idio_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+}
