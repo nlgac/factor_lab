@@ -5,10 +5,11 @@ Pure data containers with no business logic.
 
 This module contains only dataclasses and type definitions.
 For algorithms and behavior, see:
-- estimation.py: Model estimation (SVD, etc.)
-- simulation.py: Returns simulation
+- decomposition.py: SVD-based model estimation
+- simulation.py: Returns simulation (legacy)
+- flexible_simulator.py: Returns simulation
 - distributions.py: Distribution samplers
-- io.py: File I/O
+- model_io.py: File I/O
 """
 
 from dataclasses import dataclass
@@ -118,20 +119,3 @@ class FactorModelData:
         """
         return self.B.T @ self.F @ self.B + self.D
 
-
-# Note: This types.py is now CLEAN - just the FactorModelData dataclass
-# All other functionality has been moved to appropriate modules:
-#
-# - estimation.py: svd_decomposition
-# - simulation.py: ReturnsSimulator  
-# - distributions.py: create_sampler (replaces DistributionFactory)
-# - io.py: save_model, load_model
-#
-# For backward compatibility during transition period, you can add re-exports:
-#
-# from .estimation import svd_decomposition
-# from .simulation import ReturnsSimulator
-# from .distributions import create_sampler as DistributionFactory
-# from .io import save_model
-#
-# But imports should be updated to use the new modules directly.

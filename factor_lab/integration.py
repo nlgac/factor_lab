@@ -25,20 +25,18 @@ Usage
 >>> print(f"Grassmannian: {results['dist_grassmannian']:.6f}")
 """
 
-import logging
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+from loguru import logger
 
 from .decomposition import svd_decomposition
 from .distributions import Sampler
 from .factor_types import FactorModelData
 from .flexible_simulator import ReturnsSimulator as FlexibleReturnsSimulator
 from .model_builder import FactorModelBuilder
-
-log = logging.getLogger(__name__)
 
 __all__ = [
     'build_simulate_analyze',
@@ -85,7 +83,7 @@ def _simulate_and_analyze(
     timestamp: datetime,
 ) -> Dict[str, Any]:
     """Shared tail: simulate, estimate, build context, run analyses."""
-    log.debug("Simulating %d periods...", n_periods)
+    logger.debug("Simulating %d periods...", n_periods)
     sim_results = FlexibleReturnsSimulator(rng=rng).simulate(
         model=model,
         n_periods=n_periods,
@@ -93,7 +91,7 @@ def _simulate_and_analyze(
         idio_return_sampler=idio_return_sampler,
     )
 
-    log.debug("Estimating model via SVD...")
+    logger.debug("Estimating model via SVD...")
     estimated_model = svd_decomposition(
         sim_results['security_returns'], k=model.k, center=True
     )
@@ -176,7 +174,7 @@ def build_simulate_analyze(
     analyses = _resolve_analyses(analyses)
     rng = rng or np.random.default_rng()
 
-    log.debug("Building model: p=%d, k=%d", p, k)
+    logger.debug("Building model: p=%d, k=%d", p, k)
     model = FactorModelBuilder(rng=rng).build(
         p=p, k=k,
         beta_samplers=beta_samplers,
@@ -189,7 +187,7 @@ def build_simulate_analyze(
         idio_return_sampler, analyses, rng, timestamp,
     )
     duration = time.time() - start
-    log.info("build_simulate_analyze complete in %.2fs", duration)
+    logger.info("build_simulate_analyze complete in %.2fs", duration)
     return {**result, 'duration': duration, 'timestamp': timestamp}
 
 
@@ -225,7 +223,7 @@ def build_simulate_analyze_from_model(
         idio_return_sampler, analyses, rng, timestamp,
     )
     duration = time.time() - start
-    log.info("build_simulate_analyze_from_model complete in %.2fs", duration)
+    logger.info("build_simulate_analyze_from_model complete in %.2fs", duration)
     return {**result, 'duration': duration, 'timestamp': timestamp}
 
 
@@ -289,6 +287,6 @@ def run_analyses(
         )
     merged: Dict[str, Any] = {}
     for name in analyses:
-        log.debug("Running %s analysis...", name)
+        logger.debug("Running %s analysis...", name)
         merged.update(registry[name](context))
     return merged

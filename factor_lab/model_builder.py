@@ -14,8 +14,8 @@ Does NOT simulate returns. See ReturnsSimulator for that.
 
 Usage
 -----
->>> from model_builder import FactorModelBuilder
->>> from distributions import create_sampler
+>>> from factor_lab.model_builder import FactorModelBuilder
+>>> from factor_lab.distributions import create_sampler
 >>> 
 >>> rng = np.random.default_rng(42)
 >>> factory = lambda name, **p: create_sampler(name, rng, **p)
@@ -70,7 +70,7 @@ class FactorModelBuilder:
     Examples
     --------
     Basic usage with different distributions per factor:
-        >>> from distributions import create_sampler
+        >>> from factor_lab.distributions import create_sampler
         >>> rng = np.random.default_rng(42)
         >>> 
         >>> builder = FactorModelBuilder(rng=rng)

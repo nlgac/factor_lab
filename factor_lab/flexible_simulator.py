@@ -19,8 +19,8 @@ Key Feature: Same model, different return distributions!
 
 Usage
 -----
->>> from returns_simulator import ReturnsSimulator
->>> from distributions import create_sampler
+>>> from factor_lab.flexible_simulator import ReturnsSimulator
+>>> from factor_lab.distributions import create_sampler
 >>> 
 >>> rng = np.random.default_rng(42)
 >>> factory = lambda name, **p: create_sampler(name, rng, **p)
@@ -70,9 +70,9 @@ class ReturnsSimulator:
     Examples
     --------
     Basic usage:
-        >>> from model_builder import FactorModelBuilder
-        >>> from returns_simulator import ReturnsSimulator
-        >>> from distributions import create_sampler
+        >>> from factor_lab.model_builder import FactorModelBuilder
+        >>> from factor_lab.flexible_simulator import ReturnsSimulator
+        >>> from factor_lab.distributions import create_sampler
         >>> 
         >>> rng = np.random.default_rng(42)
         >>> factory = lambda name, **p: create_sampler(name, rng, **p)
@@ -347,40 +347,30 @@ class ReturnsSimulator:
     ) -> np.ndarray:
         """
         Sample idiosyncratic returns and scale by asset volatilities.
-        
-        For each asset:
-        1. Sample n_periods raw values from the distribution
-        2. Scale by asset's volatility (sqrt of D[i,i])
-        
-        All assets use the same distribution, but scaled differently.
-        
+
+        Draws all n_periods × p values in one sampler call, reshapes, then
+        scales each column by sqrt(D[i,i]).  All assets use the same
+        distribution shape but different scales.
+
         Parameters
         ----------
         sampler : Sampler
-            Distribution for idiosyncratic returns
+            Standardised distribution (mean=0, std=1); called once as
+            sampler(n_periods * p).
         n_periods : int
-            Number of periods to simulate
+            Number of periods to simulate.
         D : np.ndarray, shape (p, p)
-            Idiosyncratic covariance matrix (diagonal)
-            
+            Idiosyncratic covariance matrix (diagonal).
+
         Returns
         -------
-        idio_returns : np.ndarray, shape (n_periods, p)
-            Idiosyncratic returns with correct variances per asset
+        np.ndarray, shape (n_periods, p)
         """
         p = D.shape[0]
-        
-        # Sample raw returns for each asset
-        # Each column is one asset's idio returns
-        raw_returns = np.column_stack([
-            sampler(n_periods) for _ in range(p)
-        ])  # Shape: (n_periods, p)
-        
-        # Extract idio standard deviations (sqrt of diagonal of D)
-        idio_stds = np.sqrt(np.diag(D))  # Shape: (p,)
-        
-        # Scale each asset's returns by its idio volatility
-        # Broadcasting: (n_periods, p) * (p,) -> (n_periods, p)
-        idio_returns = raw_returns * idio_stds[np.newaxis, :]
-        
-        return idio_returns
+
+        # Single draw: one call for all n_periods × p values, then reshape.
+        # Avoids p Python-level sampler calls (matters at large p).
+        raw_returns = sampler(n_periods * p).reshape(n_periods, p)
+
+        idio_stds = np.sqrt(np.diag(D))  # (p,)
+        return raw_returns * idio_stds  # broadcast (n_periods, p) * (p,)
