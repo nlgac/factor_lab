@@ -519,11 +519,24 @@ def _record(p: int, sim: int, radius: float, metric: str,
     }
 
 
-# Dispatch: metric name → (target_sampler, distance_fn)
-_METRICS = {
-    'grassmann': (sample_grassmann_targets, grassmann_distance),
-    'stiefel-canonical': (sample_stiefel_targets, stiefel_canonical_distance),
+@dataclass(frozen=True)
+class MetricSpec:
+    """One distance metric for the simulation loop."""
+    name: str
+    distance_fn: Callable[[np.ndarray, np.ndarray], float]
+    sampler: Callable  # (U_gt, radius, n, rng, *, Q_full) -> list[ndarray]
+
+
+# Dispatch: metric name → MetricSpec.  Add new metrics here — nowhere else.
+_METRICS: dict[str, MetricSpec] = {
+    'grassmann':         MetricSpec('grassmann', grassmann_distance, sample_grassmann_targets),
+    'stiefel-canonical': MetricSpec('stiefel-canonical', stiefel_canonical_distance, sample_stiefel_targets),
 }
+
+
+def register_metric(spec: MetricSpec) -> None:
+    """Register a custom distance metric. Call before run_simulation."""
+    _METRICS[spec.name] = spec
 
 
 def _measure_one_cell(
@@ -540,18 +553,18 @@ def _measure_one_cell(
     radii and sims within a p-slice to avoid redundant null_space calls.
     """
     records = []
-    for metric_name, (sampler, distance_fn) in _METRICS.items():
-        targets = sampler(U_gt, radius, num_targets, rng, Q_full=Q_full)
+    for spec in _METRICS.values():
+        targets = spec.sampler(U_gt, radius, num_targets, rng, Q_full=Q_full)
         for target in targets:
             records.append(_record(
-                p=p, sim=sim, radius=radius, metric=metric_name,
+                p=p, sim=sim, radius=radius, metric=spec.name,
                 distance_type='sample-target',
-                distance=distance_fn(target, U_sample),
+                distance=spec.distance_fn(target, U_sample),
                 k=k, n=n,
             ))
         # Reference row: target ↔ ground truth is exactly `radius` by construction
         records.append(_record(
-            p=p, sim=sim, radius=radius, metric=metric_name,
+            p=p, sim=sim, radius=radius, metric=spec.name,
             distance_type='truth-target', distance=radius,
             k=k, n=n,
         ))
@@ -1046,11 +1059,10 @@ def _sample_truth_records(
     a column facet with sample-truth appearing in every column. The values are
     scalars (not arrays), so the memory cost is negligible.
     """
-    d_grass = grassmann_distance(U_sample, U_gt)
-    d_stief = stiefel_canonical_distance(U_sample, U_gt)
+    dists = {spec.name: spec.distance_fn(U_sample, U_gt) for spec in _METRICS.values()}
     rows = []
     for radius in target_radii:
-        for metric, dist in (('grassmann', d_grass), ('stiefel-canonical', d_stief)):
+        for metric, dist in dists.items():
             rows.append(_record(
                 p=p, sim=sim, radius=radius, metric=metric,
                 distance_type='sample-truth', distance=dist,

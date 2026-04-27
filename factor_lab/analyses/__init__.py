@@ -32,6 +32,7 @@ from .manifold import (
     compute_procrustes_distance,
     compute_chordal_distance,
     orthonormalize,
+    register_manifold_distance,
 )
 
 from .spectral import (
@@ -57,5 +58,8 @@ __all__ = [
     'compute_procrustes_distance',
     'compute_chordal_distance',
     'orthonormalize',
-    'compute_true_eigenvalues',
+  'compute_true_eigenvalues',
+
+    # Extension points
+    'register_manifold_distance',
 ]

@@ -20,7 +20,7 @@ The geometry of algorithms with orthogonality constraints.
 SIAM journal on Matrix Analysis and Applications, 20(2), 303-353.
 """
 
-from typing import Dict, Any, Tuple, Optional
+from typing import Callable, Dict, Any, Tuple, Optional
 import numpy as np
 import scipy.linalg
 
@@ -241,6 +241,25 @@ def compute_chordal_distance(
     return float(np.linalg.norm(Q_true - Q_estimated, 'fro'))
 
 
+# Extra scalar distances registered at runtime.
+# Signature: (B_true: ndarray, B_estimated: ndarray) -> float
+# Add new metrics here — nowhere else.
+_EXTRA_DISTANCES: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {}
+
+
+def register_manifold_distance(
+    result_key: str,
+    fn: Callable[[np.ndarray, np.ndarray], float],
+) -> None:
+    """Register an extra scalar distance for ManifoldDistanceAnalysis.
+
+    Example:
+        register_manifold_distance('dist_my_metric', my_distance_fn)
+        # → 'dist_my_metric' appears in every subsequent analyze() result
+    """
+    _EXTRA_DISTANCES[result_key] = fn
+
+
 class ManifoldDistanceAnalysis(SimulationAnalysis):
     """
     Compare factor loadings using manifold geometry.
@@ -341,7 +360,7 @@ class ManifoldDistanceAnalysis(SimulationAnalysis):
         procrustes_result = compute_procrustes_distance(B_true, B_estimated)
         dist_chordal = compute_chordal_distance(B_true, B_estimated)
         
-        return {
+        results = {
             'dist_grassmannian': dist_grass,
             'dist_procrustes': procrustes_result['distance'],
             'dist_chordal': dist_chordal,
@@ -349,3 +368,6 @@ class ManifoldDistanceAnalysis(SimulationAnalysis):
             'optimal_rotation': procrustes_result['optimal_rotation'],
             'aligned_frame': procrustes_result['aligned_frame'],
         }
+        for key, fn in _EXTRA_DISTANCES.items():
+            results[key] = fn(B_true, B_estimated)
+        return results
