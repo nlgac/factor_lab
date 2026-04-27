@@ -48,7 +48,7 @@ where each $\psi_{\infty,i} = \alpha_i |X_i| / \sqrt{\alpha_i^2 |X_i|^2 + \delta
 
 The model is $Y = B F^\top + Z$, dimensions $p \times n$, with $B \in \mathbb{R}^{p\times k}$, $F \in \mathbb{R}^{n\times k}$, $Z \in \mathbb{R}^{p\times n}$. Asymptotics: $p \to \infty$, $n$ and $k$ fixed.
 
-Let $\mathcal{B} := \mathrm{span}(B) \subset \mathbb{R}^p$, with orthogonal projector $\Pi_B$ and complement projector $\Pi_B^\perp = I - \Pi_B$. Let $\tilde B$ denote any orthonormal basis for $\mathcal{B}$ (under Assumption 2.5$'$, the natural choice is $\tilde B = B \cdot \opera\mathrm(|\beta_j|^{-1})$, but the choice doesn't affect $\Pi_B$).
+Let $\mathcal{B} := \mathrm{span}(B) \subset \mathbb{R}^p$, with orthogonal projector $\Pi_B$ and complement projector $\Pi_B^\perp = I - \Pi_B$. Let $\tilde B$ denote any orthonormal basis for $\mathcal{B}$ (under Assumption 2.5$'$, the natural choice is $\tilde B = B \cdot \mathrm(|\beta_j|^{-1})$, but the choice doesn't affect $\Pi_B$).
 
 The thin SVD of $Y/\sqrt n$ gives $H \in \mathbb{R}^{p\times k}$ (orthonormal top-$k$ left singular vectors), $\mathcal{X}*p \in \mathbb{R}^{n\times k}$ (orthonormal right singular vectors), and $S_p = \mathrm{diag}(s*{p,1}, \ldots, s_{p,k})$ in decreasing order. The fundamental identity is
 
@@ -172,12 +172,12 @@ Now take limits factor by factor using Lemma A.2$'$:
 - $|\beta_j|/\sqrt p \to \alpha_j$ (Assumption 2.2$'$).
 - $\mathcal{X}_p \to [X_1/|X_1|, \ldots, X_k/|X_k|]$ a.s. (Lemma A.2$'$ Part 3, requires Assumption 2.6$'$).
 - Hence $F^\top \mathcal{X}*p \to F^\top \cdot [X_1/|X_1|, \ldots, X_k/|X_k|]$, with $(i,j)$ entry $X_i^\top X_j / |X_j| = |X_j| \delta*{ij}$ under Assumption 2.6$'$. So $F^\top \mathcal{X}_p \to \mathrm{diag}(|X_j|)$.
-- $S_p^{-1} \cdot \sqrt p = \mathrm{diag}(\sqrt p / s_{p,i}) \to \opera\mathrm(1/\sqrt{\lambda_i})$ (Lemma A.2$'$ Part 4).
+- $S_p^{-1} \cdot \sqrt p = \mathrm{diag}(\sqrt p / s_{p,i}) \to \mathrm(1/\sqrt{\lambda_i})$ (Lemma A.2$'$ Part 4).
 
 Combining:
 
 $$
-(\tilde B^\top H)_\infty \;=\; \mathrm{diag}(\alpha_j) \cdot \opera\mathrm(|X_j|/\sqrt n) \cdot \operatornam\mathrmrt{\lambda_j}) \;=\; \operatorname{diag\mathrm\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big).
+(\tilde B^\top H)_\infty \;=\; \mathrm{diag}(\alpha_j) \cdot \mathrm(|X_j|/\sqrt n) \cdot \operatornam\mathrmrt{\lambda_j}) \;=\; \operatorname{diag\mathrm\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big).
 $$
 
 Since $n \lambda_j = \alpha_j^2 |X_j|^2 + \delta^2$ (Lemma A.2$'$ Part 2), the diagonal entries are
@@ -202,7 +202,7 @@ $$
 
 *Proof.* From Assumption 2.2$'$, $\langle b_i, z\rangle_p = (e^\top \beta_i / p) / (|\beta_i|/\sqrt p) \to \mu_\infty(\beta_i)/\alpha_i = c_i$. So $|\Pi_B z|^2 = \sum_i \langle b_i, z\rangle_p^2 \to \sum_i c_i^2$.
 
-For $|\Pi_H z|^2 = |H^\top z|^2$: by Part (i) at $v = z$, $H^\top z - H^\top \Pi_B z \to 0$; by Part (ii), $H^\top \tilde B \to \mathrm{diag}(\psi_{\infty,i})$. So $H^\top z \to H^\top \Pi_B z \to \opera\mathrm(\psi_{\infty,i}) \cdot (c_1, \ldots, c_k)^\top = (\psi_{\infty,1} c_1, \ldots, \psi_{\infty,k} c_k)^\top$, and $|H^\top z|^2 \to \sum_i \psi_{\infty,i}^2 c_i^2$.
+For $|\Pi_H z|^2 = |H^\top z|^2$: by Part (i) at $v = z$, $H^\top z - H^\top \Pi_B z \to 0$; by Part (ii), $H^\top \tilde B \to \mathrm{diag}(\psi_{\infty,i})$. So $H^\top z \to H^\top \Pi_B z \to \mathrm(\psi_{\infty,i}) \cdot (c_1, \ldots, c_k)^\top = (\psi_{\infty,1} c_1, \ldots, \psi_{\infty,k} c_k)^\top$, and $|H^\top z|^2 \to \sum_i \psi_{\infty,i}^2 c_i^2$.
 
 Each $1 - \psi_{\infty,i}^2 = \delta^2/(\alpha_i^2 |X_i|^2 + \delta^2) > 0$ a.s. and $c_i > 0$, so the deficit is strictly positive. $\square$
 
