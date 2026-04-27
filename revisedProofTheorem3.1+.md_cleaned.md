@@ -37,7 +37,7 @@ $$
 Under the additional Assumptions 2.5$'$–2.6$'$:
 
 $$
-\textbf{(Part ii)} \qquad H^\top \tilde B \;\longrightarrow\; \operatorname{diag}(\psi_{\infty,1}, \ldots, \psi_{\infty,k}),
+\textbf{(Part ii)} \qquad H^\top \tilde B \;\longrightarrow\; \mathrm{diag}(\psi_{\infty,1}, \ldots, \psi_{\infty,k}),
 $$
 
 where each $\psi_{\infty,i} = \alpha_i |X_i| / \sqrt{\alpha_i^2 |X_i|^2 + \delta^2} \in (0, 1)$ a.s.
@@ -48,9 +48,9 @@ where each $\psi_{\infty,i} = \alpha_i |X_i| / \sqrt{\alpha_i^2 |X_i|^2 + \delta
 
 The model is $Y = B F^\top + Z$, dimensions $p \times n$, with $B \in \mathbb{R}^{p\times k}$, $F \in \mathbb{R}^{n\times k}$, $Z \in \mathbb{R}^{p\times n}$. Asymptotics: $p \to \infty$, $n$ and $k$ fixed.
 
-Let $\mathcal{B} := \operatorname{span}(B) \subset \mathbb{R}^p$, with orthogonal projector $\Pi_B$ and complement projector $\Pi_B^\perp = I - \Pi_B$. Let $\tilde B$ denote any orthonormal basis for $\mathcal{B}$ (under Assumption 2.5$'$, the natural choice is $\tilde B = B \cdot \operatorname{diag}(|\beta_j|^{-1})$, but the choice doesn't affect $\Pi_B$).
+Let $\mathcal{B} := \mathrm{span}(B) \subset \mathbb{R}^p$, with orthogonal projector $\Pi_B$ and complement projector $\Pi_B^\perp = I - \Pi_B$. Let $\tilde B$ denote any orthonormal basis for $\mathcal{B}$ (under Assumption 2.5$'$, the natural choice is $\tilde B = B \cdot \mathrm(|\beta_j|^{-1})$, but the choice doesn't affect $\Pi_B$).
 
-The thin SVD of $Y/\sqrt n$ gives $H \in \mathbb{R}^{p\times k}$ (orthonormal top-$k$ left singular vectors), $\mathcal{X}*p \in \mathbb{R}^{n\times k}$ (orthonormal right singular vectors), and $S_p = \operatorname{diag}(s*{p,1}, \ldots, s_{p,k})$ in decreasing order. The fundamental identity is
+The thin SVD of $Y/\sqrt n$ gives $H \in \mathbb{R}^{p\times k}$ (orthonormal top-$k$ left singular vectors), $\mathcal{X}*p \in \mathbb{R}^{n\times k}$ (orthonormal right singular vectors), and $S_p = \mathrm{diag}(s*{p,1}, \ldots, s_{p,k})$ in decreasing order. The fundamental identity is
 
 $$
 H S_p \;=\; \frac{Y \mathcal{X}_p}{\sqrt n} \;=\; \frac{B F^\top \mathcal{X}_p}{\sqrt n} \;+\; \frac{Z \mathcal{X}_p}{\sqrt n}, \tag{$33'$}
@@ -92,7 +92,7 @@ The right side is summable in $p$ for $\epsilon < 1/2$. Borel–Cantelli gives $
 
 **Lemma A.2$'$ (spectral convergence).** Under Assumptions 2.1$'$–2.5$'$:
 
-1. $R_p := Y^\top Y/(np) \to A_\infty := F M_\infty F^\top / n + (\delta^2/n) I_n$ in operator norm a.s., with $M_\infty = \operatorname{diag}(\alpha_1^2, \ldots, \alpha_k^2)$.
+1. $R_p := Y^\top Y/(np) \to A_\infty := F M_\infty F^\top / n + (\delta^2/n) I_n$ in operator norm a.s., with $M_\infty = \mathrm{diag}(\alpha_1^2, \ldots, \alpha_k^2)$.
 2. $s_{p,i}^2/p \to \lambda_i$ a.s. *Under 2.6$'$,* $\lambda_i = (\alpha_i^2 |X_i|^2 + \delta^2)/n$.
 3. *Under 2.6$'$:* $\chi_{p,i} \to X_i/|X_i|$ a.s., and the $\lambda_i$ are distinct a.s.
 4. $\sqrt p / s_{p,i} \to 1/\sqrt{\lambda_i} < \infty$ a.s.
@@ -161,23 +161,23 @@ $$
 \tilde B^\top H \;=\; \tilde B^\top B \cdot \frac{F^\top \mathcal{X}_p}{\sqrt n} \cdot S_p^{-1} \;+\; \tilde B^\top \varepsilon_p.
 $$
 
-Under Assumption 2.5$'$, $\tilde B^\top B = \operatorname{diag}(|\beta_j|)_j$ (the $j$-th column of $B$ equals $|\beta_j|$ times the $j$-th column of $\tilde B$). Substituting and rescaling:
+Under Assumption 2.5$'$, $\tilde B^\top B = \mathrm{diag}(|\beta_j|)_j$ (the $j$-th column of $B$ equals $|\beta_j|$ times the $j$-th column of $\tilde B$). Substituting and rescaling:
 
 $$
-\tilde B^\top H \;=\; \operatorname{diag}(|\beta_j|/\sqrt p) \cdot \frac{F^\top \mathcal{X}_p \sqrt p}{\sqrt n} \cdot S_p^{-1} \;+\; o(1).
+\tilde B^\top H \;=\; \mathrm{diag}(|\beta_j|/\sqrt p) \cdot \frac{F^\top \mathcal{X}_p \sqrt p}{\sqrt n} \cdot S_p^{-1} \;+\; o(1).
 $$
 
 Now take limits factor by factor using Lemma A.2$'$:
 
 - $|\beta_j|/\sqrt p \to \alpha_j$ (Assumption 2.2$'$).
 - $\mathcal{X}_p \to [X_1/|X_1|, \ldots, X_k/|X_k|]$ a.s. (Lemma A.2$'$ Part 3, requires Assumption 2.6$'$).
-- Hence $F^\top \mathcal{X}*p \to F^\top \cdot [X_1/|X_1|, \ldots, X_k/|X_k|]$, with $(i,j)$ entry $X_i^\top X_j / |X_j| = |X_j| \delta*{ij}$ under Assumption 2.6$'$. So $F^\top \mathcal{X}_p \to \operatorname{diag}(|X_j|)$.
-- $S_p^{-1} \cdot \sqrt p = \operatorname{diag}(\sqrt p / s_{p,i}) \to \operatorname{diag}(1/\sqrt{\lambda_i})$ (Lemma A.2$'$ Part 4).
+- Hence $F^\top \mathcal{X}*p \to F^\top \cdot [X_1/|X_1|, \ldots, X_k/|X_k|]$, with $(i,j)$ entry $X_i^\top X_j / |X_j| = |X_j| \delta*{ij}$ under Assumption 2.6$'$. So $F^\top \mathcal{X}_p \to \mathrm{diag}(|X_j|)$.
+- $S_p^{-1} \cdot \sqrt p = \mathrm{diag}(\sqrt p / s_{p,i}) \to \mathrm(1/\sqrt{\lambda_i})$ (Lemma A.2$'$ Part 4).
 
 Combining:
 
 $$
-(\tilde B^\top H)_\infty \;=\; \operatorname{diag}(\alpha_j) \cdot \operatorname{diag}(|X_j|/\sqrt n) \cdot \operatorname{diag}(1/\sqrt{\lambda_j}) \;=\; \operatorname{diag}!\Big(\frac{\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big).
+(\tilde B^\top H)_\infty = \mathrm{diag}(\alpha_j) \cdot \mathrm{diag}(|X_j|/\sqrt n) \cdot \mathrm{diag}(1/\sqrt{\lambda_j}) = \mathrm{diag}\Big(\frac{\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big)
 $$
 
 Since $n \lambda_j = \alpha_j^2 |X_j|^2 + \delta^2$ (Lemma A.2$'$ Part 2), the diagonal entries are
@@ -186,7 +186,7 @@ $$
 \frac{\alpha_j |X_j|}{\sqrt{\alpha_j^2 |X_j|^2 + \delta^2}} \;=\; \psi_{\infty,j} \;\in\; (0, 1) \quad \text{a.s.}
 $$
 
-Transposing (which preserves diagonality): $H^\top \tilde B \to \operatorname{diag}(\psi_{\infty,1}, \ldots, \psi_{\infty,k})$ a.s. $\square$
+Transposing (which preserves diagonality): $H^\top \tilde B \to \mathrm{diag}(\psi_{\infty,1}, \ldots, \psi_{\infty,k})$ a.s. $\square$
 
 ## Corollary: The Dispersion Bias
 
@@ -202,7 +202,7 @@ $$
 
 *Proof.* From Assumption 2.2$'$, $\langle b_i, z\rangle_p = (e^\top \beta_i / p) / (|\beta_i|/\sqrt p) \to \mu_\infty(\beta_i)/\alpha_i = c_i$. So $|\Pi_B z|^2 = \sum_i \langle b_i, z\rangle_p^2 \to \sum_i c_i^2$.
 
-For $|\Pi_H z|^2 = |H^\top z|^2$: by Part (i) at $v = z$, $H^\top z - H^\top \Pi_B z \to 0$; by Part (ii), $H^\top \tilde B \to \operatorname{diag}(\psi_{\infty,i})$. So $H^\top z \to H^\top \Pi_B z \to \operatorname{diag}(\psi_{\infty,i}) \cdot (c_1, \ldots, c_k)^\top = (\psi_{\infty,1} c_1, \ldots, \psi_{\infty,k} c_k)^\top$, and $|H^\top z|^2 \to \sum_i \psi_{\infty,i}^2 c_i^2$.
+For $|\Pi_H z|^2 = |H^\top z|^2$: by Part (i) at $v = z$, $H^\top z - H^\top \Pi_B z \to 0$; by Part (ii), $H^\top \tilde B \to \mathrm{diag}(\psi_{\infty,i})$. So $H^\top z \to H^\top \Pi_B z \to \mathrm(\psi_{\infty,i}) \cdot (c_1, \ldots, c_k)^\top = (\psi_{\infty,1} c_1, \ldots, \psi_{\infty,k} c_k)^\top$, and $|H^\top z|^2 \to \sum_i \psi_{\infty,i}^2 c_i^2$.
 
 Each $1 - \psi_{\infty,i}^2 = \delta^2/(\alpha_i^2 |X_i|^2 + \delta^2) > 0$ a.s. and $c_i > 0$, so the deficit is strictly positive. $\square$
 
