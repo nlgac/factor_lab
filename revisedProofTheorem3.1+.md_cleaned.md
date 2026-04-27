@@ -177,7 +177,7 @@ Now take limits factor by factor using Lemma A.2$'$:
 Combining:
 
 $$
-(\tilde B^\top H)_\infty \;=\; \mathrm{diag}(\alpha_j) \cdot \mathrm(|X_j|/\sqrt n) \cdot \operatornam\mathrmrt{\lambda_j}) \;=\; \operatorname{diag\mathrm\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big).
+(\tilde B^\top H)_\infty = \mathrm{diag}(\alpha_j) \cdot \mathrm{diag}(|X_j|/\sqrt n) \cdot \mathrm{diag}(1/\sqrt{\lambda_j}) = \mathrm{diag}\Big(\frac{\alpha_j |X_j|}{\sqrt{n \lambda_j}}\Big)
 $$
 
 Since $n \lambda_j = \alpha_j^2 |X_j|^2 + \delta^2$ (Lemma A.2$'$ Part 2), the diagonal entries are
