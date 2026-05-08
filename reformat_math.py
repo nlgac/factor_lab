@@ -7,39 +7,24 @@ structural and stability formatting to ensure robust rendering across markdown p
 
 Usage:
     python reformat_math.py input.md [output.md]
-    (If output.md is omitted, defaults to input_cleaned.md)
+    
+If output.md is omitted, the script safely defaults to: input_cleaned.md
 
-#!/usr/bin/env python3
-# reformat_math.py -- Canonically format display-math blocks in Markdown files.
-#
-# Usage:
-#     python reformat_math.py <input.md> [output.md]
-#
-# If output.md is omitted the file is edited in-place.
-#
-# Stack model
-# -----------
-# The parser scans left-to-right with a one-slot-deep stack per nesting level.
-# Tokens are $$ (display) and $ (inline); \ escapes skip the next character.
-#
-#   Stack empty    + $$  ->  push display
-#   Stack empty    + $   ->  push inline
-#   IN_DISPLAY     + $$  ->  pop, record display span           (well-formed)
-#   IN_DISPLAY     + $   ->  push NESTED inline                 (e.g. \tag{$8'$})
-#   IN_INLINE      + $   ->  pop, record inline span            (well-formed)
-#   IN_INLINE      + $$  ->  pop, record mismatch_d_dd span     ($...$$ typo)
-#   Nested inline closes when its matching $ is found; outer display continues.
-#   Only TOP-LEVEL spans (stack depth returning to 0) are recorded.
-#   Unclosed openers at end-of-text become 'orphan' entries.
-#
-# Repairs:
-#   display       ->  canonical 7-line $$\ncontent\n$$ form; bare ; -> \;
-#   inline        ->  \n inside $...$ replaced with space (most renderers
-#                     close inline math at a newline, breaking the formula)
-#   mismatch_d_dd ->  single-line: $content$; multi-line: display block
-#   orphan        ->  warning only, text left as-is
-#
-# Code fences (``` ... ```) are skipped entirely.
+Stack Parser Model:
+-------------------
+The parser scans left-to-right with a one-slot-deep stack per nesting level.
+Tokens are $$ (display) and $ (inline); \\ escapes skip the next character.
+
+  Stack empty    + $$  ->  push display
+  Stack empty    + $   ->  push inline
+  IN_DISPLAY     + $$  ->  pop, record display span           (well-formed)
+  IN_DISPLAY     + $   ->  push NESTED inline                 (e.g. \\tag{$8'$})
+  IN_INLINE      + $   ->  pop, record inline span            (well-formed)
+  IN_INLINE      + $$  ->  pop, record mismatch_d_dd span     ($...$$ typo)
+
+Nested inline closes when its matching $ is found; outer display continues.
+Only TOP-LEVEL spans (stack depth returning to 0) are recorded.
+Unclosed openers at end-of-text become 'orphan' entries and trigger warnings.
 """
 
 import argparse
@@ -118,11 +103,14 @@ def _apply_common_math_fixes(content: str) -> str:
     # 1. Safely scope the parallel superscript to avoid double-superscript errors
     content = content.replace(r'^\|', r'^{\parallel}')
     
-    # 2. Replace norm bars with \Vert and a trailing space to prevent macro collisions (e.g., \Verth)
+    # 1.5. AUTO-REPAIR HEURISTIC: Catch missing closing norms
+    # Fixed regex: Escaped caret \^ to match the literal character, not start-of-string.
+    content = re.sub(r'(\^\{\\parallel\})(\^|_)', r'\1\\Vert \2', content)
+    
+    # 2. Replace norm bars with \Vert and a trailing space to prevent macro collisions
     content = content.replace(r'\|', r'\Vert ')
     
     # 3. Remove the space if the norm bar is immediately followed by a superscript or subscript.
-    # This guarantees the ^2 attaches directly to \Vert, preventing strict parsers from dropping it.
     content = content.replace(r'\Vert ^', r'\Vert^')
     content = content.replace(r'\Vert _', r'\Vert_')
     
@@ -131,36 +119,81 @@ def _apply_common_math_fixes(content: str) -> str:
     
     return content
 
-def format_math_span(raw_text: str, kind: str, warnings: List[str]) -> str:
-    """Routes a raw math string through the appropriate formatting rules."""
+
+def format_math_span(raw_text: str, kind: str, warnings: List[str], offset: int) -> str:
+    """Routes a raw math string through formatting rules and performs stack-based validation."""
+    
+    def check_delimiter_stack(text: str):
+        """
+        Validates structure using a Pushdown Automaton. 
+        Tracks \Vert alongside { and } to catch crossing scopes and missing pulls.
+        """
+        stack = []
+        i, n = 0, len(text)
+        
+        while i < n:
+            if text[i] == '\\':
+                # Check for \Vert macro
+                if text[i:i+5] == r'\Vert':
+                    if stack and stack[-1] == r'\Vert':
+                        stack.pop()  # Pull (Close norm)
+                    else:
+                        stack.append(r'\Vert')  # Push (Open norm)
+                    i += 5
+                    continue
+                i += 2  # Skip other escaped characters
+                continue
+                
+            ch = text[i]
+            if ch == '{':
+                stack.append('{')
+            elif ch == '}':
+                if not stack:
+                    pass # Ignore orphan closing braces
+                elif stack[-1] == '{':
+                    stack.pop()
+                elif stack[-1] == r'\Vert':
+                    # Scope Violation: Closing a brace while a norm is still open
+                    snippet = text[max(0, i-15):min(n, i+15)].replace('\n', ' ')
+                    warnings.append(f"Scope violation near index {offset + i}: Closed '}}' while '\\Vert' was still pushed. (Context: '{snippet}')")
+                    stack.pop() # Pop the \Vert to attempt recovery
+                    if stack and stack[-1] == '{':
+                        stack.pop()
+            i += 1
+
+        # Anything left on the stack is unclosed
+        if r'\Vert' in stack:
+            snippet = text[:40].replace('\n', ' ') + "..." if len(text) > 40 else text.replace('\n', ' ')
+            warnings.append(f"Unclosed '\\Vert' (missing pull) detected in block starting at index {offset}. (Snippet: '{snippet}')")
+
     if kind == 'display':
         content = _apply_common_math_fixes(raw_text[2:-2].strip())
+        check_delimiter_stack(content)
         return f'\n\n$$\n{content}\n$$\n\n'
 
     if kind == 'inline':
         content = raw_text.replace('\n', ' ') if '\n' in raw_text else raw_text
-        return _apply_common_math_fixes(content)
+        content = _apply_common_math_fixes(content)
+        check_delimiter_stack(content)
+        return content
 
     if kind == 'mismatch_d_dd':
         content = _apply_common_math_fixes(raw_text[1:-2].strip())
+        check_delimiter_stack(content)
         if '\n' in content:
-            warnings.append('Mismatched $...$$ (multi-line) -> converted to display block')
+            warnings.append(f'Mismatched $...$$ (multi-line) near index {offset} -> converted to display block.')
             return f'\n\n$$\n{content}\n$$\n\n'
-        warnings.append(f'Mismatched $...$$ -> converted to inline: ${content}$')
+        warnings.append(f'Mismatched $...$$ near index {offset} -> converted to inline.')
         return f'${content}$'
 
     return raw_text
 
 
 def protect_table_pipes(text: str) -> str:
-    """
-    Prevents markdown table parsers from breaking on vertical bars inside inline math.
-    Only processes rows starting with '|' to avoid mutating unrelated absolute values.
-    """
+    """Prevents markdown table parsers from breaking on vertical bars inside inline math."""
     out = []
     for line in text.split('\n'):
         if line.lstrip().startswith('|') and '$' in line:
-            # Quick state machine to flip '|' to '\vert' only while inside '$'
             in_math, chars = False, []
             i = 0
             while i < len(line):
@@ -198,12 +231,12 @@ def process_markdown(text: str) -> Tuple[str, List[str]]:
             out_seg.append(seg[prev:span.start])
             
             if span.end is None:
-                warnings.append(f"Unmatched math delimiter near: {repr(seg[span.start:span.start+40])}")
+                warnings.append(f"Unmatched math delimiter near character index {span.start}: {repr(seg[span.start:span.start+40])}")
                 out_seg.append(seg[span.start:])
                 prev = len(seg)
                 break
 
-            formatted = format_math_span(seg[span.start:span.end], span.kind, warnings)
+            formatted = format_math_span(seg[span.start:span.end], span.kind, warnings, span.start)
             out_seg.append(formatted)
             prev = span.end
 
@@ -228,6 +261,7 @@ def main():
     if not input_path.is_file():
         sys.exit(f"Error: Input file not found: {input_path}")
 
+    # Default output logic: append '_cleaned'
     output_path: Path = args.output or input_path.with_name(f"{input_path.stem}_cleaned{input_path.suffix}")
 
     original = input_path.read_text(encoding='utf-8')
