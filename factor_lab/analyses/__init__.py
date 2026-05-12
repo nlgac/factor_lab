@@ -31,6 +31,7 @@ from .manifold import (
     compute_grassmannian_distance,
     compute_procrustes_distance,
     compute_chordal_distance,
+    compute_sine_alignment,
     orthonormalize,
     register_manifold_distance,
 )
@@ -57,8 +58,9 @@ __all__ = [
     'compute_grassmannian_distance',
     'compute_procrustes_distance',
     'compute_chordal_distance',
+    'compute_sine_alignment',
     'orthonormalize',
-  'compute_true_eigenvalues',
+    'compute_true_eigenvalues',
 
     # Extension points
     'register_manifold_distance',

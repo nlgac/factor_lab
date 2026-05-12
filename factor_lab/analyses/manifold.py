@@ -31,6 +31,8 @@ __all__ = [
     'compute_grassmannian_distance',
     'compute_procrustes_distance',
     'compute_chordal_distance',
+    'compute_sine_alignment',
+    'register_manifold_distance',
     'ManifoldDistanceAnalysis',
 ]
 
@@ -241,6 +243,50 @@ def compute_chordal_distance(
     return float(np.linalg.norm(Q_true - Q_estimated, 'fro'))
 
 
+def compute_sine_alignment(
+    B_true: np.ndarray,
+    B_estimated: np.ndarray,
+) -> Tuple[np.ndarray, float]:
+    """Per-factor sin²∠(hⱼ, bⱼ) with j matched by row order.
+
+    Computes sin²∠(hⱼ, bⱼ) for j = 1, …, k, where the j-th row of
+    B_true is population direction bⱼ and the j-th row of B_estimated
+    is sample direction hⱼ.  Matching is by **row order** (eigenvalue
+    rank), not by optimal alignment — this is what Theorem 1, Eq. (20)
+    predicts.
+
+    This differs from the Grassmannian distance, which uses principal
+    angles (optimally matched).  d_Gr ≤ d_sine always; equality holds
+    iff the rank-order matching is already optimal.
+
+    Parameters
+    ----------
+    B_true : np.ndarray, shape (k, p)
+        Population loading directions (rows need not be unit-norm).
+    B_estimated : np.ndarray, shape (k, p)
+        Sample loading directions (rows need not be unit-norm).
+
+    Returns
+    -------
+    sin2 : np.ndarray, shape (k,)
+        sin²∠(hⱼ, bⱼ) for each factor j, values in [0, 1].
+    dist_sine : float
+        Aggregate scalar sqrt(Σⱼ sin²∠(hⱼ, bⱼ)).
+
+    Examples
+    --------
+    >>> B = np.random.randn(3, 100)
+    >>> sin2, d = compute_sine_alignment(B, B)   # perfect alignment
+    >>> np.allclose(sin2, 0.0)
+    True
+    """
+    b    = B_true      / np.linalg.norm(B_true,      axis=1, keepdims=True)
+    h    = B_estimated / np.linalg.norm(B_estimated, axis=1, keepdims=True)
+    cos2 = np.einsum('jp,jp->j', b, h) ** 2      # (bⱼ · hⱼ)²; sign-invariant
+    sin2 = np.clip(1.0 - cos2, 0.0, 1.0)
+    return sin2, float(np.sqrt(float(sin2.sum())))
+
+
 # Extra scalar distances registered at runtime.
 # Signature: (B_true: ndarray, B_estimated: ndarray) -> float
 # Add new metrics here — nowhere else.
@@ -331,7 +377,6 @@ class ManifoldDistanceAnalysis(SimulationAnalysis):
         Returns
         -------
         dict
-            dist_grassmannian : float
                 Distance on Grassmannian manifold.
             dist_procrustes : float
                 Procrustes distance (after alignment).
