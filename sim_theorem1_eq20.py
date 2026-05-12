@@ -1,5 +1,5 @@
 """
-sim_theorem1_eq20_v1.py
+sim_theorem1_eq20_v2.py
 =======================
 Numerical verification of Theorem 1, Equation (20) from:
 
@@ -15,6 +15,15 @@ on X and almost surely as p → ∞,
 
 where ρⱼ and ŵⱼ are the j-th eigenvalue/vector of D̂ = C^{1/2}(XX^T/n)C^{1/2}.
 
+Changes from v1
+---------------
+- `SineAlignmentAnalysis` replaces `Eq20LHSAnalysis`.  The LHS column is now
+  named "sin2_j" throughout (DataFrame, plots, RMSE table).
+- `compute_sine_alignment` (from factor_lab.analyses) is registered with
+  `register_manifold_distance` so it also appears in `ManifoldDistanceAnalysis`
+  results.  Note: that path uses centered PCA, which differs from the uncentered
+  Gram trick used here; treat the registered value as a diagnostic only.
+
 Setup
 -----
 - Loadings: B[j,:] has i.i.d. N(0, τⱼ) entries, independent across j.
@@ -25,22 +34,12 @@ Setup
 - The model is drawn once per (n, p) cell and held fixed; X and Z are
   redrawn each replication (simulating the conditional-on-X regime).
 
-Implementation
---------------
-Uses the factor_lab package:
-  - FactorModelBuilder  – model construction (β, F, D)
-  - ReturnsSimulator    – data generation
-  - SimulationContext   – per-rep state container
-  - compute_true_eigenvalues – population directions bⱼ via implicit Σ
-
-The LHS and RHS calculations are implemented as SimulationAnalysis classes.
-
 Outputs
 -------
-- sim_theorem1_results.csv      — raw per-rep records
-- fig_theorem1_convergence.png  — gap LHS−RHS vs p, for each n and factor
-- fig_theorem1_scatter.png      — LHS vs RHS scatter at p=P_VALUES[-2]
-- fig_theorem1_components.png   — floor and rotation convergence separately
+- sim_theorem1_results_v2.csv       — raw per-rep records
+- fig_theorem1_convergence_v2.png   — gap sin²∠−RHS vs p, for each n and factor
+- fig_theorem1_scatter_v2.png       — sin²∠ vs RHS scatter at p=P_VALUES[-2]
+- fig_theorem1_components_v2.png    — floor and rotation convergence separately
 """
 
 import sys
@@ -62,6 +61,7 @@ from factor_lab.flexible_simulator import ReturnsSimulator
 from factor_lab.distributions import create_sampler
 from factor_lab.analysis import SimulationContext
 from factor_lab.analyses.spectral import compute_true_eigenvalues
+from factor_lab.analyses import compute_sine_alignment, register_manifold_distance
 
 # ── Experiment parameters ─────────────────────────────────────────────────────
 
@@ -89,11 +89,12 @@ N_SHOW = N_VALUES[1]
 # ── SimulationAnalysis implementations ───────────────────────────────────────
 
 
-class Eq20LHSAnalysis:
+class SineAlignmentAnalysis:
     """
     Observed LHS of equation (20): sin²∠(hⱼ, bⱼ) for each factor j.
 
-    hⱼ: j-th top left singular vector of Y  (estimated loading direction).
+    hⱼ: j-th top left singular vector of Y  (estimated loading direction,
+        computed via the n×n Gram trick — uncentered, matching the theorem).
     bⱼ: j-th population loading direction, injected at construction.
 
     Population directions are passed at construction so that ARPACK runs once
@@ -101,8 +102,9 @@ class Eq20LHSAnalysis:
 
     Example:
         _, b_pop = compute_true_eigenvalues(model, K)
-        analysis = Eq20LHSAnalysis(b_pop)
-        result = analysis.analyze(context)   # {"lhs": array of shape (K,)}
+        analysis = SineAlignmentAnalysis(b_pop)
+        result = analysis.analyze(context)
+        # {"sin2_j": array shape (K,), "dist_sine": float}
     """
 
     def __init__(self, b_pop: np.ndarray):
@@ -111,16 +113,16 @@ class Eq20LHSAnalysis:
     def analyze(self, context: SimulationContext) -> dict:
         k = context.k
         Y = context.security_returns.T   # (p, n)
-        # Top-k left SVs of Y via the n×n Gram Y^T Y.
-        # Eigenvalues of Y^T Y are σⱼ², so dividing by σⱼ gives unit-norm uⱼ.
+        # Top-k left SVs of Y via the n×n Gram Y^T Y (uncentered).
         # Cost O(p·n²) vs O(p²·n) for the full SVD.
         G = Y.T @ Y
         vals, vecs = np.linalg.eigh(G)
         idx = np.argsort(vals)[::-1][:k]
         s = np.sqrt(np.maximum(vals[idx], 0.0))
         H = (Y @ vecs[:, idx]) / np.where(s > 1e-14, s, 1.0)   # (p, k)
-        cos2 = np.einsum("pj,jp->j", H, self.b_pop) ** 2
-        return {"lhs": 1.0 - cos2}
+        # H.T has shape (k, p); b_pop has shape (k, p)
+        sin2, dist = compute_sine_alignment(self.b_pop, H.T)
+        return {"sin2_j": sin2, "dist_sine": dist}
 
 
 class Eq20RHSAnalysis:
@@ -187,10 +189,10 @@ def build_model(p: int, rng: np.random.Generator):
 
 def _rep_records(n: int, p: int, lhs_res: dict, rhs_res: dict) -> list[dict]:
     """Flatten one replication's analysis results into K per-factor records."""
-    gap = lhs_res["lhs"] - rhs_res["rhs"]
+    gap = lhs_res["sin2_j"] - rhs_res["rhs"]
     return [
         {"n": n, "p": p, "j": j + 1,
-         "lhs":      float(lhs_res["lhs"][j]),
+         "sin2_j":   float(lhs_res["sin2_j"][j]),
          "rhs":      float(rhs_res["rhs"][j]),
          "gap":      float(gap[j]),
          "floor":    float(rhs_res["floor"][j]),
@@ -204,6 +206,17 @@ def _rep_records(n: int, p: int, lhs_res: dict, rhs_res: dict) -> list[dict]:
 
 
 def simulate() -> pd.DataFrame:
+    # Register sine distance once per process so ManifoldDistanceAnalysis
+    # picks it up when used alongside this simulation.  The registration is
+    # guarded to be idempotent; the centering difference vs. uncentered Y
+    # used here means this value is diagnostic only.
+    from factor_lab.analyses.manifold import _EXTRA_DISTANCES
+    if 'dist_sine' not in _EXTRA_DISTANCES:
+        register_manifold_distance(
+            'dist_sine',
+            lambda bt, be: compute_sine_alignment(bt, be)[1],
+        )
+
     rng_master = np.random.default_rng(SEED)
     simulator = ReturnsSimulator()   # stateless; all draws go through samplers
     rhs_analysis = Eq20RHSAnalysis(DELTA2)
@@ -218,7 +231,7 @@ def simulate() -> pd.DataFrame:
 
             # Population directions computed once here; ARPACK skips the rep loop.
             _, b_pop = compute_true_eigenvalues(model, K)
-            lhs_analysis = Eq20LHSAnalysis(b_pop)
+            lhs_analysis = SineAlignmentAnalysis(b_pop)
 
             logger.debug("n={}, p={}: c={:.4f}, {:.4f}, {:.4f}",
                          n, p, *(model.B ** 2).mean(axis=1))
@@ -278,7 +291,7 @@ def _save_fig(fig, out_path: Path) -> None:
 
 
 def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
-    """Gap LHS − RHS vs p, median ± IQR, for each n and factor."""
+    """Gap sin²∠ − RHS vs p, median ± IQR, for each n and factor."""
     fig, axes = plt.subplots(1, K, figsize=(14, 4), sharey=False)
     for ax, j in zip(axes, range(1, K + 1)):
         sub = df[df["j"] == j]
@@ -292,10 +305,11 @@ def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
         ax.set_title(f"Factor j={j}", fontsize=11)
         ax.set_xlabel("p")
         if j == 1:
-            ax.set_ylabel("LHS − RHS  (gap)")
+            ax.set_ylabel(r"$\sin^2\angle$ − RHS  (gap)")
         ax.legend(fontsize=8)
     fig.suptitle(
-        "Convergence of gap  LHS − RHS  to zero as $p \\to \\infty$\n"
+        r"Convergence of gap  $\sin^2\angle(h_j, b_j)$ − RHS  to zero as $p \to \infty$"
+        "\n"
         r"Equation (20), Theorem 1  ($G_\infty = \mathrm{diag}(\tau_j)$, "
         f"$n_{{\\mathrm{{rep}}}}={N_REPS}$)",
         fontsize=11,
@@ -304,7 +318,7 @@ def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
-    """LHS vs RHS scatter at the second-largest p value."""
+    """sin²∠ vs RHS scatter at the second-largest p value."""
     p_scatter = sorted(df["p"].unique())[-2]
     sub = df[df["p"] == p_scatter]
     fig, axes = plt.subplots(1, K, figsize=(13, 4))
@@ -312,16 +326,17 @@ def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
         d = sub[sub["j"] == j]
         for n in N_VALUES:
             dn = d[d["n"] == n]
-            ax.scatter(dn["rhs"], dn["lhs"], s=6, alpha=0.4, label=f"n={n}")
-        lo = min(d["rhs"].min(), d["lhs"].min()) - 0.01
-        hi = max(d["rhs"].max(), d["lhs"].max()) + 0.01
+            ax.scatter(dn["rhs"], dn["sin2_j"], s=6, alpha=0.4, label=f"n={n}")
+        lo = min(d["rhs"].min(), d["sin2_j"].min()) - 0.01
+        hi = max(d["rhs"].max(), d["sin2_j"].max()) + 0.01
         ax.plot([lo, hi], [lo, hi], "k--", linewidth=0.8, label="45°")
         ax.set_xlabel("RHS (predicted)", fontsize=9)
-        ax.set_ylabel("LHS (observed)", fontsize=9)
+        ax.set_ylabel(r"$\sin^2\angle(h_j, b_j)$  (observed)", fontsize=9)
         ax.set_title(f"Factor j={j}", fontsize=11)
         ax.legend(fontsize=7, markerscale=2)
     fig.suptitle(
-        f"LHS vs RHS of Equation (20) at p={p_scatter:,}\n"
+        r"$\sin^2\angle(h_j, b_j)$ vs RHS of Equation (20)"
+        f" at p={p_scatter:,}\n"
         "Each point is one (X, Z) replication",
         fontsize=11,
     )
@@ -331,7 +346,7 @@ def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
 def plot_components(df: pd.DataFrame, out_path: Path) -> None:
     """Floor and rotation terms vs p for each factor at n=N_SHOW.
 
-    Row 0: predicted floor vs observed LHS — shows the floor is p-stable.
+    Row 0: predicted floor vs observed sin²∠ — shows the floor is p-stable.
     Row 1: rotation term 1 − (ŵⱼ)ⱼ² — shows the rotation vanishes as p grows.
     """
     sub = df[df["n"] == N_SHOW]
@@ -339,23 +354,23 @@ def plot_components(df: pd.DataFrame, out_path: Path) -> None:
     for j_idx, j in enumerate(range(1, K + 1)):
         d = sub[sub["j"] == j]
         p_vals, floor_med, _, _ = _agg_by_p(d.groupby("p")["floor"])
-        _,      lhs_med,   _, _ = _agg_by_p(d.groupby("p")["lhs"])
+        _,      sin2_med,  _, _ = _agg_by_p(d.groupby("p")["sin2_j"])
         _,      rot_med, rot_q25, rot_q75 = _agg_by_p(d.groupby("p")["rotation"])
         color = _COLORS[j_idx]
 
         ax0 = axes[0, j_idx]
         ax0.plot(p_vals, floor_med, color=color, linewidth=2, label="predicted floor")
-        ax0.plot(p_vals, lhs_med, color="k", linestyle=":", linewidth=1.2,
-                 label="observed LHS")
+        ax0.plot(p_vals, sin2_med, color="k", linestyle=":", linewidth=1.2,
+                 label=r"observed $\sin^2\angle$")
         ax0.set_xscale("log")
         ax0.set_title(f"Factor j={j}", fontsize=11)
         if j_idx == 0:
-            ax0.set_ylabel("Floor  (predicted vs LHS)", fontsize=9)
+            ax0.set_ylabel(r"Floor  (predicted vs $\sin^2\angle$)", fontsize=9)
         ax0.legend(fontsize=8)
 
         ax1 = axes[1, j_idx]
         ax1.plot(p_vals, rot_med, color=color, linewidth=2,
-                 label="rotation  1 − (ŵⱼ)ⱼ²")
+                 label=r"rotation  $1 - (\hat{w}_j)_j^2$")
         ax1.fill_between(p_vals, rot_q25, rot_q75, alpha=0.25, color=color)
         ax1.axhline(0, color="gray", linewidth=0.6, linestyle=":")
         ax1.set_xlabel("p")
@@ -373,7 +388,7 @@ def plot_components(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def print_summary(df: pd.DataFrame) -> None:
-    """Print a compact RMSE table: RMSE of (LHS − RHS) by (n, p, j)."""
+    """Print a compact RMSE table: RMSE of (sin²∠ − RHS) by (n, p, j)."""
     tbl = (
         df.groupby(["n", "p", "j"])["gap"]
         .apply(lambda g: np.sqrt((g ** 2).mean()))
@@ -382,7 +397,7 @@ def print_summary(df: pd.DataFrame) -> None:
         .pivot(index=["n", "p"], columns="j", values="RMSE")
     )
     tbl.columns = [f"j={c}" for c in tbl.columns]
-    print("\nRMSE of (LHS − RHS)  [smaller is better; should → 0 as p grows]\n")
+    print("\nRMSE of (sin²∠ − RHS)  [smaller is better; should → 0 as p grows]\n")
     print(tbl.to_string(float_format="{:.5f}".format))
     print()
 
@@ -400,15 +415,15 @@ def main() -> None:
 
     df = simulate()
 
-    csv_path = ROOT / "sim_theorem1_results.csv"
+    csv_path = ROOT / "sim_theorem1_results_v2.csv"
     df.to_csv(csv_path, index=False)
     logger.info("Saved {} rows to {}", len(df), csv_path.name)
 
     print_summary(df)
 
-    plot_convergence(df, ROOT / "fig_theorem1_convergence.png")
-    plot_scatter(df,     ROOT / "fig_theorem1_scatter.png")
-    plot_components(df,  ROOT / "fig_theorem1_components.png")
+    plot_convergence(df, ROOT / "fig_theorem1_convergence_v2.png")
+    plot_scatter(df,     ROOT / "fig_theorem1_scatter_v2.png")
+    plot_components(df,  ROOT / "fig_theorem1_components_v2.png")
 
     logger.info("Done.")
 
