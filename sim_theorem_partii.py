@@ -283,7 +283,16 @@ def main() -> None:
     parser.add_argument(
         "--out", type=Path,
         default=ROOT / "sim_thmptii.parquet",
-        help="Output path for the primary .parquet file (default: next to this script).",
+        help="Output path for the .parquet file (default: next to this script).",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--plot", action="store_true",
+        help="Generate figures from in-memory results; skip saving the parquet.",
+    )
+    mode.add_argument(
+        "--plot-save", action="store_true",
+        help="Save the parquet and generate figures.",
     )
     args = parser.parse_args()
 
@@ -298,8 +307,13 @@ def main() -> None:
 
     df = simulate()
 
-    df.to_parquet(parquet_path, index=False)
-    logger.info("Saved {} rows to {}", len(df), parquet_path)
+    if not args.plot:
+        df.to_parquet(parquet_path, index=False)
+        logger.info("Saved {} rows to {}", len(df), parquet_path)
+
+    if args.plot or args.plot_save:
+        from fl_graphics import plot_all
+        plot_all(df, out_dir=parquet_path.parent)
 
     print_summary(df)
 

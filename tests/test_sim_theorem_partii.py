@@ -289,6 +289,41 @@ class TestGraphics:
         assert len(loaded) == len(results_df)
 
 
+# ── main() CLI dispatch ───────────────────────────────────────────────────────
+
+class TestMain:
+
+    @pytest.fixture(autouse=True)
+    def _patch_simulate(self, monkeypatch, results_df):
+        """Replace simulate() with a fast no-op returning the fixture DataFrame."""
+        monkeypatch.setattr(sim, "simulate", lambda: results_df)
+
+    def test_default_saves_parquet_no_plot(self, monkeypatch, tmp_path):
+        out = tmp_path / "out.parquet"
+        plot_calls = []
+        monkeypatch.setattr("fl_graphics.plot_all", lambda df, out_dir, **kw: plot_calls.append(out_dir))
+        monkeypatch.setattr(sys, "argv", ["sim_theorem_partii.py", "--out", str(out)])
+        sim.main()
+        assert out.exists()
+        assert plot_calls == []
+
+    def test_plot_skips_parquet(self, monkeypatch, tmp_path):
+        out = tmp_path / "out.parquet"
+        monkeypatch.setattr("fl_graphics.plot_all", lambda df, out_dir, **kw: None)
+        monkeypatch.setattr(sys, "argv", ["sim_theorem_partii.py", "--out", str(out), "--plot"])
+        sim.main()
+        assert not out.exists()
+
+    def test_plot_save_writes_parquet_and_plots(self, monkeypatch, tmp_path):
+        out = tmp_path / "out.parquet"
+        plot_calls = []
+        monkeypatch.setattr("fl_graphics.plot_all", lambda df, out_dir, **kw: plot_calls.append(out_dir))
+        monkeypatch.setattr(sys, "argv", ["sim_theorem_partii.py", "--out", str(out), "--plot-save"])
+        sim.main()
+        assert out.exists()
+        assert len(plot_calls) == 1
+
+
 # ── print_summary ─────────────────────────────────────────────────────────────
 
 class TestPrintSummary:
