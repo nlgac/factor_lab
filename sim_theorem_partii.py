@@ -50,6 +50,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import seaborn as sns
 from loguru import logger
 from tqdm import tqdm
 
@@ -264,25 +265,10 @@ def simulate() -> pd.DataFrame:
 
 # ── Plotting helpers ──────────────────────────────────────────────────────────
 
-_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c"]   # blue, orange, green (j=1,2,3)
-# Line style keyed by n-value; derived from N_VALUES so they stay in sync.
-_N_LINE = dict(zip(N_VALUES, ["-", "--", "-."]))
-
-
-def _agg_by_p(grp) -> tuple:
-    """Return (p_vals, medians, q25s, q75s) for a SeriesGroupBy grouped by p."""
-    p_vals = sorted(grp.groups)
-    return (
-        p_vals,
-        [grp.get_group(p).median()       for p in p_vals],
-        [grp.get_group(p).quantile(0.25) for p in p_vals],
-        [grp.get_group(p).quantile(0.75) for p in p_vals],
-    )
-
 
 def _save_fig(fig, out_path: Path) -> None:
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     logger.info("Saved {}", out_path.name)
 
@@ -292,99 +278,106 @@ def _save_fig(fig, out_path: Path) -> None:
 
 def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
     """Gap sin²∠ − RHS vs p, median ± IQR, for each n and factor."""
-    fig, axes = plt.subplots(1, K, figsize=(14, 4), sharey=False)
-    for ax, j in zip(axes, range(1, K + 1)):
-        sub = df[df["j"] == j]
-        for n in N_VALUES:
-            p_vals, med, q25, q75 = _agg_by_p(sub[sub["n"] == n].groupby("p")["gap"])
-            ax.plot(p_vals, med, linestyle=_N_LINE[n], color="k",
-                    linewidth=1.5, label=f"n={n}")
-            ax.fill_between(p_vals, q25, q75, alpha=0.15, color="k")
-        ax.axhline(0, color="red", linewidth=0.8, linestyle=":")
-        ax.set_xscale("log")
-        ax.set_title(f"Factor j={j}", fontsize=11)
-        ax.set_xlabel("p")
-        if j == 1:
-            ax.set_ylabel(r"$\sin^2\angle$ − RHS  (gap)")
-        ax.legend(fontsize=8)
-    fig.suptitle(
-        r"Convergence of gap  $\sin^2\angle(h_j, b_j)$ − RHS  to zero as $p \to \infty$"
-        "\n"
-        r"Equation (20), Theorem 1  ($G_\infty = \mathrm{diag}(\tau_j)$, "
-        f"$n_{{\\mathrm{{rep}}}}={N_REPS}$)",
-        fontsize=11,
+    sns.set_theme(style="whitegrid", context="paper")
+
+    g = sns.relplot(
+        data=df, x="p", y="gap", hue="n", col="j",
+        kind="line", estimator=np.median, errorbar=("pi", 50),
+        facet_kws={"sharey": False}, height=3.5, aspect=1.2,
+        palette="tab10",
     )
-    _save_fig(fig, out_path)
+    g.set(xscale="log")
+    g.map(plt.axhline, y=0, color="red", linestyle=":", linewidth=0.8)
+    g.set_axis_labels("p", r"$\sin^2\angle$ − RHS (gap)")
+    g.set_titles(col_template="Factor j={col_name}")
+    g.fig.suptitle(
+        r"Convergence of gap $\sin^2\angle(h_j, b_j)$ − RHS to zero as $p \to \infty$"
+        "\n"
+        r"Equation (20), Theorem 1 ($G_\infty = \mathrm{diag}(\tau_j)$)",
+        y=1.08,
+    )
+    _save_fig(g.fig, out_path)
 
 
 def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
     """sin²∠ vs RHS scatter at the second-largest p value."""
     p_scatter = sorted(df["p"].unique())[-2]
     sub = df[df["p"] == p_scatter]
-    fig, axes = plt.subplots(1, K, figsize=(13, 4))
-    for ax, j in zip(axes, range(1, K + 1)):
-        d = sub[sub["j"] == j]
-        for n in N_VALUES:
-            dn = d[d["n"] == n]
-            ax.scatter(dn["rhs"], dn["sin2_j"], s=6, alpha=0.4, label=f"n={n}")
-        lo = min(d["rhs"].min(), d["sin2_j"].min()) - 0.01
-        hi = max(d["rhs"].max(), d["sin2_j"].max()) + 0.01
-        ax.plot([lo, hi], [lo, hi], "k--", linewidth=0.8, label="45°")
-        ax.set_xlabel("RHS (predicted)", fontsize=9)
-        ax.set_ylabel(r"$\sin^2\angle(h_j, b_j)$  (observed)", fontsize=9)
-        ax.set_title(f"Factor j={j}", fontsize=11)
-        ax.legend(fontsize=7, markerscale=2)
-    fig.suptitle(
+
+    sns.set_theme(style="whitegrid", context="paper")
+
+    g = sns.relplot(
+        data=sub, x="rhs", y="sin2_j", hue="n", col="j",
+        kind="scatter", alpha=0.4, s=15,
+        height=3.5, aspect=1.1, palette="tab10",
+    )
+
+    def _draw_45(**kwargs):
+        ax = plt.gca()
+        lims = [min(ax.get_xlim()[0], ax.get_ylim()[0]),
+                max(ax.get_xlim()[1], ax.get_ylim()[1])]
+        ax.plot(lims, lims, "k--", linewidth=0.8)
+
+    g.map(_draw_45)
+    g.set_axis_labels("RHS (predicted)", r"$\sin^2\angle(h_j, b_j)$ (observed)")
+    g.set_titles(col_template="Factor j={col_name}")
+    g.fig.suptitle(
         r"$\sin^2\angle(h_j, b_j)$ vs RHS of Equation (20)"
         f" at p={p_scatter:,}\n"
         "Each point is one (X, Z) replication",
-        fontsize=11,
+        y=1.08,
     )
-    _save_fig(fig, out_path)
+    _save_fig(g.fig, out_path)
 
 
-def plot_components(df: pd.DataFrame, out_path: Path) -> None:
+def plot_components(df: pd.DataFrame, out_path: Path, top_margin: float = 0.03) -> None:
     """Floor and rotation terms vs p for each factor at n=N_SHOW.
 
-    Row 0: predicted floor vs observed sin²∠ — shows the floor is p-stable.
-    Row 1: rotation term 1 − (ŵⱼ)ⱼ² — shows the rotation vanishes as p grows.
+    Boxplots on a categorical p-axis (equally spaced).
+    Row 0 (Floor / Observed): predicted floor vs observed sin²∠.
+    Row 1 (Rotation): rotation term 1 − (ŵⱼ)ⱼ² — vanishes as p grows.
+
+    top_margin: fractional headroom added above the top-row data maximum
+                to prevent whisker clipping (default 0.03 = 3%).
     """
-    sub = df[df["n"] == N_SHOW]
-    fig, axes = plt.subplots(2, K, figsize=(13, 7), sharex=True, sharey="row")
-    for j_idx, j in enumerate(range(1, K + 1)):
-        d = sub[sub["j"] == j]
-        p_vals, floor_med, _, _ = _agg_by_p(d.groupby("p")["floor"])
-        _,      sin2_med,  _, _ = _agg_by_p(d.groupby("p")["sin2_j"])
-        _,      rot_med, rot_q25, rot_q75 = _agg_by_p(d.groupby("p")["rotation"])
-        color = _COLORS[j_idx]
-
-        ax0 = axes[0, j_idx]
-        ax0.plot(p_vals, floor_med, color=color, linewidth=2, label="predicted floor")
-        ax0.plot(p_vals, sin2_med, color="k", linestyle=":", linewidth=1.2,
-                 label=r"observed $\sin^2\angle$")
-        ax0.set_xscale("log")
-        ax0.set_title(f"Factor j={j}", fontsize=11)
-        if j_idx == 0:
-            ax0.set_ylabel(r"Floor  (predicted vs $\sin^2\angle$)", fontsize=9)
-        ax0.legend(fontsize=8)
-
-        ax1 = axes[1, j_idx]
-        ax1.plot(p_vals, rot_med, color=color, linewidth=2,
-                 label=r"rotation  $1 - (\hat{w}_j)_j^2$")
-        ax1.fill_between(p_vals, rot_q25, rot_q75, alpha=0.25, color=color)
-        ax1.axhline(0, color="gray", linewidth=0.6, linestyle=":")
-        ax1.set_xlabel("p")
-        ax1.set_xscale("log")
-        if j_idx == 0:
-            ax1.set_ylabel("Rotation  (median ± IQR)", fontsize=9)
-        ax1.legend(fontsize=8)
-
-    fig.suptitle(
-        f"Floor and rotation components of Equation (20),  n={N_SHOW}\n"
-        "Rotation → 0 as p → ∞; floor is p-stable",
-        fontsize=11,
+    sub = df[df["n"] == N_SHOW].copy()
+    df_melt = sub.melt(
+        id_vars=["n", "p", "j"],
+        value_vars=["floor", "sin2_j", "rotation"],
+        var_name="metric", value_name="value",
     )
-    _save_fig(fig, out_path)
+    # "Floor / Observed" sorts before "Rotation" → row 0 = floor, row 1 = rotation
+    df_melt["row_group"] = df_melt["metric"].apply(
+        lambda x: "Rotation" if x == "rotation" else "Floor / Observed"
+    )
+
+    sns.set_theme(style="whitegrid", context="paper")
+
+    g = sns.catplot(
+        data=df_melt, x="p", y="value", hue="metric",
+        col="j", row="row_group",
+        kind="box", showfliers=False,
+        sharey="row", height=3.0, aspect=1.2,
+        palette="Set2",
+    )
+    g.set_axis_labels("Ambient dimension (p)", "Value")
+    g.set_titles(row_template="{row_name}", col_template="Factor j={col_name}")
+
+    # Ensure no whisker is clipped: set top ylim from the data maximum.
+    # Whiskers never exceed the data max, so this is the tight ceiling.
+    y_top = df_melt[df_melt["row_group"] == "Floor / Observed"]["value"].max()
+    for ax in g.axes[0, :]:
+        ax.set_ylim(top=y_top * (1 + top_margin))
+
+    # Zero reference only on the Rotation row (index 1)
+    for ax in g.axes[1, :]:
+        ax.axhline(0, color="gray", linewidth=0.8, linestyle=":")
+    g.fig.suptitle(
+        f"Floor and rotation components of Equation (20), n={N_SHOW}\n"
+        "Rotation → 0 as p → ∞; floor is p-stable",
+        y=1.05,
+    )
+    _save_fig(g.fig, out_path)
 
 
 def print_summary(df: pd.DataFrame) -> None:
