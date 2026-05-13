@@ -539,16 +539,16 @@ The table below summarises the differences between the NG formulas (§1–5) and
 case (§6). The correction formula itself is the final row — it is the only entry that does
 not change.
 
-| Quantity | NG case ($G_\infty = I_k$, orth.\ returns) | General $G_\infty$ |
-|:---------|:------------------------------------------:|:------------------:|
-| Population target $\vert\Pi_B z\vert^2$ | $\sum_j c_j^2$ | $\|u\|^2 = (\tilde{B}^\top z)^\top G_\infty^{-1}(\tilde{B}^\top z)$ |
-| Factor covariance matrix | $\hat{D} = \mathrm{diag}(c_j\hat\sigma_j^2)$ | $\hat{M} = \Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}$ |
-| Signal strength $\rho_j$ | $j$-th eigenvalue of $\hat{D}$ | $j$-th eigenvalue of $\hat{M}$ |
-| Factor direction $\hat{w}_j$ | $e_j$ (standard basis) | $j$-th eigenvector of $\hat{M}$ |
-| Per-factor exposure | $c_j^2 = (\bar{b}_j^\top z)^2$ | $(\hat{w}_j^\top u)^2$ |
-| Bias formula | $\sum_j(1-\psi_{\infty,j}^2)c_j^2$ | $\sum_j(1-\psi_{\infty,j}^2)(\hat{w}_j^\top u)^2$ |
-| Correction formula | $H\hat D_\psi^{-1} H^\top z$ | $H\hat D_\psi^{-1} H^\top z$ (unchanged) |
-| $\hat\psi_j$ estimator | $\sqrt{\max(0,1-\hat\delta^2 p/s_{p,j}^2)}$ | same (unchanged) |
+| Quantity                                | NG case ($G_\infty = I_k$, orth.\ returns)   | General $G_\infty$                                                  |
+|:--------------------------------------- |:--------------------------------------------:|:-------------------------------------------------------------------:|
+| Population target $\vert\Pi_B z\vert^2$ | $\sum_j c_j^2$                               | $\|u\|^2 = (\tilde{B}^\top z)^\top G_\infty^{-1}(\tilde{B}^\top z)$ |
+| Factor covariance matrix                | $\hat{D} = \mathrm{diag}(c_j\hat\sigma_j^2)$ | $\hat{M} = \Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}$          |
+| Signal strength $\rho_j$                | $j$-th eigenvalue of $\hat{D}$               | $j$-th eigenvalue of $\hat{M}$                                      |
+| Factor direction $\hat{w}_j$            | $e_j$ (standard basis)                       | $j$-th eigenvector of $\hat{M}$                                     |
+| Per-factor exposure                     | $c_j^2 = (\bar{b}_j^\top z)^2$               | $(\hat{w}_j^\top u)^2$                                              |
+| Bias formula                            | $\sum_j(1-\psi_{\infty,j}^2)c_j^2$           | $\sum_j(1-\psi_{\infty,j}^2)(\hat{w}_j^\top u)^2$                   |
+| Correction formula                      | $H\hat D_\psi^{-1} H^\top z$                 | $H\hat D_\psi^{-1} H^\top z$ (unchanged)                            |
+| $\hat\psi_j$ estimator                  | $\sqrt{\max(0,1-\hat\delta^2 p/s_{p,j}^2)}$  | same (unchanged)                                                    |
 
 Two practical remarks follow.
 
@@ -606,14 +606,14 @@ the loading eigenbasis.
 
 **Shrinkage and floor comparison.**
 
-| | Case A ($G_\infty = I_2$) | Case B ($G_\infty$ as above) |
-|:----|:-----:|:-----:|
-| $\rho_1$ | 0.0500 | 0.0538 |
-| $\rho_2$ | 0.0125 | 0.00872 |
-| $\psi_{\infty,1}$ | 0.866 | 0.874 |
-| $\psi_{\infty,2}$ | 0.655 | 0.586 |
-| Floor$_1 = 1-\psi_{\infty,1}^2$ | 0.250 | 0.237 |
-| Floor$_2 = 1-\psi_{\infty,2}^2$ | 0.571 | 0.657 |
+|                                 | Case A ($G_\infty = I_2$) | Case B ($G_\infty$ as above) |
+|:------------------------------- |:-------------------------:|:----------------------------:|
+| $\rho_1$                        | 0.0500                    | 0.0538                       |
+| $\rho_2$                        | 0.0125                    | 0.00872                      |
+| $\psi_{\infty,1}$               | 0.866                     | 0.874                        |
+| $\psi_{\infty,2}$               | 0.655                     | 0.586                        |
+| Floor$_1 = 1-\psi_{\infty,1}^2$ | 0.250                     | 0.237                        |
+| Floor$_2 = 1-\psi_{\infty,2}^2$ | 0.571                     | 0.657                        |
 
 The correlated loading geometry strengthens the dominant factor (larger $\rho_1$, smaller
 floor) and weakens the subdominant one (smaller $\rho_2$, larger floor by $15\%$). The

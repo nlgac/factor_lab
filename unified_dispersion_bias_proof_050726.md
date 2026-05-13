@@ -223,7 +223,7 @@ $$
 \sin^2\angle(h_j,\,\bar{b}_j) \;\xrightarrow{a.s.}\;
 \underbrace{\frac{\delta^2}{n\rho_j + \delta^2}}_{\text{out-of-subspace floor}}
 \;+\;
-\underbrace{\frac{n\rho_j}{n\rho_j + \delta^2}\,\sin^2\angle(\hat{w}_j,\,e_j)}_{\text{in-subspace rotation}},
+\underbrace{\frac{n\rho_j}{n\rho_j + \delta^2}\,\sin^2\angle(\hat{w}_j,\,e_j)}_{\text{in-subspace rotation}},\\
 \tag{ii-diag}
 $$
 

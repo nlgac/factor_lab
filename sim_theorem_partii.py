@@ -350,7 +350,7 @@ def plot_components(df: pd.DataFrame, out_path: Path) -> None:
     Row 1: rotation term 1 − (ŵⱼ)ⱼ² — shows the rotation vanishes as p grows.
     """
     sub = df[df["n"] == N_SHOW]
-    fig, axes = plt.subplots(2, K, figsize=(13, 7), sharex=True)
+    fig, axes = plt.subplots(2, K, figsize=(13, 7), sharex=True, sharey="row")
     for j_idx, j in enumerate(range(1, K + 1)):
         d = sub[sub["j"] == j]
         p_vals, floor_med, _, _ = _agg_by_p(d.groupby("p")["floor"])
