@@ -11,8 +11,7 @@ loaded from a .parquet or .csv file — with columns:
 Can be run standalone:
 
     python fl_graphics.py                          # loads default parquet path
-    python fl_graphics.py sim_theorem1_results_v2.parquet
-    python fl_graphics.py sim_theorem1_results_v2.csv
+    python fl_graphics.py sim_thmptii.parquet
 
 Or called programmatically after a live simulation:
 
@@ -33,7 +32,7 @@ from loguru import logger
 
 ROOT = Path(__file__).resolve().parent
 
-_DEFAULT_DATA_PATH = ROOT / "sim_theorem1_results_v2.parquet"
+_DEFAULT_DATA_PATH = ROOT / "sim_thmptii.parquet"
 
 
 # ── I/O ───────────────────────────────────────────────────────────────────────

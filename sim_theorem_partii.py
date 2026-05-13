@@ -36,8 +36,7 @@ Setup
 
 Outputs
 -------
-- sim_theorem1_results_v2.parquet   — raw per-rep records (primary)
-- sim_theorem1_results_v2.csv       — same data, human-readable
+- sim_thmptii.parquet               — raw per-rep records
 - fig_theorem1_convergence_v2.png   — gap sin²∠−RHS vs p, for each n and factor
 - fig_theorem1_scatter_v2.png       — sin²∠ vs RHS scatter at p=P_VALUES[-2]
 - fig_theorem1_components_v2.png    — floor and rotation convergence separately
@@ -279,6 +278,17 @@ def print_summary(df: pd.DataFrame) -> None:
 
 
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="Run Theorem 1 / Equation (20) simulation.")
+    parser.add_argument(
+        "--out", type=Path,
+        default=ROOT / "sim_thmptii.parquet",
+        help="Output path for the primary .parquet file (default: next to this script).",
+    )
+    args = parser.parse_args()
+
+    parquet_path: Path = args.out.with_suffix(".parquet")
+
     logger.info(
         "Simulation: k={}, n={}, p={}, reps={}, seed={}",
         K, N_VALUES, P_VALUES, N_REPS, SEED,
@@ -288,13 +298,8 @@ def main() -> None:
 
     df = simulate()
 
-    parquet_path = ROOT / "sim_theorem1_results_v2.parquet"
     df.to_parquet(parquet_path, index=False)
-    logger.info("Saved {} rows to {}", len(df), parquet_path.name)
-
-    csv_path = ROOT / "sim_theorem1_results_v2.csv"
-    df.to_csv(csv_path, index=False)
-    logger.info("Saved {}", csv_path.name)
+    logger.info("Saved {} rows to {}", len(df), parquet_path)
 
     print_summary(df)
 
