@@ -6,7 +6,7 @@ Unit and smoke tests for sim_theorem_partii.py and fl_graphics.py.
 Covers:
   - build_model: shapes, factor covariance, idio variance, prevalence convergence
   - SineAlignmentAnalysis: perfect recovery, shape/range
-  - Eq20RHSAnalysis: diagonal-X case (rotation=0), shape/range, floor ≤ rhs
+  - Eq6RHSAnalysis: diagonal-F case (rotation=0), shape/range, floor ≤ rhs
   - _rep_records: structure, semantics, key names
   - simulate(): schema and row count (small grid, mocked)
   - fl_graphics: smoke tests for all three plot functions
@@ -106,10 +106,10 @@ class TestBuildModel:
         )
 
     def test_prevalences_converge(self, rng):
-        """At p=5000, empirical ‖B[j,:]‖²/p → TAU2 within 5%."""
+        """At p=5000, empirical ‖B[j,:]‖²/p → C2 (Assumption 1) within 5%."""
         model = sim.build_model(5_000, rng)
         np.testing.assert_allclose(
-            (model.B ** 2).mean(axis=1), sim.TAU2, rtol=0.05
+            (model.B ** 2).mean(axis=1), sim.C2, rtol=0.05
         )
 
 
@@ -148,44 +148,44 @@ class TestSineAlignmentAnalysis:
         np.testing.assert_allclose(result["sin2_j"], 0.0, atol=1e-12)
 
 
-# ── Eq20RHSAnalysis ───────────────────────────────────────────────────────────
+# ── Eq6RHSAnalysis ────────────────────────────────────────────────────────────
 
-class TestEq20RHSAnalysis:
+class TestEq6RHSAnalysis:
 
     def _diagonal_context(self, k=3, n=20, p=30):
-        """Context where X@X.T/n = diag(SIGMA2[:k]), making D̂ diagonal.
+        """Context where F@F.T/n = diag(SIGMA2[:k]), making D̂ diagonal.
 
-        When D̂ is diagonal its eigenvectors form the identity and
-        rotation = 1 − diag(W)² = 0, so rhs == floor exactly.
+        When D̂ is diagonal its eigenvectors are the standard basis eⱼ, so
+        sin²∠(ŵⱼ, eⱼ) = rotation = 0 and rhs == floor exactly.
         """
         sigma2 = sim.SIGMA2[:k]
-        tau2   = sim.TAU2[:k]
-        X      = np.zeros((k, n))
+        c2     = sim.C2[:k]
+        F      = np.zeros((k, n))
         for j in range(k):
-            X[j, j] = np.sqrt(n * sigma2[j])
-        B     = np.tile(np.sqrt(tau2)[:, None], (1, p))
+            F[j, j] = np.sqrt(n * sigma2[j])
+        B     = np.tile(np.sqrt(c2)[:, None], (1, p))
         model = FactorModelData(B=B, F=np.diag(sigma2), D=np.eye(p) * sim.DELTA2)
         return SimulationContext(
             model=model,
             security_returns=np.random.default_rng(0).standard_normal((n, p)),
-            factor_returns=X.T,
+            factor_returns=F.T,
             idio_returns=np.zeros((n, p)),
         )
 
-    def test_diagonal_X_rotation_is_zero(self):
-        result = sim.Eq20RHSAnalysis(sim.DELTA2).analyze(self._diagonal_context())
+    def test_diagonal_F_rotation_is_zero(self):
+        result = sim.Eq6RHSAnalysis(sim.DELTA2).analyze(self._diagonal_context())
         np.testing.assert_allclose(result["rotation"], 0.0,            atol=1e-12)
         np.testing.assert_allclose(result["rhs"],      result["floor"], atol=1e-12)
 
     def test_shape_and_range(self):
-        result = sim.Eq20RHSAnalysis(sim.DELTA2).analyze(self._diagonal_context())
+        result = sim.Eq6RHSAnalysis(sim.DELTA2).analyze(self._diagonal_context())
         for key in ("rhs", "floor", "rotation"):
             assert result[key].shape == (sim.K,)
         assert np.all(result["rhs"] >= -1e-12)
         assert np.all(result["rhs"] <=  1.0 + 1e-12)
 
     def test_floor_le_rhs(self, mock_context):
-        result = sim.Eq20RHSAnalysis(sim.DELTA2).analyze(mock_context)
+        result = sim.Eq6RHSAnalysis(sim.DELTA2).analyze(mock_context)
         assert np.all(result["floor"] <= result["rhs"] + 1e-12)
 
 

@@ -123,7 +123,7 @@ def plot_components(
 
     Boxplots on a categorical p-axis (equally spaced).
     Row 0 (Floor / Observed): predicted floor vs observed sin²∠.
-    Row 1 (Rotation): rotation term 1 − (ŵⱼ)ⱼ² — vanishes as p grows.
+    Row 1 (Rotation): rotation term 1 − (ŵⱼ)ⱼ² — p-stable, set by F and C alone.
 
     top_margin: fractional headroom added above the top-row data maximum
                 to prevent whisker clipping (default 0.03 = 3%).
@@ -159,7 +159,7 @@ def plot_components(
 
     g.fig.suptitle(
         f"Floor and rotation components of Equation (20), n={n_show}\n"
-        "Rotation → 0 as p → ∞; floor is p-stable",
+        "Both terms are p-stable; the formula becomes exact as p → ∞",
         y=1.05,
     )
     _save_fig(g.fig, out_path)

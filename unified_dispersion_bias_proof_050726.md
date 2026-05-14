@@ -89,10 +89,10 @@ Then $\|\beta_1\|^2 = p(9+1)/2 = 5p$, so $c_1 = 5$; likewise $c_2 = 5$. Since $\
 **SVD of normalized loading matrix.** Fix the thin SVD
 
 $$
-b(p) = U(p)\,\Sigma(p)\,V(p)^\top, \tag{SVD-$b$}
+b(p) = U(p)\,\Sigma(p)\,V(p)^\top, \tag{1}
 $$
 
-where $U(p)\in\mathbb{R}^{p\times k}$ has orthonormal columns spanning $\mathcal{B}$, $\Sigma(p)\in\mathbb{R}^{k\times k}$ is diagonal positive, and $V(p)\in O(k)$, the group of $k\times k$ real orthogonal matrices. Write $\Pi_U = U(p)U(p)^\top$ (equal to $\Pi_B$). Note: $\Sigma(p)^2 = G(p)$, so $\Sigma(p) \to G_\infty^{1/2}$ when $G(p)\to G_\infty$.
+where $U(p)\in\mathbb{R}^{p\times k}$ has orthonormal columns spanning $\mathcal{B}$, $\Sigma(p)\in\mathbb{R}^{k\times k}$ is diagonal positive, and $V(p)\in O(k)$, the group of $k\times k$ real orthogonal matrices. Write $\Pi_U = U(p)U(p)^\top$ (equal to $\Pi_B$). Note: forming the Gram matrix from the SVD gives $G(p) = b(p)^\top b(p) = V(p)\Sigma(p)^2 V(p)^\top$, so the diagonal entries of $\Sigma(p)^2$ are the eigenvalues of $G(p)$. In particular, $\Sigma(p) \to \Lambda_G^{1/2}$ when $G(p)\to G_\infty = Q\Lambda_G Q^\top$; when $G_\infty = I_k$, $\Sigma(p)\to I_k$ but $V(p)$ need not converge.
 
 **Prevalence-rescaled factor returns.** Define the *prevalence-rescaled factor return matrix*
 
@@ -115,13 +115,13 @@ where $\Sigma_F = \lim_{n\to\infty} F^\top F/n$ is the population factor-return 
 **Rotated-and-reweighted matrices for general $G_\infty$.** Fix a spectral decomposition
 
 $$
-G_\infty = Q\Lambda_G Q^\top, \qquad \Lambda_G = \mathrm{diag}(g_1,\ldots,g_k),\quad g_1\ge\cdots\ge g_k>0,\quad Q\in O(k).\\ \tag{29}
+G_\infty = Q\Lambda_G Q^\top, \qquad \Lambda_G = \mathrm{diag}(g_1,\ldots,g_k),\quad g_1\ge\cdots\ge g_k>0,\quad Q\in O(k).\\ \tag{2}
 $$
 
 Define
 
 $$
-\hat{M} = \Lambda_G^{1/2}(Q^\top \hat{D}\,Q)\Lambda_G^{1/2}, \qquad M = \Lambda_G^{1/2}(Q^\top D\,Q)\Lambda_G^{1/2}. \tag{30--31}
+\hat{M} = \Lambda_G^{1/2}(Q^\top \hat{D}\,Q)\Lambda_G^{1/2}, \qquad M = \Lambda_G^{1/2}(Q^\top D\,Q)\Lambda_G^{1/2}. \tag{3}
 $$
 
 **Interpretation.** The matrix $G_\infty = b(p)^\top b(p)$ (with unit-normalized loading columns) is the *correlation* matrix of the loading columns, not covariance. When loadings are non-orthogonal, the factor covariance $\hat{D}$ is most naturally expressed in coordinates aligned with the eigenbasis of $G_\infty$. The transformation accomplishes this: $Q$ rotates the factor covariance into the eigenbasis of the loading-column correlation $G_\infty$, and $\Lambda_G^{1/2}$ pre- and post-multiplies to reweight each rotated direction by the square root of the corresponding loading-correlation eigenvalue $g_j$. These eigenvalues measure how much the normalized loading variance is concentrated along the $j$-th principal loading direction: larger $g_j$ indicates stronger signal concentration. When $G_\infty = I_k$ (orthogonal loadings), we may take $Q = I_k$, $\Lambda_G = I_k$, giving $\hat{M} = \hat{D}$ and $M = D$.
@@ -129,7 +129,7 @@ $$
 **Sample PCA objects.** The thin SVD of $Y/\sqrt{n}$ gives
 
 $$
-H S_p = \frac{Y\,\mathcal{X}_p}{\sqrt{n}}, \tag{$*$}
+H S_p = \frac{Y\,\mathcal{X}_p}{\sqrt{n}}, \tag{4}
 $$
 
 where $H = [h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$ has orthonormal columns (the top-$k$ sample eigenvectors of $YY^\top/n$); $S_p = \mathrm{diag}(s_{p,1},\ldots,s_{p,k})$ with $s_{p,1}\ge\cdots\ge s_{p,k}>0$; and $\mathcal{X}_p = [\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$ has orthonormal columns. The *small Gram matrix*
@@ -150,22 +150,92 @@ corresponding to its $j$-th largest eigenvalue. Since $\Sigma_0^{(p)}$ is suppor
 
 **Symbol summary.**
 
-| Symbol                       | Meaning                                                                                |
-|:----------------------------:|:-------------------------------------------------------------------------------------- |
-| $B$, $\beta_j$               | Population loading matrix, $j$-th loading column                                       |
-| $b(p)$, $b_j$                | Unit-normalized loading matrix, $j$-th unit loading column                             |
-| $\bar{b}_j$                  | $j$-th population loading direction (unit eigenvector of $\Sigma_0^{(p)}$)             |
-| $H$, $h_j$                   | Sample eigenvector matrix, $j$-th sample eigenvector                                   |
-| $c_j$, $C$                   | Prevalence of factor $j$, diagonal matrix of prevalences                               |
-| $\hat{D}$, $D$               | Sample and population prevalence-weighted factor covariance                            |
-| $\hat{M}$, $M$               | Sample and population rotated-reweighted factor covariance (general $G_\infty$)        |
-| $\rho_j$                     | $j$-th eigenvalue of $\hat{M}$ (or $\hat{D}$ when $G_\infty = I_k$)                    |
-| $\hat{w}_j$, $w_j$           | Sample and population eigenvectors of $\hat{M}$, $M$                                   |
-| $G_\infty$, $Q$, $\Lambda_G$ | Limiting Gram matrix and its spectral decomposition                                    |
-| $\delta^2$                   | Common idiosyncratic noise variance                                                    |
-| $F^\#$                       | Prevalence-rescaled factor return matrix $C^{1/2}F^\top$                               |
-| $R(p)$                       | Norm-scaling bridge matrix $A(p)C^{-1/2}/\sqrt{p} \to I_k$                             |
-| $\Psi_\infty$                | Shrinkage matrix $\mathrm{diag}(\psi_{\infty,1},\ldots,\psi_{\infty,k})$ (Corollary 5) |
+*Grouping follows the order of introduction in §2. Items first defined outside §2 note their location.*
+
+**Model primitives**
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $p$, $n$, $k$ | Number of assets, time periods, factors; asymptotics: $p\to\infty$ with $n$, $k$ fixed |
+| $Y \in \mathbb{R}^{p\times n}$ | Observed return matrix: $Y = BF^\top + Z$ |
+| $B \in \mathbb{R}^{p\times k}$, $\beta_j$ | Population loading matrix; $j$-th loading column |
+| $F \in \mathbb{R}^{n\times k}$, $F_j$ | Factor-return matrix; $j$-th factor-return series (column of $F$) |
+| $Z \in \mathbb{R}^{p\times n}$ | Idiosyncratic noise matrix; i.i.d. mean-zero entries with variance $\delta^2$ |
+| $\delta^2 > 0$ | Common idiosyncratic noise variance |
+| $\Sigma_F$ | Population factor-return covariance: $\Sigma_F = \lim_{n\to\infty} F^\top F/n$ |
+
+**Loading geometry**
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $A(p)$ | Diagonal matrix of loading-column norms: $A(p) = \mathrm{diag}(\|\beta_j(p)\|)_{j=1}^k$ |
+| $b(p) = BA(p)^{-1}$ | Unit-normalized loading matrix; columns are $\beta_j/\|\beta_j\|$ |
+| $G(p) = b(p)^\top b(p)$ | Finite-$p$ Gram matrix of unit loading columns; $G(p) \to G_\infty$ by Assumption 2 |
+| $G_\infty$ | Limiting Gram matrix (positive definite, $k\times k$); see Assumption 2 |
+| $Q$, $\Lambda_G$ | Spectral factors of $G_\infty$: $G_\infty = Q\Lambda_G Q^\top$, $\Lambda_G = \mathrm{diag}(g_1,\ldots,g_k)$, $Q\in O(k)$; see (2) |
+| $c_j$, $C$ | Prevalence of factor $j$: $c_j = \lim\|\beta_j\|^2/p \in (0,\infty)$; $C = \mathrm{diag}(c_j)$; see Assumption 1 |
+| $R(p)$ | Norm-scaling bridge: $R(p) = A(p)C^{-1/2}/\sqrt{p} \to I_k$; appears in (15) |
+
+**SVD of unit loading matrix** (equation (1))
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $U(p) \in \mathbb{R}^{p\times k}$ | Left singular vectors of $b(p)$; columns form an orthonormal basis of $\mathcal{B}$ |
+| $\Sigma(p) \in \mathbb{R}^{k\times k}$ | Diagonal singular-value matrix of $b(p)$; $\Sigma(p)^2 = G(p)$, so $\Sigma(p)\to G_\infty^{1/2}$ |
+| $V(p) \in O(k)$ | Right singular vectors of $b(p)$; subsequentially convergent to $V_\infty \in O(k)$ |
+
+**Signal subspace**
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $\mathcal{B} = \mathrm{col}(B)$ | $k$-dimensional population factor subspace of $\mathbb{R}^p$ |
+| $\Pi_B$, $\Pi_B^\perp$ | Orthogonal projection onto $\mathcal{B}$, and its complement $I_p - \Pi_B$ |
+| $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$ | Population signal covariance ($p\times p$); supported on $\mathcal{B}$ |
+| $\bar{b}_j$ | $j$-th population loading direction: unit eigenvector of $\Sigma_0^{(p)}$ for eigenvalue $\lambda_j(\Sigma_0^{(p)})$ |
+
+**Prevalence-weighted factor covariances**
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $F^\# = C^{1/2}F^\top \in \mathbb{R}^{k\times n}$ | Prevalence-rescaled factor-return matrix |
+| $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$ | Sample prevalence-weighted factor covariance ($k\times k$); equals $F^\#(F^\#)^\top/n$ |
+| $D = C^{1/2}\Sigma_F C^{1/2}$ | Population prevalence-weighted factor covariance ($k\times k$) |
+| $\hat{M}$, $M$ | Rotated-reweighted covariances for general $G_\infty$: see (3); reduce to $\hat{D}$, $D$ when $G_\infty = I_k$ |
+| $\rho_j$ | $j$-th eigenvalue of $\hat{M}$ (or $\hat{D}$ when $G_\infty=I_k$); $\rho_1>\cdots>\rho_k>0$ by the regular-event hypothesis |
+| $\hat{w}_j$, $w_j$ | $j$-th orthonormal eigenvectors of $\hat{M}$ and $M$ respectively |
+| $d_j$ | $j$-th eigenvalue of $M$; population limit $d_j = \lim_{n\to\infty}\rho_j$ |
+| $\mathrm{SNR}_j = n\rho_j/\delta^2$ | Per-factor signal-to-noise ratio; determines the out-of-subspace floor $1/(1+\mathrm{SNR}_j)$ |
+
+**Sample PCA objects** (equation (4))
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $H = [h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$ | Top-$k$ sample eigenvectors of $YY^\top/n$; orthonormal columns |
+| $S_p = \mathrm{diag}(s_{p,1},\ldots,s_{p,k})$ | Diagonal matrix of top-$k$ singular values of $Y/\sqrt{n}$ |
+| $\mathcal{X}_p = [\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$ | Right singular vectors of $Y/\sqrt{n}$; orthonormal columns |
+| $s_{p,j}$ | $j$-th largest singular value of $Y/\sqrt{n}$; satisfies $s_{p,j}^2/p \to \rho_j + \delta^2/n$ a.s. by (13) |
+| $\chi_{p,j}$ | $j$-th column of $\mathcal{X}_p$; converges to $v_j$ a.s. by (13) |
+| $\Pi_H = HH^\top$ | Orthogonal projection onto $\mathrm{col}(H)$ |
+| $W^{(p)} = Y^\top Y/(np) \in \mathbb{R}^{n\times n}$ | Small Gram matrix; eigenvalues $s_{p,j}^2/p$ with eigenvectors $\chi_{p,j}$ |
+
+**Limiting small Gram matrix** (Lemmas 7–8)
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $W_\infty$ | Almost-sure spectral limit of $W^{(p)}$; see (11) for diagonal case, (18) for general |
+| $\tau_j = \rho_j + \delta^2/n$ | $j$-th largest eigenvalue of $W_\infty$ (signal-plus-noise level) |
+| $v_j$ | $j$-th eigenvector of $W_\infty$; see (12) for diagonal case, (19) for general |
+
+**Shrinkage and alignment** (Corollaries 1 and 5)
+
+| Symbol | Meaning |
+|:------:|:------- |
+| $\psi_{\infty,j}^2 = n\rho_j/(n\rho_j+\delta^2)$ | Squared alignment ceiling for eigenvector $h_j$; equals $\mathrm{SNR}_j/(1+\mathrm{SNR}_j)$ |
+| $\hat{\psi}_{p,j}^2 = 1 - \ell_p^2/s_{p,j}^2$ | Observable estimator of $\psi_{\infty,j}^2$; see Corollary 1 |
+| $\ell_p^2 = \frac{1}{n-k}\sum_{j=k+1}^n s_{p,j}^2$ | Mean squared noise singular value; converges to $\delta^2/n$ a.s. |
+| $\Psi_\infty = \mathrm{diag}(\psi_{\infty,1},\ldots,\psi_{\infty,k})$ | Diagonal shrinkage matrix; see Corollaries 5 and discussion in §9 |
+| $\tilde{B} = b(p)$ | Unit loading column matrix (alternative notation used in §9 and corollaries) |
+| $\Gamma_\infty = \lim_{p\to\infty}\tilde{B}^\top W$ | Asymptotic alignment matrix between unit loadings and probe frame $W$; see Corollary 5 |
 
 **Angles.** For unit vectors $u,v\in\mathbb{R}^p$, the angle between them satisfies $\cos\angle(u,v) = |\langle u,v\rangle|$ and $\sin^2\angle(u,v) = 1 - \langle u,v\rangle^2$.
 
@@ -183,7 +253,7 @@ $$
 
 **Assumption 2 (Gram convergence).** The normalized Gram matrix converges: $G(p)\to G_\infty$ for some positive definite $G_\infty\in\mathbb{R}^{k\times k}$.
 
-**Assumption 3 (Spectral separation).** The matrix $M$ defined in (30--31) has $k$ distinct positive eigenvalues $m_1 > m_2 > \cdots > m_k > 0$. Under $G_\infty = I_k$ and diagonal $\Sigma_F = \mathrm{diag}(\sigma_1^2,\ldots,\sigma_k^2)$, we have $D = \mathrm{diag}(c_j\sigma_j^2)$ and Assumption 3 reduces to the strict ordering $c_1\sigma_1^2 > c_2\sigma_2^2 > \cdots > c_k\sigma_k^2 > 0$: no two factors contribute equally to cross-sectional variance.
+**Assumption 3 (Spectral separation).** The matrix $M$ defined in (3) has $k$ distinct positive eigenvalues $m_1 > m_2 > \cdots > m_k > 0$. Under $G_\infty = I_k$ and diagonal $\Sigma_F = \mathrm{diag}(\sigma_1^2,\ldots,\sigma_k^2)$, we have $D = \mathrm{diag}(c_j\sigma_j^2)$ and Assumption 3 reduces to the strict ordering $c_1\sigma_1^2 > c_2\sigma_2^2 > \cdots > c_k\sigma_k^2 > 0$: no two factors contribute equally to cross-sectional variance.
 
 *Example 3.1.* In Example 2.1 with $c_1 = c_2 = 5$ and factor-return standard deviations $\sigma_1 = 0.10$, $\sigma_2 = 0.05$: $c_1\sigma_1^2 = 5\times 0.01 = 0.05 > c_2\sigma_2^2 = 5\times 0.0025 = 0.0125$. Assumption 3 is satisfied.
 
@@ -214,7 +284,7 @@ The theorem has three parts with distinct assumption requirements. Part (i) is a
 **Part (i): Probe-vector alignment.** *(Requires only Assumption 1 and the noise assumptions.) For any deterministic sequence $v = v(p)\in\mathbb{R}^p$ with $|v|\le 1$,*
 
 $$
-H^\top v \;-\; H^\top\Pi_B v \;\longrightarrow\; 0 \quad a.s. \tag{i}
+H^\top v \;-\; H^\top\Pi_B v \;\longrightarrow\; 0 \quad a.s. \tag{5}
 $$
 
 **Part (ii): Per-direction alignment, diagonal-Gram case.** *Under the additional hypothesis $G_\infty = I_k$, for each $j\in\{1,\ldots,k\}$,*
@@ -224,7 +294,7 @@ $$
 \underbrace{\frac{\delta^2}{n\rho_j + \delta^2}}_{\text{out-of-subspace floor}}
 \;+\;
 \underbrace{\frac{n\rho_j}{n\rho_j + \delta^2}\,\sin^2\angle(\hat{w}_j,\,e_j)}_{\text{in-subspace rotation}},\\
-\tag{ii-diag}
+\tag{6}
 $$
 
 *where $\rho_j$ is the $j$-th eigenvalue of $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$, $\hat{w}_j$ is its $j$-th eigenvector, and $e_j$ is the $j$-th standard basis vector of $\mathbb{R}^k$.*
@@ -236,16 +306,16 @@ $$
 \frac{\delta^2}{n\rho_j + \delta^2}
 \;+\;
 \frac{n\rho_j}{n\rho_j + \delta^2}\,\sin^2\angle(\hat{w}_j,\,w_j),
-\tag{ii-gen}
+\tag{7}
 $$
 
 *where $\rho_j$ and $\hat{w}_j$ are the $j$-th eigenvalue and eigenvector of $\hat{M}$, and $w_j$ is the $j$-th eigenvector of $M$.*
 
-The right-hand sides of (ii-diag) and (ii-gen) share the same structure. The first term is the floor $1/(1+\mathrm{SNR}_j)$, determined entirely by the signal-to-noise ratio $\mathrm{SNR}_j = n\rho_j/\delta^2$. The second term is the in-subspace alignment error between sample and population factor-covariance eigenvectors, scaled by $\mathrm{SNR}_j/(1+\mathrm{SNR}_j)$.
+The right-hand sides of (6) and (7) share the same structure. The first term is the floor $1/(1+\mathrm{SNR}_j)$, determined entirely by the signal-to-noise ratio $\mathrm{SNR}_j = n\rho_j/\delta^2$. The second term is the in-subspace alignment error between sample and population factor-covariance eigenvectors, scaled by $\mathrm{SNR}_j/(1+\mathrm{SNR}_j)$.
 
 ### 4.1 Worked Examples
 
-**Example 4.1 ($k=1$, single factor).** Let $k=1$, $\beta = a\cdot\mathbf{1}_p$ for some $a > 0$, so $c = a^2$ and $G(p) = 1 = G_\infty$. The single factor-return series is $F = X\in\mathbb{R}^n$ with $\hat{D} = c\cdot\|X\|^2/n$ (a scalar), so $\rho = c\|X\|^2/n$ and $\hat{w}_1 = e_1 = 1$ trivially. The in-subspace rotation is $\sin^2\angle(1, 1) = 0$. Formula (ii-diag) reduces to
+**Example 4.1 ($k=1$, single factor).** Let $k=1$, $\beta = a\cdot\mathbf{1}_p$ for some $a > 0$, so $c = a^2$ and $G(p) = 1 = G_\infty$. The single factor-return series is $F = X\in\mathbb{R}^n$ with $\hat{D} = c\cdot\|X\|^2/n$ (a scalar), so $\rho = c\|X\|^2/n$ and $\hat{w}_1 = e_1 = 1$ trivially. The in-subspace rotation is $\sin^2\angle(1, 1) = 0$. Formula (6) reduces to
 
 $$
 \sin^2\angle(h, \bar{b}) \;\to\; \frac{\delta^2}{nc\sigma^2 + \delta^2} \;=\; \frac{1}{1 + \mathrm{SNR}},\quad \mathrm{SNR} = \frac{nc\sigma^2}{\delta^2}.
@@ -350,7 +420,7 @@ $$
 
 **Full proof.** Decompose $v = \Pi_B v + \eta_p$ where $\eta_p = \Pi_B^\perp v$. Since $\Pi_B^\perp$ is non-expansive, $|\eta_p|\le|v|\le 1$.
 
-Apply $\Pi_B^\perp$ to both sides of ($*$). The signal term vanishes: $\Pi_B^\perp B = 0$ (every column of $B$ lies in $\mathcal{B}$), so
+Apply $\Pi_B^\perp$ to both sides of (4). The signal term vanishes: $\Pi_B^\perp B = 0$ (every column of $B$ lies in $\mathcal{B}$), so
 
 $$
 \Pi_B^\perp H\,S_p \;=\; \frac{\Pi_B^\perp Z\,\mathcal{X}_p}{\sqrt{n}}.
@@ -359,7 +429,7 @@ $$
 Right-multiply by $S_p^{-1}$ and left-multiply by $v^\top$:
 
 $$
-H^\top v - H^\top\Pi_B v \;=\; S_p^{-1}\,\frac{\mathcal{X}_p^\top Z^\top \eta_p}{\sqrt{n}}. \tag{$\dagger$}
+H^\top v - H^\top\Pi_B v \;=\; S_p^{-1}\,\frac{\mathcal{X}_p^\top Z^\top \eta_p}{\sqrt{n}}. \tag{8}
 $$
 
 For each $i = 1,\ldots,k$, the $i$-th entry of the right side is $\frac{1}{s_{p,i}\sqrt{n}}\sum_{\ell=1}^n(\chi_{p,i})_\ell\,(\eta_p^\top Z_{\cdot\ell})$.
@@ -389,7 +459,7 @@ Throughout this section, $G_\infty = I_k$. The proof proceeds in eight steps: (7
 Since $\bar{b}_j\in\mathrm{col}(U(p))$, write $h_j^\perp = (I-\Pi_U)h_j$ and $h_j^\| = \Pi_U h_j$. The angle-decomposition identity gives:
 
 $$
-\sin^2\angle(h_j,\,\bar{b}_j) \;=\; \|h_j^\perp\|^2 \;+\; \|h_j^\|\|^2\,\sin^2\!\angle\!\left(\frac{h_j^\|}{\|h_j^\|\|},\,\bar{b}_j\right). \tag{35}
+\sin^2\angle(h_j,\,\bar{b}_j) \;=\; \|h_j^\perp\|^2 \;+\; \|h_j^\|\|^2\,\sin^2\!\angle\!\left(\frac{h_j^\|}{\|h_j^\|\|},\,\bar{b}_j\right). \tag{9}
 $$
 
 This follows from $\sin^2\angle(h,b) = 1-\langle h,b\rangle^2$, $\langle h_j^\perp, \bar{b}_j\rangle = 0$ (since $\bar{b}_j\in\mathrm{col}(U)$ and $h_j^\perp\perp\mathrm{col}(U)$), and $\|h_j^\perp\|^2 + \|h_j^\|\|^2 = 1$.
@@ -399,7 +469,7 @@ This follows from $\sin^2\angle(h,b) = 1-\langle h,b\rangle^2$, $\langle h_j^\pe
 Substitute $Y = bAF^\top + Z$ into $W^{(p)} = Y^\top Y/(np)$:
 
 $$
-W^{(p)} = \underbrace{\frac{F\,A(p)\,G(p)\,A(p)\,F^\top}{np}}_{(\mathrm{A})} \;+\; \underbrace{\frac{F\,A(p)\,b(p)^\top Z + Z^\top b(p)\,A(p)\,F^\top}{np}}_{(\mathrm{B})} \;+\; \underbrace{\frac{Z^\top Z}{np}}_{(\mathrm{C})}. \tag{37}
+W^{(p)} = \underbrace{\frac{F\,A(p)\,G(p)\,A(p)\,F^\top}{np}}_{(\mathrm{A})} \;+\; \underbrace{\frac{F\,A(p)\,b(p)^\top Z + Z^\top b(p)\,A(p)\,F^\top}{np}}_{(\mathrm{B})} \;+\; \underbrace{\frac{Z^\top Z}{np}}_{(\mathrm{C})}. \tag{10}
 $$
 
 **Term (A).** Write $A(p)/\sqrt{p} \to C^{1/2}$ by Assumption 1. Since $G(p)\to I_k$, $(A(p)/\sqrt{p})G(p)(A(p)/\sqrt{p})\to C$, giving
@@ -415,7 +485,7 @@ $$
 Combining:
 
 $$
-W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{38}
+W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{11}
 $$
 
 ### 7.3 Eigenstructure of $W_\infty$
@@ -423,10 +493,10 @@ $$
 **Lemma 7** (Eigenstructure of $W_\infty$, diagonal-Gram case). *The matrix $W_\infty$ has eigenvalues $\tau_j = \rho_j + \delta^2/n$ for $j\le k$ and $\delta^2/n$ for $j > k$, where $\rho_1 > \cdots > \rho_k > 0$ are the eigenvalues of $\hat{D} = F^\#(F^\#)^\top/n$. The top-$k$ eigenvectors are*
 
 $$
-v_j \;=\; \frac{(F^\#)^\top\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}. \tag{40}
+v_j \;=\; \frac{(F^\#)^\top\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}. \tag{12}
 $$
 
-**Proof.** The nonzero eigenvalues of $(F^\#)^\top F^\#/n$ equal those of $F^\#(F^\#)^\top/n = \hat{D}$ (by the AB/BA identity: if $ABx = \lambda x$ with $\lambda\ne 0$, set $y = Bx$; then $y \ne 0$ and $BAy = \lambda y$). For $v_j$ as in (40):
+**Proof.** The nonzero eigenvalues of $(F^\#)^\top F^\#/n$ equal those of $F^\#(F^\#)^\top/n = \hat{D}$ (by the AB/BA identity: if $ABx = \lambda x$ with $\lambda\ne 0$, set $y = Bx$; then $y \ne 0$ and $BAy = \lambda y$). For $v_j$ as in (12):
 
 $$
 \frac{(F^\#)^\top F^\#}{n}\,v_j \;=\; \frac{(F^\#)^\top\,\hat{D}\,\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{\rho_j(F^\#)^\top\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \rho_j\,v_j,
@@ -438,19 +508,19 @@ and $\|v_j\|^2 = \hat{w}_j^\top\hat{D}\hat{w}_j/\rho_j = 1$. For the bottom $n-k
 
 ### 7.4 Spectral Convergence
 
-By (38), $W^{(p)}\to W_\infty$ a.s. in operator norm on the fixed finite-dimensional space $\mathbb{R}^{n\times n}$. The top-$k$ eigenvalues of $W_\infty$ are simple (Assumption 3) and separated from the noise level $\delta^2/n$ by the spectral gap $\rho_k > 0$.
+By (11), $W^{(p)}\to W_\infty$ a.s. in operator norm on the fixed finite-dimensional space $\mathbb{R}^{n\times n}$. The top-$k$ eigenvalues of $W_\infty$ are simple (Assumption 3) and separated from the noise level $\delta^2/n$ by the spectral gap $\rho_k > 0$.
 
 **Davis–Kahan theorem** (Kato 1995, §V.4). *If $A_p \to A_\infty$ in operator norm and a simple eigenvalue $\tau$ of $A_\infty$ is separated from the rest of the spectrum by gap $\gamma > 0$, then the corresponding eigenvalue of $A_p$ converges to $\tau$ and the corresponding eigenvector converges (up to sign) to that of $A_\infty$.*
 
 Applying this with gap $\gamma = \rho_k > 0$, for each $j\in\{1,\ldots,k\}$:
 
 $$
-\frac{s_{p,j}^2}{p} \;\longrightarrow\; \tau_j = \rho_j + \frac{\delta^2}{n}, \qquad \chi_{p,j} \;\longrightarrow\; v_j \quad\text{a.s., up to sign.} \tag{41}
+\frac{s_{p,j}^2}{p} \;\longrightarrow\; \tau_j = \rho_j + \frac{\delta^2}{n}, \qquad \chi_{p,j} \;\longrightarrow\; v_j \quad\text{a.s., up to sign.} \tag{13}
 $$
 
 ### 7.5 Out-of-Subspace Limit
 
-From ($*$), $h_j = Y\chi_{p,j}/(\sqrt{n}\,s_{p,j})$. Projecting onto the noise subspace:
+From (4), $h_j = Y\chi_{p,j}/(\sqrt{n}\,s_{p,j})$. Projecting onto the noise subspace:
 
 $$
 \|h_j^\perp\|^2 \;=\; \frac{\chi_{p,j}^\top Z^\top(I-\Pi_U)Z\,\chi_{p,j}}{n\,s_{p,j}^2} \;=\; \frac{1}{n}\cdot\frac{\chi_{p,j}^\top\bigl(Z^\top(I-\Pi_U)Z/p\bigr)\chi_{p,j}}{s_{p,j}^2/p}.
@@ -462,27 +532,27 @@ $$
 \chi_{p,j}^\top\left(\frac{Z^\top(I-\Pi_U)Z}{p}\right)\chi_{p,j} \;\longrightarrow\; \delta^2 \quad\text{a.s.}
 $$
 
-And $s_{p,j}^2/p\to\rho_j+\delta^2/n$ by (41). Therefore
+And $s_{p,j}^2/p\to\rho_j+\delta^2/n$ by (13). Therefore
 
 $$
-\|h_j^\perp\|^2 \;\longrightarrow\; \frac{\delta^2}{n\rho_j+\delta^2} \quad\text{a.s.} \tag{42}
+\|h_j^\perp\|^2 \;\longrightarrow\; \frac{\delta^2}{n\rho_j+\delta^2} \quad\text{a.s.} \tag{14}
 $$
 
 ### 7.6 In-Subspace Limit
 
 *Plan.* We fix an arbitrary subsequence along which $V(p)\to V_\infty$ (compactness of $O(k)$ guarantees such subsequences exist), compute the in-subspace limit along that subsequence, then verify the formula is $V_\infty$-independent — establishing the full a.s. limit.
 
-Apply $U(p)^\top$ to ($*$). Using $b(p) = U\Sigma V^\top$ and $Y = bAF^\top + Z$:
+Apply $U(p)^\top$ to (4). Using $b(p) = U\Sigma V^\top$ and $Y = bAF^\top + Z$:
 
 $$
-\frac{s_{p,j}}{\sqrt{p}}\,U^\top h_j \;=\; \underbrace{\frac{\Sigma\,V^\top R(p)\,F^\#\,\chi_{p,j}}{\sqrt{n}}}_{\text{signal}} \;+\; \underbrace{\frac{U^\top Z\,\chi_{p,j}}{\sqrt{np}}}_{\text{noise}}, \tag{43}
+\frac{s_{p,j}}{\sqrt{p}}\,U^\top h_j \;=\; \underbrace{\frac{\Sigma\,V^\top R(p)\,F^\#\,\chi_{p,j}}{\sqrt{n}}}_{\text{signal}} \;+\; \underbrace{\frac{U^\top Z\,\chi_{p,j}}{\sqrt{np}}}_{\text{noise}}, \tag{15}
 $$
 
 where $R(p) = A(p)C^{-1/2}/\sqrt{p}\to I_k$.
 
 **Noise part.** Lemma 3 gives $\xi_p = \|U^\top Z\|_F^2$ bounded in $(1+\eta/2)$-th moment. Cauchy–Schwarz and $\|\chi_{p,j}\|=1$ give $\|U^\top Z\chi_{p,j}\|^2 \le \xi_p$. Lemma 2 with $\phi(p) = np$ gives $\|U^\top Z\chi_{p,j}\|^2/(np)\to 0$ a.s.
 
-**Signal part.** Along the subsequence where $V(p)\to V_\infty$: $\Sigma(p)\to I_k$ (since $\Sigma(p)^2 = G(p)\to I_k$), $R(p)\to I_k$, and $\chi_{p,j}\to v_j$ by (41). Substituting (40):
+**Signal part.** Along the subsequence where $V(p)\to V_\infty$: $\Sigma(p)\to I_k$ (since $\Sigma(p)^2 = G(p)\to I_k$), $R(p)\to I_k$, and $\chi_{p,j}\to v_j$ by (13). Substituting (12):
 
 $$
 \frac{F^\#\,v_j}{\sqrt{n}} \;=\; \frac{F^\#(F^\#)^\top\hat{w}_j}{n\sqrt{\rho_j}} \;=\; \frac{\hat{D}\,\hat{w}_j}{\sqrt{\rho_j}} \;=\; \sqrt{\rho_j}\,\hat{w}_j.
@@ -491,10 +561,10 @@ $$
 Hence the signal part converges to $V_\infty^\top\sqrt{\rho_j}\hat{w}_j$. Dividing by $s_{p,j}/\sqrt{p}\to\sqrt{\rho_j+\delta^2/n}$:
 
 $$
-U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,V_\infty^\top\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{45}
+U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,V_\infty^\top\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{16}
 $$
 
-In particular, $\|h_j^\|\|^2 \to n\rho_j/(n\rho_j+\delta^2)$ a.s. (this limit is $V_\infty$-independent, consistent with (42) and $\|h_j\|^2 = 1$).
+In particular, $\|h_j^\|\|^2 \to n\rho_j/(n\rho_j+\delta^2)$ a.s. (this limit is $V_\infty$-independent, consistent with (14) and $\|h_j\|^2 = 1$).
 
 ### 7.7 Population Eigenvector Target
 
@@ -509,24 +579,24 @@ using $A(p)/\sqrt{p}\to C^{1/2}$ and $\Sigma(p)\to I_k$, where $D = C^{1/2}\Sigm
 Since $\bar{b}_j$ is the $j$-th eigenvector of $\Sigma_0^{(p)}$ supported on $\mathrm{col}(U)$, there exist coefficient vectors $w_j^{(p)}\in\mathbb{R}^k$ with $\bar{b}_j = U(p)\,w_j^{(p)}$, and
 
 $$
-w_j^{(p)} \;\longrightarrow\; V_\infty^\top e_j \quad\text{a.s. along the subsequence.} \tag{48}
+w_j^{(p)} \;\longrightarrow\; V_\infty^\top e_j \quad\text{a.s. along the subsequence.} \tag{17}
 $$
 
 ### 7.8 Assembly
 
-Combining (35), (42), (45), and (48) along the fixed subsequence:
+Combining (9), (14), (16), and (17) along the fixed subsequence:
 
 $$
 \sin^2\angle\!\left(\frac{h_j^\|}{\|h_j^\|\|},\,\bar{b}_j\right) \;=\; \sin^2\angle(V_\infty^\top\hat{w}_j,\,V_\infty^\top e_j) \;=\; \sin^2\angle(\hat{w}_j,\,e_j),
 $$
 
-using that $V_\infty^\top$ is an isometry. Substituting into (35):
+using that $V_\infty^\top$ is an isometry. Substituting into (9):
 
 $$
 \sin^2\angle(h_j,\,\bar{b}_j) \;\to\; \frac{\delta^2}{n\rho_j+\delta^2} \;+\; \frac{n\rho_j}{n\rho_j+\delta^2}\,(1-(\hat{w}_j)_j^2).
 $$
 
-The right-hand side does not involve $V_\infty$, so the limit is the same along every subsequence, and the full a.s. limit (ii-diag) exists. $\square$
+The right-hand side does not involve $V_\infty$, so the limit is the same along every subsequence, and the full a.s. limit (6) exists. $\square$
 
 ---
 
@@ -540,16 +610,16 @@ When $G_\infty = I_k$, the value of $V_\infty$ in the subsequence limit does not
 
 ### 8.2 Expansion of $W^{(p)}$ and Its Limit
 
-Term (A) of (37) now converges to $(F^\#)^\top G_\infty F^\#/n$ (replacing $I_k$ by $G_\infty$):
+Term (A) of (10) now converges to $(F^\#)^\top G_\infty F^\#/n$ (replacing $I_k$ by $G_\infty$):
 
 $$
-W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top G_\infty F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{50}
+W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top G_\infty F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{18}
 $$
 
 **Lemma 8** (Eigenstructure of $W_\infty$, general case). *The matrix $W_\infty$ has eigenvalues $\tau_j = \rho_j + \delta^2/n$ for $j\le k$ and $\delta^2/n$ for $j > k$, where $\rho_j$ is the $j$-th eigenvalue of $\hat{M} = \Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}$. The top-$k$ eigenvectors are*
 
 $$
-v_j \;=\; \frac{(F^\#)^\top Q\,\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}, \tag{51}
+v_j \;=\; \frac{(F^\#)^\top Q\,\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}, \tag{19}
 $$
 
 *where $\hat{w}_j$ is the $j$-th eigenvector of $\hat{M}$.*
@@ -562,7 +632,7 @@ $$
 
 so the nonzero eigenvalues of $W_\infty - (\delta^2/n)I$ equal those of $\hat{M}$, namely $\rho_1,\ldots,\rho_k$.
 
-To verify that $v_j$ in (51) is the corresponding eigenvector, we need $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$. This follows from $\hat{M}\hat{w}_j = \rho_j\hat{w}_j$ by three steps: $\Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\hat{w}_j$ implies $(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $\Lambda_G^{-1/2}$) implies $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $Q$). Then:
+To verify that $v_j$ in (19) is the corresponding eigenvector, we need $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$. This follows from $\hat{M}\hat{w}_j = \rho_j\hat{w}_j$ by three steps: $\Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\hat{w}_j$ implies $(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $\Lambda_G^{-1/2}$) implies $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $Q$). Then:
 
 $$
 \frac{(F^\#)^\top G_\infty F^\#}{n}\,v_j \;=\; \frac{(F^\#)^\top Q\Lambda_G^{1/2}\,\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{\rho_j(F^\#)^\top Q\Lambda_G^{1/2}\cdot\Lambda_G^{-1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \rho_j\,v_j.
@@ -574,7 +644,7 @@ Spectral convergence (§7.4) applies verbatim with gap $\gamma = \rho_k > 0$.
 
 ### 8.3 In-Subspace Limit and Population Target
 
-**In-subspace limit.** The signal part of (43) uses $\Sigma(p)\to\Lambda_G^{1/2}$ and $V(p)\to Q$. Substituting (51) and the identity $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ derived above:
+**In-subspace limit.** The signal part of (15) uses $\Sigma(p)\to\Lambda_G^{1/2}$ and $V(p)\to Q$. Substituting (19) and the identity $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ derived above:
 
 $$
 \frac{F^\#\,v_j}{\sqrt{n}} \;=\; \frac{\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{\rho_j}} \;=\; \sqrt{\rho_j}\,Q\Lambda_G^{-1/2}\hat{w}_j.
@@ -589,28 +659,28 @@ $$
 Dividing by $s_{p,j}/\sqrt{p}\to\sqrt{\rho_j+\delta^2/n}$:
 
 $$
-U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{52}
+U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{20}
 $$
 
-The geometry encoded by $G_\infty$ is absorbed into the definition of $\hat{M}$, so the limiting in-subspace component is $\hat{w}_j$ directly (not $V_\infty^\top\hat{w}_j$ as in (45)).
+The geometry encoded by $G_\infty$ is absorbed into the definition of $\hat{M}$, so the limiting in-subspace component is $\hat{w}_j$ directly (not $V_\infty^\top\hat{w}_j$ as in (16)).
 
 **Population target.** The limiting $k\times k$ signal block in the $U$-basis converges to $M = \Lambda_G^{1/2}(Q^\top D Q)\Lambda_G^{1/2}$, so the $j$-th population loading direction satisfies
 
 $$
-w_j^{(p)} \;\longrightarrow\; w_j \quad\text{a.s. along the subsequence,} \tag{53}
+w_j^{(p)} \;\longrightarrow\; w_j \quad\text{a.s. along the subsequence,} \tag{21}
 $$
 
 where $w_j$ is the $j$-th eigenvector of $M$.
 
 ### 8.4 Assembly, General Case
 
-From (35), (42), (52), and (53):
+From (9), (14), (20), and (21):
 
 $$
 \sin^2\angle(h_j,\bar{b}_j) \;\to\; \frac{\delta^2}{n\rho_j+\delta^2} \;+\; \frac{n\rho_j}{n\rho_j+\delta^2}\,\sin^2\angle(\hat{w}_j,w_j).
 $$
 
-By Remark 12 of AK's work, the quantities $\rho_j$ and $\sin^2\angle(\hat{w}_j,w_j)$ depend on $Q$ only through $Q$-invariant combinations (they are eigenvalues and principal angles of $\hat{M}$ and $M$, which are defined in terms of $Q$ but whose spectral properties do not depend on the particular choice of $Q$ in the decomposition (29)). Hence the limit is the same along every subsequence, and the full a.s. limit (ii-gen) exists. $\square$
+By Remark 12 of AK's work, the quantities $\rho_j$ and $\sin^2\angle(\hat{w}_j,w_j)$ depend on $Q$ only through $Q$-invariant combinations (they are eigenvalues and principal angles of $\hat{M}$ and $M$, which are defined in terms of $Q$ but whose spectral properties do not depend on the particular choice of $Q$ in the decomposition (2)). Hence the limit is the same along every subsequence, and the full a.s. limit (7) exists. $\square$
 
 ---
 
@@ -624,7 +694,7 @@ Under NG's Assumptions 2.5′ (orthogonal loading columns) and 2.6′ (orthogona
 
 *Intuition.* When factor returns are orthogonal, the sample factor covariance is diagonal — each factor is its own factor with no mixing. No in-subspace rotation occurs. When returns are correlated, the factor covariance must be diagonalized, producing non-trivial eigenvectors $\hat{w}_j$ and $w_j$ and hence non-zero in-subspace rotation.
 
-With $G_\infty = I_k$ and $\sin^2\angle(\hat{w}_j, e_j) = 0$, formula (ii-diag) reduces to:
+With $G_\infty = I_k$ and $\sin^2\angle(\hat{w}_j, e_j) = 0$, formula (6) reduces to:
 
 $$
 \sin^2\angle(h_j, \bar{b}_j) \;\to\; \frac{\delta^2}{n\rho_j + \delta^2},
@@ -666,7 +736,7 @@ $$
 
 *we have $\hat{\psi}_{p,j}^2 \xrightarrow{a.s.} n\rho_j/(n\rho_j+\delta^2) = 1 - \delta^2/(n\rho_j+\delta^2)$.*
 
-**Proof.** The lower bound follows from (ii-diag) and (ii-gen) since the in-subspace term is non-negative. For the observable estimator: the noise singular values $s_{p,j}$ for $j > k$ satisfy $s_{p,j}^2/p\to\delta^2/n$ a.s. (they are eigenvalues of $W^{(p)}$ converging to $\delta^2/n$). Hence $\ell_p^2/p\to\delta^2/n$ and $s_{p,j}^2/p\to\rho_j+\delta^2/n$, giving $\hat{\psi}_{p,j}^2\to n\rho_j/(n\rho_j+\delta^2)$ a.s. $\square$
+**Proof.** The lower bound follows from (6) and (7) since the in-subspace term is non-negative. For the observable estimator: the noise singular values $s_{p,j}$ for $j > k$ satisfy $s_{p,j}^2/p\to\delta^2/n$ a.s. (they are eigenvalues of $W^{(p)}$ converging to $\delta^2/n$). Hence $\ell_p^2/p\to\delta^2/n$ and $s_{p,j}^2/p\to\rho_j+\delta^2/n$, giving $\hat{\psi}_{p,j}^2\to n\rho_j/(n\rho_j+\delta^2)$ a.s. $\square$
 
 *Note.* $\hat{\psi}_{p,j}^2$ requires only the sample singular values of $Y$ — no knowledge of $D$, $G_\infty$, $C$, or $Q$.
 
@@ -714,9 +784,9 @@ $$
 
 where $h_j^\perp = (I - \Pi_B)h_j$ is the out-of-subspace component of $h_j$. To see this: the principal angles are defined by the singular values of $H^\top U$ (where $U$ spans $\mathcal{B}$), with $\cos\theta_j = \sigma_j(H^\top U)$. Hence $\sum_j\cos^2\theta_j = \|H^\top U\|_F^2 = \mathrm{tr}(H^\top\Pi_B H) = \|\Pi_B H\|_F^2 = \sum_j\|h_j^\|\|^2$. Since $\|h_j^\perp\|^2 + \|h_j^\|\|^2 = 1$, summing gives $\sum_j\sin^2\theta_j = \sum_j\|h_j^\perp\|^2$.
 
-The limit now follows directly from equation (42): $\|h_j^\perp\|^2\to\delta^2/(n\rho_j+\delta^2)$ a.s. for each $j$, and $k$ is fixed. $\square$
+The limit now follows directly from equation (14): $\|h_j^\perp\|^2\to\delta^2/(n\rho_j+\delta^2)$ a.s. for each $j$, and $k$ is fixed. $\square$
 
-*Remark.* The in-subspace rotation term in the per-vector formula (ii-diag)/(ii-gen) does not appear in Corollary 4. This is not a coincidence: the Grassmannian distance depends only on $\Pi_H = HH^\top$, which is invariant under orthogonal rotations of the columns of $H$ within $\mathrm{col}(H)$. The in-subspace rotation is precisely such a rotation — it displaces each $h_j$ within $\mathcal{B}$ without changing the subspace $\mathrm{col}(H)$. Corollary 4 therefore provides a strictly weaker error criterion than the per-vector formulas, and achieves a correspondingly smaller limiting error.
+*Remark.* The in-subspace rotation term in the per-vector formula (6)/(7) does not appear in Corollary 4. This is not a coincidence: the Grassmannian distance depends only on $\Pi_H = HH^\top$, which is invariant under orthogonal rotations of the columns of $H$ within $\mathrm{col}(H)$. The in-subspace rotation is precisely such a rotation — it displaces each $h_j$ within $\mathcal{B}$ without changing the subspace $\mathrm{col}(H)$. Corollary 4 therefore provides a strictly weaker error criterion than the per-vector formulas, and achieves a correspondingly smaller limiting error.
 
 ---
 
@@ -830,7 +900,7 @@ The two terms suggest different remedies: increase $n$ to reduce the rotation, o
 
 ### The role of loading geometry
 
-The general-$G_\infty$ formula (ii-gen) differs from the diagonal-Gram formula (ii-diag) in the matrices $\hat{M}$, $M$ replacing $\hat{D}$, $D$. The loading geometry $G_\infty = Q\Lambda_G Q^\top$ rotates and reweights the factor covariance. When all loading directions are equally represented ($G_\infty = I_k$), the reweighting is trivial. In practice, fundamental factor models (Barra, Axioma) commonly produce non-orthogonal loading columns, making (ii-gen) the operationally relevant formula.
+The general-$G_\infty$ formula (7) differs from the diagonal-Gram formula (6) in the matrices $\hat{M}$, $M$ replacing $\hat{D}$, $D$. The loading geometry $G_\infty = Q\Lambda_G Q^\top$ rotates and reweights the factor covariance. When all loading directions are equally represented ($G_\infty = I_k$), the reweighting is trivial. In practice, fundamental factor models (Barra, Axioma) commonly produce non-orthogonal loading columns, making (7) the operationally relevant formula.
 
 ### Specializations
 
@@ -838,8 +908,8 @@ The general-$G_\infty$ formula (ii-gen) differs from the diagonal-Gram formula (
 |:--------------------------------------------- |:------------------------------------------------------------------------- |
 | $k=1$ (GPS2022)                               | $\sin^2\angle(h,\bar{b}) \to \delta^2/(c\|X\|^2+\delta^2)$ (Corollary 2)  |
 | $G_\infty=I_k$, orth. returns (NG's Th. 3.1′) | $\sin^2\angle(h_j,\bar{b}_j) \to \delta^2/(n\rho_j+\delta^2)$; floor only |
-| $G_\infty=I_k$, general returns               | Formula (ii-diag) with rotation $\sin^2\angle(\hat{w}_j,e_j)$             |
-| General $G_\infty$                            | Full formula (ii-gen) with $\hat{M}$, $M$                                 |
+| $G_\infty=I_k$, general returns               | Formula (6) with rotation $\sin^2\angle(\hat{w}_j,e_j)$             |
+| General $G_\infty$                            | Full formula (7) with $\hat{M}$, $M$                                 |
 | $n\to\infty$                                  | $\hat{w}_j\to w_j$; rotation $\to 0$; floor $\to 0$; total $\to 0$        |
 | $\delta^2\to 0$                               | Floor $\to 0$; rotation survives with weight $\to 1$                      |
 | Grassmannian (Cor. 4)                         | $\sum_j\delta^2/(n\rho_j+\delta^2)$; rotation drops out                   |

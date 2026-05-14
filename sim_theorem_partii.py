@@ -1,38 +1,31 @@
 """
 sim_theorem_partii.py
 =====================
-Numerical verification of Theorem 1, Equation (20) from:
+Numerical verification of the Theorem (Multifactor Dispersion Bias),
+Part (ii), Equation (6) from:
 
-    "Multifactor Dispersion Bias under a Per-Column Prevalence Condition" (v7)
-    §3.3, diagonal-Gram theorem.
+    "Multifactor Dispersion Bias with Per-Column Prevalence: A Unified Treatment"
+    §4, diagonal-Gram case (G∞ = I_k).
 
-The claim: for k=3 factors with G∞ = diag(τⱼ) (diagonal Gram), conditional
-on X and almost surely as p → ∞,
+The claim: for k=3 factors with G∞ = I_k (diagonal Gram), conditional
+on F and almost surely as p → ∞,
 
-    sin²∠(hⱼ, bⱼ)  →  δ²/(nρⱼ+δ²)  +  nρⱼ/(nρⱼ+δ²) · (1 − (ŵⱼ)ⱼ²)
-                        ──────────────    ──────────────────────────────
-                           floor               rotation
+    sin²∠(hⱼ, b̄ⱼ)  →  δ²/(nρⱼ+δ²)  +  nρⱼ/(nρⱼ+δ²) · sin²∠(ŵⱼ, eⱼ)
+                         ──────────────    ──────────────────────────────
+                              floor               rotation
 
-where ρⱼ and ŵⱼ are the j-th eigenvalue/vector of D̂ = C^{1/2}(XX^T/n)C^{1/2}.
-
-Changes from v1
----------------
-- `SineAlignmentAnalysis` replaces `Eq20LHSAnalysis`.  The LHS column is now
-  named "sin2_j" throughout (DataFrame, plots, RMSE table).
-- `compute_sine_alignment` (from factor_lab.analyses) is registered with
-  `register_manifold_distance` so it also appears in `ManifoldDistanceAnalysis`
-  results.  Note: that path uses centered PCA, which differs from the uncentered
-  Gram trick used here; treat the registered value as a diagnostic only.
+where ρⱼ and ŵⱼ are the j-th eigenvalue/eigenvector of
+D̂ = C^{1/2}(F^T F/n)C^{1/2}, and eⱼ is the j-th standard basis vector.
 
 Setup
 -----
-- Loadings: B[j,:] has i.i.d. N(0, τⱼ) entries, independent across j.
-  Empirical prevalence ‖B[j,:]‖²/p → τⱼ; diagonal Gram G∞ = diag(τⱼ).
-- Factor returns: columns of X are i.i.d. N(0, F), F = diag(σⱼ²).
+- Loadings: B[j,:] has i.i.d. N(0, cⱼ) entries, independent across j.
+  Prevalence ‖B[j,:]‖²/p → cⱼ (Assumption 1); unit-loading Gram G∞ = I_k.
+- Factor returns: F is n×k, columns drawn i.i.d. N(0, Σ_F), Σ_F = diag(σⱼ²).
 - Noise: idiosyncratic entries are i.i.d. N(0, δ²).
-- Population loading directions bⱼ: top-k eigenvectors of Σ = B'FB + D.
-- The model is drawn once per (n, p) cell and held fixed; X and Z are
-  redrawn each replication (simulating the conditional-on-X regime).
+- Population loading directions b̄ⱼ: top-k eigenvectors of Σ₀ = BΣ_F B^T/p.
+- The model is drawn once per (n, p) cell and held fixed; F and Z are
+  redrawn each replication (simulating the conditional-on-F regime).
 
 Outputs
 -------
@@ -65,12 +58,12 @@ from factor_lab.analyses import compute_sine_alignment, register_manifold_distan
 K = 3
 
 # Factor return variances. Assumption 3 requires c₁σ₁² > c₂σ₂² > c₃σ₃².
-# With TAU2 = [1.0, 0.8, 0.6] the effective spikes are d_j = τⱼ·σⱼ²:
+# With C2 = [1.0, 0.8, 0.6] the effective spikes are d_j = cⱼ·σⱼ²:
 #   d₁ = 0.040 > d₂ = 0.016 > d₃ = 0.006  ✓
 SIGMA2 = np.array([0.04, 0.02, 0.01])
 
-# Per-factor loading entry variances → prevalences cⱼ ≈ τⱼ (by LLN)
-TAU2 = np.array([1.00, 0.80, 0.60])
+# Prevalences cⱼ = lim ‖βⱼ‖²/p (Assumption 1); diagonal C = diag(c₁, c₂, c₃)
+C2 = np.array([1.00, 0.80, 0.60])
 
 # Idiosyncratic noise variance
 DELTA2 = 1.0
@@ -85,14 +78,12 @@ SEED     = 20260511
 
 class SineAlignmentAnalysis:
     """
-    Observed LHS of equation (20): sin²∠(hⱼ, bⱼ) for each factor j.
+    Observed LHS of Equation (6): sin²∠(hⱼ, b̄ⱼ) for each factor j.
 
-    hⱼ: j-th top left singular vector of Y  (estimated loading direction,
-        computed via the n×n Gram trick — uncentered, matching the theorem).
-    bⱼ: j-th population loading direction, injected at construction.
-
-    Population directions are passed at construction so that ARPACK runs once
-    per model (once per (n, p) cell), not once per replication.
+    hⱼ:  j-th top left singular vector of Y (estimated loading direction,
+          computed via the n×n Gram trick — uncentered, matching the theorem).
+    b̄ⱼ: j-th population loading direction (unit eigenvector of Σ₀ = BΣ_F B^T/p),
+          injected at construction so ARPACK runs once per (n, p) cell.
 
     Example:
         _, b_pop = compute_true_eigenvalues(model, K)
@@ -102,7 +93,7 @@ class SineAlignmentAnalysis:
     """
 
     def __init__(self, b_pop: np.ndarray):
-        self.b_pop = b_pop   # (k, p), rows are population directions bⱼ
+        self.b_pop = b_pop   # (k, p), rows are population loading directions b̄ⱼ
 
     def analyze(self, context: SimulationContext) -> dict:
         k = context.k
@@ -119,15 +110,15 @@ class SineAlignmentAnalysis:
         return {"sin2_j": sin2, "dist_sine": dist}
 
 
-class Eq20RHSAnalysis:
+class Eq6RHSAnalysis:
     """
-    Predicted RHS of equation (20): floor + weight × rotation for each factor j.
+    Predicted RHS of Equation (6), Part (ii): floor + weight × rotation for each j.
 
-    Uses factor returns X from the context and empirical prevalences cⱼ = ‖B[j,:]‖²/p
-    from the model loadings.
+    Uses factor returns F from the context and empirical prevalences cⱼ = ‖B[j,:]‖²/p
+    from the model loadings. Computes D̂ = C^{1/2}(F^T F/n)C^{1/2}.
 
     Example:
-        analysis = Eq20RHSAnalysis(delta2=1.0)
+        analysis = Eq6RHSAnalysis(delta2=1.0)
         result = analysis.analyze(context)
         # keys: "rhs", "floor", "rotation", "rhos"
     """
@@ -137,16 +128,16 @@ class Eq20RHSAnalysis:
 
     def analyze(self, context: SimulationContext) -> dict:
         k, n = context.k, context.T
-        X = context.factor_returns.T                     # (k, n)
+        F = context.factor_returns.T                     # (k, n)
         c_half = np.sqrt((context.model.B ** 2).mean(axis=1))   # √cⱼ
-        D_hat = (c_half[:, None] * (X @ X.T / n)) * c_half[None, :]
+        D_hat = (c_half[:, None] * (F @ F.T / n)) * c_half[None, :]
         vals, vecs = np.linalg.eigh(D_hat)
         idx = np.argsort(vals)[::-1]
         rhos = vals[idx]
         W = vecs[:, idx]
         floor = self.delta2 / (n * rhos + self.delta2)
         weight = n * rhos / (n * rhos + self.delta2)
-        # (ŵⱼ)ⱼ is the j-th component of the j-th eigenvector; squaring removes sign.
+        # sin²∠(ŵⱼ, eⱼ) = 1 − (ŵⱼ)ⱼ²; squaring the diagonal removes sign ambiguity.
         rotation = 1.0 - np.diag(W) ** 2
         return {"rhs": floor + weight * rotation, "floor": floor,
                 "rotation": rotation, "rhos": rhos}
@@ -156,10 +147,10 @@ class Eq20RHSAnalysis:
 
 
 def build_model(p: int, rng: np.random.Generator):
-    """Build a k-factor model for the diagonal-Gram experiment.
+    """Build a k-factor model for the diagonal-Gram experiment (G∞ = I_k).
 
-    Loading entries for factor j are i.i.d. N(0, τⱼ), so by LLN
-    ‖B[j,:]‖²/p → τⱼ and off-diagonal Gram entries → 0, giving G∞ = diag(τⱼ).
+    Loading entries for factor j are i.i.d. N(0, cⱼ), so by LLN (Assumption 1)
+    ‖B[j,:]‖²/p → cⱼ and off-diagonal unit-loading Gram entries → 0, giving G∞ = I_k.
     Idiosyncratic volatility is uniform at δ for all assets.
 
     Example:
@@ -170,8 +161,8 @@ def build_model(p: int, rng: np.random.Generator):
         p=p,
         k=K,
         beta_samplers=[
-            create_sampler("normal", rng, loc=0, scale=np.sqrt(tau))
-            for tau in TAU2
+            create_sampler("normal", rng, loc=0, scale=np.sqrt(c))
+            for c in C2
         ],
         idio_vol_sampler=create_sampler("constant", rng, value=np.sqrt(DELTA2)),
         factor_variances=SIGMA2.tolist(),
@@ -213,7 +204,7 @@ def simulate() -> pd.DataFrame:
 
     rng_master = np.random.default_rng(SEED)
     simulator = ReturnsSimulator()   # stateless; all draws go through samplers
-    rhs_analysis = Eq20RHSAnalysis(DELTA2)
+    rhs_analysis = Eq6RHSAnalysis(DELTA2)
     records: list[dict] = []
 
     for n in N_VALUES:
@@ -279,7 +270,7 @@ def print_summary(df: pd.DataFrame) -> None:
 
 def main() -> None:
     import argparse
-    parser = argparse.ArgumentParser(description="Run Theorem 1 / Equation (20) simulation.")
+    parser = argparse.ArgumentParser(description="Run Multifactor Dispersion Bias simulation (Theorem, Part ii, Eq. (6)).")
     parser.add_argument(
         "--out", type=Path,
         default=ROOT / "sim_thmptii.parquet",
@@ -302,8 +293,8 @@ def main() -> None:
         "Simulation: k={}, n={}, p={}, reps={}, seed={}",
         K, N_VALUES, P_VALUES, N_REPS, SEED,
     )
-    logger.info("σ²={}, τ²={}, δ²={}, spikes={}",
-                SIGMA2.tolist(), TAU2.tolist(), DELTA2, (TAU2 * SIGMA2).tolist())
+    logger.info("σ²={}, c²={}, δ²={}, spikes={}",
+                SIGMA2.tolist(), C2.tolist(), DELTA2, (C2 * SIGMA2).tolist())
 
     df = simulate()
 
