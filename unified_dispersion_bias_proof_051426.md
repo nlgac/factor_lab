@@ -154,88 +154,88 @@ corresponding to its $j$-th largest eigenvalue. Since $\Sigma_0^{(p)}$ is suppor
 
 **Model primitives**
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $p$, $n$, $k$ | Number of assets, time periods, factors; asymptotics: $p\to\infty$ with $n$, $k$ fixed |
-| $Y \in \mathbb{R}^{p\times n}$ | Observed return matrix: $Y = BF^\top + Z$ |
-| $B \in \mathbb{R}^{p\times k}$, $\beta_j$ | Population loading matrix; $j$-th loading column |
-| $F \in \mathbb{R}^{n\times k}$, $F_j$ | Factor-return matrix; $j$-th factor-return series (column of $F$) |
-| $Z \in \mathbb{R}^{p\times n}$ | Idiosyncratic noise matrix; i.i.d. mean-zero entries with variance $\delta^2$ |
-| $\delta^2 > 0$ | Common idiosyncratic noise variance |
-| $\Sigma_F$ | Population factor-return covariance: $\Sigma_F = \lim_{n\to\infty} F^\top F/n$ |
+| Symbol                                    | Meaning                                                                                |
+|:-----------------------------------------:|:-------------------------------------------------------------------------------------- |
+| $p$, $n$, $k$                             | Number of assets, time periods, factors; asymptotics: $p\to\infty$ with $n$, $k$ fixed |
+| $Y \in \mathbb{R}^{p\times n}$            | Observed return matrix: $Y = BF^\top + Z$                                              |
+| $B \in \mathbb{R}^{p\times k}$, $\beta_j$ | Population loading matrix; $j$-th loading column                                       |
+| $F \in \mathbb{R}^{n\times k}$, $F_j$     | Factor-return matrix; $j$-th factor-return series (column of $F$)                      |
+| $Z \in \mathbb{R}^{p\times n}$            | Idiosyncratic noise matrix; i.i.d. mean-zero entries with variance $\delta^2$          |
+| $\delta^2 > 0$                            | Common idiosyncratic noise variance                                                    |
+| $\Sigma_F$                                | Population factor-return covariance: $\Sigma_F = \lim_{n\to\infty} F^\top F/n$         |
 
 **Loading geometry**
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $A(p)$ | Diagonal matrix of loading-column norms: $A(p) = \mathrm{diag}(\|\beta_j(p)\|)_{j=1}^k$ |
-| $b(p) = BA(p)^{-1}$ | Unit-normalized loading matrix; columns are $\beta_j/\|\beta_j\|$ |
-| $G(p) = b(p)^\top b(p)$ | Finite-$p$ Gram matrix of unit loading columns; $G(p) \to G_\infty$ by Assumption 2 |
-| $G_\infty$ | Limiting Gram matrix (positive definite, $k\times k$); see Assumption 2 |
-| $Q$, $\Lambda_G$ | Spectral factors of $G_\infty$: $G_\infty = Q\Lambda_G Q^\top$, $\Lambda_G = \mathrm{diag}(g_1,\ldots,g_k)$, $Q\in O(k)$; see (2) |
-| $c_j$, $C$ | Prevalence of factor $j$: $c_j = \lim\|\beta_j\|^2/p \in (0,\infty)$; $C = \mathrm{diag}(c_j)$; see Assumption 1 |
-| $R(p)$ | Norm-scaling bridge: $R(p) = A(p)C^{-1/2}/\sqrt{p} \to I_k$; appears in (15) |
+| Symbol                  | Meaning                                                                                                                           |
+|:-----------------------:|:--------------------------------------------------------------------------------------------------------------------------------- |
+| $A(p)$                  | Diagonal matrix of loading-column norms: $A(p) = \mathrm{diag}(\|\beta_j(p)\|)_{j=1}^k$                                           |
+| $b(p) = BA(p)^{-1}$     | Unit-normalized loading matrix; columns are $\beta_j/\|\beta_j\|$                                                                 |
+| $G(p) = b(p)^\top b(p)$ | Finite-$p$ Gram matrix of unit loading columns; $G(p) \to G_\infty$ by Assumption 2                                               |
+| $G_\infty$              | Limiting Gram matrix (positive definite, $k\times k$); see Assumption 2                                                           |
+| $Q$, $\Lambda_G$        | Spectral factors of $G_\infty$: $G_\infty = Q\Lambda_G Q^\top$, $\Lambda_G = \mathrm{diag}(g_1,\ldots,g_k)$, $Q\in O(k)$; see (2) |
+| $c_j$, $C$              | Prevalence of factor $j$: $c_j = \lim\|\beta_j\|^2/p \in (0,\infty)$; $C = \mathrm{diag}(c_j)$; see Assumption 1                  |
+| $R(p)$                  | Norm-scaling bridge: $R(p) = A(p)C^{-1/2}/\sqrt{p} \to I_k$; appears in (15)                                                      |
 
 **SVD of unit loading matrix** (equation (1))
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $U(p) \in \mathbb{R}^{p\times k}$ | Left singular vectors of $b(p)$; columns form an orthonormal basis of $\mathcal{B}$ |
+| Symbol                                 | Meaning                                                                                          |
+|:--------------------------------------:|:------------------------------------------------------------------------------------------------ |
+| $U(p) \in \mathbb{R}^{p\times k}$      | Left singular vectors of $b(p)$; columns form an orthonormal basis of $\mathcal{B}$              |
 | $\Sigma(p) \in \mathbb{R}^{k\times k}$ | Diagonal singular-value matrix of $b(p)$; $\Sigma(p)^2 = G(p)$, so $\Sigma(p)\to G_\infty^{1/2}$ |
-| $V(p) \in O(k)$ | Right singular vectors of $b(p)$; subsequentially convergent to $V_\infty \in O(k)$ |
+| $V(p) \in O(k)$                        | Right singular vectors of $b(p)$; subsequentially convergent to $V_\infty \in O(k)$              |
 
 **Signal subspace**
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $\mathcal{B} = \mathrm{col}(B)$ | $k$-dimensional population factor subspace of $\mathbb{R}^p$ |
-| $\Pi_B$, $\Pi_B^\perp$ | Orthogonal projection onto $\mathcal{B}$, and its complement $I_p - \Pi_B$ |
-| $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$ | Population signal covariance ($p\times p$); supported on $\mathcal{B}$ |
-| $\bar{b}_j$ | $j$-th population loading direction: unit eigenvector of $\Sigma_0^{(p)}$ for eigenvalue $\lambda_j(\Sigma_0^{(p)})$ |
+| Symbol                                | Meaning                                                                                                              |
+|:-------------------------------------:|:-------------------------------------------------------------------------------------------------------------------- |
+| $\mathcal{B} = \mathrm{col}(B)$       | $k$-dimensional population factor subspace of $\mathbb{R}^p$                                                         |
+| $\Pi_B$, $\Pi_B^\perp$                | Orthogonal projection onto $\mathcal{B}$, and its complement $I_p - \Pi_B$                                           |
+| $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$ | Population signal covariance ($p\times p$); supported on $\mathcal{B}$                                               |
+| $\bar{b}_j$                           | $j$-th population loading direction: unit eigenvector of $\Sigma_0^{(p)}$ for eigenvalue $\lambda_j(\Sigma_0^{(p)})$ |
 
 **Prevalence-weighted factor covariances**
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $F^\# = C^{1/2}F^\top \in \mathbb{R}^{k\times n}$ | Prevalence-rescaled factor-return matrix |
-| $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$ | Sample prevalence-weighted factor covariance ($k\times k$); equals $F^\#(F^\#)^\top/n$ |
-| $D = C^{1/2}\Sigma_F C^{1/2}$ | Population prevalence-weighted factor covariance ($k\times k$) |
-| $\hat{M}$, $M$ | Rotated-reweighted covariances for general $G_\infty$: see (3); reduce to $\hat{D}$, $D$ when $G_\infty = I_k$ |
-| $\rho_j$ | $j$-th eigenvalue of $\hat{M}$ (or $\hat{D}$ when $G_\infty=I_k$); $\rho_1>\cdots>\rho_k>0$ by the regular-event hypothesis |
-| $\hat{w}_j$, $w_j$ | $j$-th orthonormal eigenvectors of $\hat{M}$ and $M$ respectively |
-| $d_j$ | $j$-th eigenvalue of $M$; population limit $d_j = \lim_{n\to\infty}\rho_j$ |
-| $\mathrm{SNR}_j = n\rho_j/\delta^2$ | Per-factor signal-to-noise ratio; determines the out-of-subspace floor $1/(1+\mathrm{SNR}_j)$ |
+| Symbol                                            | Meaning                                                                                                                     |
+|:-------------------------------------------------:|:--------------------------------------------------------------------------------------------------------------------------- |
+| $F^\# = C^{1/2}F^\top \in \mathbb{R}^{k\times n}$ | Prevalence-rescaled factor-return matrix                                                                                    |
+| $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$            | Sample prevalence-weighted factor covariance ($k\times k$); equals $F^\#(F^\#)^\top/n$                                      |
+| $D = C^{1/2}\Sigma_F C^{1/2}$                     | Population prevalence-weighted factor covariance ($k\times k$)                                                              |
+| $\hat{M}$, $M$                                    | Rotated-reweighted covariances for general $G_\infty$: see (3); reduce to $\hat{D}$, $D$ when $G_\infty = I_k$              |
+| $\rho_j$                                          | $j$-th eigenvalue of $\hat{M}$ (or $\hat{D}$ when $G_\infty=I_k$); $\rho_1>\cdots>\rho_k>0$ by the regular-event hypothesis |
+| $\hat{w}_j$, $w_j$                                | $j$-th orthonormal eigenvectors of $\hat{M}$ and $M$ respectively                                                           |
+| $d_j$                                             | $j$-th eigenvalue of $M$; population limit $d_j = \lim_{n\to\infty}\rho_j$                                                  |
+| $\mathrm{SNR}_j = n\rho_j/\delta^2$               | Per-factor signal-to-noise ratio; determines the out-of-subspace floor $1/(1+\mathrm{SNR}_j)$                               |
 
 **Sample PCA objects** (equation (4))
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $H = [h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$ | Top-$k$ sample eigenvectors of $YY^\top/n$; orthonormal columns |
-| $S_p = \mathrm{diag}(s_{p,1},\ldots,s_{p,k})$ | Diagonal matrix of top-$k$ singular values of $Y/\sqrt{n}$ |
-| $\mathcal{X}_p = [\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$ | Right singular vectors of $Y/\sqrt{n}$; orthonormal columns |
-| $s_{p,j}$ | $j$-th largest singular value of $Y/\sqrt{n}$; satisfies $s_{p,j}^2/p \to \rho_j + \delta^2/n$ a.s. by (13) |
-| $\chi_{p,j}$ | $j$-th column of $\mathcal{X}_p$; converges to $v_j$ a.s. by (13) |
-| $\Pi_H = HH^\top$ | Orthogonal projection onto $\mathrm{col}(H)$ |
-| $W^{(p)} = Y^\top Y/(np) \in \mathbb{R}^{n\times n}$ | Small Gram matrix; eigenvalues $s_{p,j}^2/p$ with eigenvectors $\chi_{p,j}$ |
+| Symbol                                                                    | Meaning                                                                                                     |
+|:-------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------- |
+| $H = [h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$                           | Top-$k$ sample eigenvectors of $YY^\top/n$; orthonormal columns                                             |
+| $S_p = \mathrm{diag}(s_{p,1},\ldots,s_{p,k})$                             | Diagonal matrix of top-$k$ singular values of $Y/\sqrt{n}$                                                  |
+| $\mathcal{X}_p = [\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$ | Right singular vectors of $Y/\sqrt{n}$; orthonormal columns                                                 |
+| $s_{p,j}$                                                                 | $j$-th largest singular value of $Y/\sqrt{n}$; satisfies $s_{p,j}^2/p \to \rho_j + \delta^2/n$ a.s. by (13) |
+| $\chi_{p,j}$                                                              | $j$-th column of $\mathcal{X}_p$; converges to $v_j$ a.s. by (13)                                           |
+| $\Pi_H = HH^\top$                                                         | Orthogonal projection onto $\mathrm{col}(H)$                                                                |
+| $W^{(p)} = Y^\top Y/(np) \in \mathbb{R}^{n\times n}$                      | Small Gram matrix; eigenvalues $s_{p,j}^2/p$ with eigenvectors $\chi_{p,j}$                                 |
 
 **Limiting small Gram matrix** (Lemmas 7–8)
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $W_\infty$ | Almost-sure spectral limit of $W^{(p)}$; see (11) for diagonal case, (18) for general |
-| $\tau_j = \rho_j + \delta^2/n$ | $j$-th largest eigenvalue of $W_\infty$ (signal-plus-noise level) |
-| $v_j$ | $j$-th eigenvector of $W_\infty$; see (12) for diagonal case, (19) for general |
+| Symbol                         | Meaning                                                                               |
+|:------------------------------:|:------------------------------------------------------------------------------------- |
+| $W_\infty$                     | Almost-sure spectral limit of $W^{(p)}$; see (11) for diagonal case, (18) for general |
+| $\tau_j = \rho_j + \delta^2/n$ | $j$-th largest eigenvalue of $W_\infty$ (signal-plus-noise level)                     |
+| $v_j$                          | $j$-th eigenvector of $W_\infty$; see (12) for diagonal case, (19) for general        |
 
 **Shrinkage and alignment** (Corollaries 1 and 5)
 
-| Symbol | Meaning |
-|:------:|:------- |
-| $\psi_{\infty,j}^2 = n\rho_j/(n\rho_j+\delta^2)$ | Squared alignment ceiling for eigenvector $h_j$; equals $\mathrm{SNR}_j/(1+\mathrm{SNR}_j)$ |
-| $\hat{\psi}_{p,j}^2 = 1 - \ell_p^2/s_{p,j}^2$ | Observable estimator of $\psi_{\infty,j}^2$; see Corollary 1 |
-| $\ell_p^2 = \frac{1}{n-k}\sum_{j=k+1}^n s_{p,j}^2$ | Mean squared noise singular value; converges to $\delta^2/n$ a.s. |
-| $\Psi_\infty = \mathrm{diag}(\psi_{\infty,1},\ldots,\psi_{\infty,k})$ | Diagonal shrinkage matrix; see Corollaries 5 and discussion in §9 |
-| $\tilde{B} = b(p)$ | Unit loading column matrix (alternative notation used in §9 and corollaries) |
-| $\Gamma_\infty = \lim_{p\to\infty}\tilde{B}^\top W$ | Asymptotic alignment matrix between unit loadings and probe frame $W$; see Corollary 5 |
+| Symbol                                                                | Meaning                                                                                     |
+|:---------------------------------------------------------------------:|:------------------------------------------------------------------------------------------- |
+| $\psi_{\infty,j}^2 = n\rho_j/(n\rho_j+\delta^2)$                      | Squared alignment ceiling for eigenvector $h_j$; equals $\mathrm{SNR}_j/(1+\mathrm{SNR}_j)$ |
+| $\hat{\psi}_{p,j}^2 = 1 - \ell_p^2/s_{p,j}^2$                         | Observable estimator of $\psi_{\infty,j}^2$; see Corollary 1                                |
+| $\ell_p^2 = \frac{1}{n-k}\sum_{j=k+1}^n s_{p,j}^2$                    | Mean squared noise singular value; converges to $\delta^2/n$ a.s.                           |
+| $\Psi_\infty = \mathrm{diag}(\psi_{\infty,1},\ldots,\psi_{\infty,k})$ | Diagonal shrinkage matrix; see Corollaries 5 and discussion in §9                           |
+| $\tilde{B} = b(p)$                                                    | Unit loading column matrix (alternative notation used in §9 and corollaries)                |
+| $\Gamma_\infty = \lim_{p\to\infty}\tilde{B}^\top W$                   | Asymptotic alignment matrix between unit loadings and probe frame $W$; see Corollary 5      |
 
 **Angles.** For unit vectors $u,v\in\mathbb{R}^p$, the angle between them satisfies $\cos\angle(u,v) = |\langle u,v\rangle|$ and $\sin^2\angle(u,v) = 1 - \langle u,v\rangle^2$.
 
@@ -908,8 +908,8 @@ The general-$G_\infty$ formula (7) differs from the diagonal-Gram formula (6) in
 |:--------------------------------------------- |:------------------------------------------------------------------------- |
 | $k=1$ (GPS2022)                               | $\sin^2\angle(h,\bar{b}) \to \delta^2/(c\|X\|^2+\delta^2)$ (Corollary 2)  |
 | $G_\infty=I_k$, orth. returns (NG's Th. 3.1′) | $\sin^2\angle(h_j,\bar{b}_j) \to \delta^2/(n\rho_j+\delta^2)$; floor only |
-| $G_\infty=I_k$, general returns               | Formula (6) with rotation $\sin^2\angle(\hat{w}_j,e_j)$             |
-| General $G_\infty$                            | Full formula (7) with $\hat{M}$, $M$                                 |
+| $G_\infty=I_k$, general returns               | Formula (6) with rotation $\sin^2\angle(\hat{w}_j,e_j)$                   |
+| General $G_\infty$                            | Full formula (7) with $\hat{M}$, $M$                                      |
 | $n\to\infty$                                  | $\hat{w}_j\to w_j$; rotation $\to 0$; floor $\to 0$; total $\to 0$        |
 | $\delta^2\to 0$                               | Floor $\to 0$; rotation survives with weight $\to 1$                      |
 | Grassmannian (Cor. 4)                         | $\sum_j\delta^2/(n\rho_j+\delta^2)$; rotation drops out                   |
