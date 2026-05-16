@@ -14,8 +14,8 @@
 4. Main Results
 5. Lemmas
 6. Proof of Part (i)
-7. Proof of Part (ii): Diagonal-Gram Case
-8. Proof of Part (iii): General $G_\infty$
+7. Proof of Parts (ii) and (iii)
+8. Unification of Parts (ii) and (iii)
 9. Recovery of NG's Theorem 3.1′
 10. Corollaries
 11. Discussion
@@ -110,7 +110,7 @@ where $\Sigma_F = \lim_{n\to\infty} F^\top F/n$ is the population factor-return 
 
 *Intuition.* $\hat{D}$ blends two sources of information: how strongly each factor is spread cross-sectionally (captured by $C^{1/2}$) and how much it varies over time (captured by $F^\top F/n$). The diagonal entry $\hat{D}_{jj} = c_j\cdot (F_j^\top F_j/n)$ is the $j$-th factor's per-period contribution to cross-sectional variance.
 
-**Norm-scaling matrix.** Define $R(p) = A(p)C^{-1/2}/\sqrt{p}$. By Assumption 1 below, $A(p)/\sqrt{p} \to C^{1/2}$, so $R(p)\to I_k$ as $p\to\infty$. This matrix appears in the in-subspace limit computation (§7.6) where it bridges the $p$-dependent loading norms to the limiting prevalence matrix.
+*Remark on loading norms.* The diagonal matrix $A(p) = \mathrm{diag}(\|\beta_j(p)\|)$ satisfies $A(p)/\sqrt{p} \to C^{1/2}$ by Assumption 1. Equivalently, $B^\top B/p = A(p)G(p)A(p)/p \to C^{1/2}G_\infty C^{1/2} = \Gamma_B$. This convergence $\Gamma_p \to \Gamma_B$ is all that the proof of §7 requires; the matrices $A(p)$ and $G(p)$ enter only through their product.
 
 **Rotated-and-reweighted matrices for general $G_\infty$.** Fix a spectral decomposition
 
@@ -126,13 +126,31 @@ $$
 
 **Interpretation.** The matrix $G_\infty = b(p)^\top b(p)$ (with unit-normalized loading columns) is the *correlation* matrix of the loading columns, not covariance. When loadings are non-orthogonal, the factor covariance $\hat{D}$ is most naturally expressed in coordinates aligned with the eigenbasis of $G_\infty$. The transformation accomplishes this: $Q$ rotates the factor covariance into the eigenbasis of the loading-column correlation $G_\infty$, and $\Lambda_G^{1/2}$ pre- and post-multiplies to reweight each rotated direction by the square root of the corresponding loading-correlation eigenvalue $g_j$. These eigenvalues measure how much the normalized loading variance is concentrated along the $j$-th principal loading direction: larger $g_j$ indicates stronger signal concentration. When $G_\infty = I_k$ (orthogonal loadings), we may take $Q = I_k$, $\Lambda_G = I_k$, giving $\hat{M} = \hat{D}$ and $M = D$.
 
-**Sample PCA objects.** The thin SVD of $Y/\sqrt{n}$ gives
+**Sample PCA objects.** The full SVD of $Y/\sqrt{n}$ is the exact matrix factorization
+$$
+\frac{Y}{\sqrt{n}} = \tilde{H}\,\tilde{S}\,\tilde{\mathcal{X}}^\top,
+$$
+where $\tilde{H}\in\mathbb{R}^{p\times r}$ and $\tilde{\mathcal{X}}\in\mathbb{R}^{n\times r}$ have orthonormal columns, $\tilde{S}\in\mathbb{R}^{r\times r}$ is diagonal with entries $s_{p,1}\ge\cdots\ge s_{p,r}>0$, and $r=\mathrm{rank}(Y)\le\min(p,n)$ (with $r=\min(p,n)$ almost surely since $Z$ has full rank). Partition the three factors by keeping the leading $k$ columns:
+$$
+\tilde{H} = \bigl[H \;\big|\; H_\perp\bigr],
+\qquad
+\tilde{S} = \begin{bmatrix} S_p & 0 \\ 0 & S_\perp \end{bmatrix},
+\qquad
+\tilde{\mathcal{X}} = \bigl[\mathcal{X}_p \;\big|\; \mathcal{X}_\perp\bigr],
+$$
+where $H=[h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$, $S_p=\mathrm{diag}(s_{p,1},\ldots,s_{p,k})$, and $\mathcal{X}_p=[\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$. The columns of $H$ are the top-$k$ eigenvectors of $YY^\top/n$. Because $\tilde{S}$ is block-diagonal with zero off-diagonal blocks, the product $\tilde{H}\tilde{S} = [HS_p \mid H_\perp S_\perp]$ has no cross terms, and the full SVD reads
+$$
+\frac{Y}{\sqrt{n}} = H S_p \mathcal{X}_p^\top \;+\; H_\perp S_\perp \mathcal{X}_\perp^\top.
+$$
+Right-multiplying by $\mathcal{X}_p$ and using $\mathcal{X}_p^\top\mathcal{X}_p=I_k$ and $\mathcal{X}_\perp^\top\mathcal{X}_p=0$ (orthonormality of the columns of $\tilde{\mathcal{X}}$) gives the exact identity
 
 $$
-H S_p = \frac{Y\,\mathcal{X}_p}{\sqrt{n}}, \tag{4}
+H S_p = \frac{Y\,\mathcal{X}_p}{\sqrt{n}}. \tag{4}
 $$
 
-where $H = [h_1,\ldots,h_k]\in\mathbb{R}^{p\times k}$ has orthonormal columns (the top-$k$ sample eigenvectors of $YY^\top/n$); $S_p = \mathrm{diag}(s_{p,1},\ldots,s_{p,k})$ with $s_{p,1}\ge\cdots\ge s_{p,k}>0$; and $\mathcal{X}_p = [\chi_{p,1},\ldots,\chi_{p,k}]\in\mathbb{R}^{n\times k}$ has orthonormal columns. The *small Gram matrix*
+The rank-$k$ term $HS_p\mathcal{X}_p^\top$ is *not* equal to $Y/\sqrt{n}$; the second term $H_\perp S_\perp\mathcal{X}_\perp^\top$ is nonzero and carries the noise contributions. Equation (4) is exact; a truncated reconstruction of $Y/\sqrt{n}$ from the top-$k$ factors alone is not.
+
+The *small Gram matrix*
 
 $$
 W^{(p)} = \frac{Y^\top Y}{np} \in \mathbb{R}^{n\times n}
@@ -174,7 +192,7 @@ corresponding to its $j$-th largest eigenvalue. Since $\Sigma_0^{(p)}$ is suppor
 | $G_\infty$              | Limiting Gram matrix (positive definite, $k\times k$); see Assumption 2                                                           |
 | $Q$, $\Lambda_G$        | Spectral factors of $G_\infty$: $G_\infty = Q\Lambda_G Q^\top$, $\Lambda_G = \mathrm{diag}(g_1,\ldots,g_k)$, $Q\in O(k)$; see (2) |
 | $c_j$, $C$              | Prevalence of factor $j$: $c_j = \lim\|\beta_j\|^2/p \in (0,\infty)$; $C = \mathrm{diag}(c_j)$; see Assumption 1                  |
-| $R(p)$                  | Norm-scaling bridge: $R(p) = A(p)C^{-1/2}/\sqrt{p} \to I_k$; appears in (15)                                                      |
+| $\Gamma_B = C^{1/2}G_\infty C^{1/2}$ | Limiting metric on $\mathbb{R}^k$: $B^\top B/p \to \Gamma_B$; used as the inner-product matrix in the §7 proof |
 
 **SVD of unit loading matrix** (equation (1))
 
@@ -182,7 +200,7 @@ corresponding to its $j$-th largest eigenvalue. Since $\Sigma_0^{(p)}$ is suppor
 |:--------------------------------------:|:------------------------------------------------------------------------------------------------ |
 | $U(p) \in \mathbb{R}^{p\times k}$      | Left singular vectors of $b(p)$; columns form an orthonormal basis of $\mathcal{B}$              |
 | $\Sigma(p) \in \mathbb{R}^{k\times k}$ | Diagonal singular-value matrix of $b(p)$; $\Sigma(p)^2 = G(p)$, so $\Sigma(p)\to G_\infty^{1/2}$ |
-| $V(p) \in O(k)$                        | Right singular vectors of $b(p)$; subsequentially convergent to $V_\infty \in O(k)$              |
+| $V(p) \in O(k)$                        | Right singular vectors of $b(p)$; enters the SVD (1) but does not appear in the §7 proof         |
 
 **Signal subspace**
 
@@ -222,9 +240,9 @@ corresponding to its $j$-th largest eigenvalue. Since $\Sigma_0^{(p)}$ is suppor
 
 | Symbol                         | Meaning                                                                               |
 |:------------------------------:|:------------------------------------------------------------------------------------- |
-| $W_\infty$                     | Almost-sure spectral limit of $W^{(p)}$; see (11) for diagonal case, (18) for general |
-| $\tau_j = \rho_j + \delta^2/n$ | $j$-th largest eigenvalue of $W_\infty$ (signal-plus-noise level)                     |
-| $v_j$                          | $j$-th eigenvector of $W_\infty$; see (12) for diagonal case, (19) for general        |
+| $W_\infty$                     | Almost-sure spectral limit of $W^{(p)}$; $W_\infty = F\Gamma_B F^\top/n + (\delta^2/n)I_n$; see (11) |
+| $\tau_j = \rho_j + \delta^2/n$ | $j$-th largest eigenvalue of $W_\infty$ (signal-plus-noise level)                                     |
+| $v_j$                          | $j$-th eigenvector of $W_\infty$; see (12); equals $(F^\#)^\top\hat{w}_j/\sqrt{n\rho_j}$ when $G_\infty = I_k$  |
 
 **Shrinkage and alignment** (Corollaries 1 and 5)
 
@@ -350,7 +368,7 @@ The in-subspace rotation adds a 15% relative increase to the misalignment of fac
 
 ## 5. Lemmas
 
-All four lemmas are elementary consequences of the strong law of large numbers combined with moment bounds. Lemmas 1–3 bound noise projections; Lemma 4 shows the noise Gram matrix concentrates around $\delta^2 I_n$.
+The proof rests on two fundamental noise results. **Lemma 1** is the main probabilistic workhorse: a fourth-moment Borel–Cantelli argument showing that a single noise projection $\eta_p^\top Z_{\cdot\ell}/\sqrt{p}$ vanishes a.s. for any bounded deterministic sequence $\eta_p$. **Lemma 4** shows the noise Gram matrix $Z^\top Z/p$ concentrates around $\delta^2 I_n$, proved by the Kolmogorov SLLN. **Corollary 1.1** (following Lemma 1) extends the pointwise bound to the full matrix $U(p)^\top Z$, giving $\|U(p)^\top Z\|_F^2/p \to 0$ a.s. by applying Lemma 1 column-by-column.
 
 ### Lemma 1 (Bounded-vector noise concentration)
 
@@ -380,37 +398,21 @@ $$
 
 ---
 
-### Lemma 2 (Borel–Cantelli decay under uniform moment bounds)
+### Corollary 1.1 (Noise projection onto the signal subspace)
 
-*Why needed.* Several quantities in the proof are of the form $\xi_p/\phi(p)$ where $\xi_p$ has a uniform moment bound. Lemma 2 is the abstract engine converting this bound into almost-sure convergence to zero. It is applied with $\phi(p) = p$ (to show $\xi_p/p \to 0$) and $\phi(p) = np$ (to show $\xi_p/(np) \to 0$).
+*Let $U(p)\in\mathbb{R}^{p\times k}$ be a deterministic sequence with orthonormal columns spanning $\mathcal{B}$. Then $\|U(p)^\top Z\|_F^2/p \to 0$ a.s. The same bound holds with $b(p)$ in place of $U(p)$: $\|b(p)^\top Z\|_F^2/p \to 0$ a.s.*
 
-*Let $\{\xi_p\}_{p\ge 1}$ be non-negative random variables with $\sup_p\mathbb{E}[\xi_p^{1+\eta/2}]\le K$ for some $\eta > 0$. Let $\phi:\mathbb{N}\to(0,\infty)$ with $\liminf_{p\to\infty}\phi(p)/p > 0$. Then $\xi_p/\phi(p)\to 0$ a.s.*
+**Proof.** Each column $u_l(p)$ of $U(p)$ is a deterministic sequence of unit vectors. Lemma 1 applies to each pair $(l, m)$ with $l\in\{1,\ldots,k\}$, $m\in\{1,\ldots,n\}$: $$|u_l(p)^\top Z_{\cdot m}| = o(p^{1/2-\varepsilon}) \quad\text{a.s.}$$ The $(l,m)$ entry of $U^\top Z$ equals $u_l^\top Z_{\cdot m}$, so summing the $kn$ squared terms: $$\|U^\top Z\|_F^2 = \sum_{l=1}^k\sum_{m=1}^n |u_l^\top Z_{\cdot m}|^2 = o(p^{1-2\varepsilon}) \quad\text{a.s.}$$ Dividing by $p$ gives $\|U^\top Z\|_F^2/p \to 0$ a.s. The same argument applies to $b(p)$: each column $\beta_j/\|\beta_j\|$ is a deterministic unit vector, so Lemma 1 gives $|(\beta_j/\|\beta_j\|)^\top Z_{\cdot m}| = o(p^{1/2-\varepsilon})$ a.s., and summing $kn$ squared terms gives $\|b^\top Z\|_F^2/p \to 0$ a.s. $\square$
 
-**Proof.** Fix $c_0 > 0$ with $\phi(p)\ge c_0 p$ for all large $p$. Markov on $\xi_p^{1+\eta/2}$ gives $\Pr(\xi_p/\phi(p) > \varepsilon) \le K/(\varepsilon c_0 p)^{1+\eta/2}$. The series $\sum_p p^{-(1+\eta/2)}$ converges since $1+\eta/2 > 1$. Borel–Cantelli concludes. $\square$
-
----
-
-### Lemma 3 (Noise projection — matrix form)
-
-*Why needed.* Shows $\|U^\top Z\|_F^2/p \to 0$ a.s., establishing that noise projected onto the $k$-dimensional signal subspace is negligible.
-
-*Let $V(p)\in\mathbb{R}^{p\times k}$ be deterministic with orthonormal columns. Then $\xi_p := \|V(p)^\top Z^{(p)}\|_F^2$ satisfies $\sup_p\,\mathbb{E}[\xi_p^{1+\eta/2}] \le K(k,n,\eta,\delta^2,\mathbb{E}|Z_{11}|^{2+\eta})$. In particular, $\xi_p/p \to 0$ a.s.*
-
-**Proof.** Each entry $(V^\top Z)_{j\ell} = \sum_i V_{ij}Z_{i\ell}$ is a weighted sum of mean-zero independent variables with weights satisfying $\sum_i V_{ij}^2 = 1$. The Marcinkiewicz–Zygmund inequality gives $\mathbb{E}|\sum_i V_{ij}Z_{i\ell}|^{2+\eta} \le C_\eta\,\mathbb{E}|Z_{11}|^{2+\eta}$ uniformly in $p$, $j$, $\ell$. Since $\xi_p$ is a sum of $kn$ such terms, subadditivity of $x\mapsto x^{1+\eta/2}$ bounds $\mathbb{E}[\xi_p^{1+\eta/2}]$ by a constant times $kn\cdot\mathbb{E}|Z_{11}|^{2+\eta}$. Lemma 2 with $\phi(p) = p$ concludes. $\square$
+*Why Lemma 1 suffices (no Marcinkiewicz–Zygmund needed).* The elementary reason is that a rank-$k$ projector has bounded expected Frobenius norm: $\mathbb{E}\|\Pi_B Z\|_F^2 = \delta^2\mathrm{tr}(\Pi_B) = \delta^2 k$, independent of $p$. Lemma 1's fourth-moment Borel–Cantelli argument promotes this $O(1)$ expectation to almost-sure convergence of the normalized version $\|U^\top Z\|_F^2/p \to 0$.
 
 ---
 
-### Lemma 4 (Noise Gram and out-of-subspace noise)
+### Lemma 4 (Noise Gram concentration)
 
-*(a) $Z^\top Z/p \to \delta^2 I_n$ a.s. in spectral norm.*
+*$Z^\top Z/p \to \delta^2 I_n$ a.s. in spectral norm.*
 
-*(b) Let $U(p)\in\mathbb{R}^{p\times k}$ be a deterministic orthonormal sequence and $\Pi_U = UU^\top$. Then $(Z^\top(I_p-\Pi_U)Z)/p \to \delta^2 I_n$ a.s. in spectral norm.*
-
-*Why needed.* Part (b) is the key tool for the out-of-subspace limit in Step 7.5: noise projected away from the signal subspace still behaves like $\delta^2 I_n$.
-
-**Proof of (a).** The $(j,\ell)$ entry of $Z^\top Z/p$ equals $(1/p)\sum_{i=1}^p Z_{ij}Z_{i\ell}$. For $j = \ell$ the summands $Z_{ij}^2$ are i.i.d. with mean $\delta^2$; for $j\ne\ell$ they have mean zero. The Kolmogorov SLLN gives entrywise a.s. convergence. Since $n$ is fixed, entrywise convergence implies spectral-norm convergence.
-
-**Proof of (b).** Decompose: $(Z^\top(I-\Pi_U)Z)/p = Z^\top Z/p - (U^\top Z)^\top(U^\top Z)/p$. The first term converges to $\delta^2 I_n$ by part (a). The Frobenius norm squared of the second term equals $\xi_p/p$ where $\xi_p = \|U^\top Z\|_F^2$; Lemma 3 gives $\xi_p/p\to 0$ a.s., and $\|A\|_{\mathrm{op}} \le \|A\|_F$ completes the argument. $\square$
+**Proof.** The $(j,\ell)$ entry of $Z^\top Z/p$ equals $(1/p)\sum_{i=1}^p Z_{ij}Z_{i\ell}$. For $j = \ell$ the summands $Z_{ij}^2$ are i.i.d. with mean $\delta^2$; for $j\ne\ell$ they have mean zero. The Kolmogorov SLLN gives entrywise a.s. convergence. Since $n$ is fixed, entrywise convergence implies spectral-norm convergence. $\square$
 
 ---
 
@@ -436,7 +438,7 @@ For each $i = 1,\ldots,k$, the $i$-th entry of the right side is $\frac{1}{s_{p,
 
 Since $|\chi_{p,i}| = 1$, each coefficient $|(\chi_{p,i})_\ell|\le 1$. By Lemma 1, $|(\eta_p^\top Z_{\cdot\ell})| = o(p^{1/2-\varepsilon})$ a.s. Summing $n$ terms: $|\chi_{p,i}^\top Z^\top\eta_p| = o(p^{1/2-\varepsilon})$ a.s.
 
-*Lower bound on singular values.* By Weyl's inequality applied to $YY^\top/(np) = \Sigma_0^{(p)} + \text{noise}$, the $i$-th eigenvalue of $YY^\top/(np)$ satisfies $s_{p,i}^2/(np) \ge \lambda_i(\Sigma_0^{(p)}) - \|Z^\top Z/(np) - (\delta^2/n)I_p\|_{\mathrm{op}}$. The second term vanishes a.s. by Lemma 4(a). The $i$-th eigenvalue of $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$ converges to a positive limit under Assumption 1 (it equals $c_{(i)}\sigma_{(i)}^2 + o(1)$ where the subscript denotes the $i$-th ordered value). Hence $s_{p,i}^2/p \ge c > 0$ a.s. for all large $p$, giving $s_{p,i}\asymp\sqrt{p}$ a.s.
+*Lower bound on singular values.* By Weyl's inequality applied to $YY^\top/(np) = \Sigma_0^{(p)} + \text{noise}$, the $i$-th eigenvalue of $YY^\top/(np)$ satisfies $s_{p,i}^2/(np) \ge \lambda_i(\Sigma_0^{(p)}) - \|Z^\top Z/(np) - (\delta^2/n)I_p\|_{\mathrm{op}}$. The second term vanishes a.s. by Lemma 4. The $i$-th eigenvalue of $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$ converges to a positive limit under Assumption 1 (it equals $c_{(i)}\sigma_{(i)}^2 + o(1)$ where the subscript denotes the $i$-th ordered value). Hence $s_{p,i}^2/p \ge c > 0$ a.s. for all large $p$, giving $s_{p,i}\asymp\sqrt{p}$ a.s.
 
 Therefore $1/(s_{p,i}\sqrt{n}) = O(1/\sqrt{p})$ a.s., and
 
@@ -450,9 +452,9 @@ for each $i$. Hence $H^\top v - H^\top\Pi_B v \to 0$ a.s. $\square$
 
 ---
 
-## 7. Proof of Part (ii): Diagonal-Gram Case
+## 7. Proof of Parts (ii) and (iii)
 
-Throughout this section, $G_\infty = I_k$. The proof proceeds in eight steps: (7.1) decompose the misalignment into out-of-subspace and in-subspace parts; (7.2–7.3) compute the limiting spectrum of $W^{(p)}$; (7.4) apply Davis–Kahan to pass limits through eigenvectors; (7.5–7.6) compute each component's limit; (7.7) identify the population target; (7.8) assemble. The key structure is that steps 7.2–7.4 operate on the small $n\times n$ matrix $W^{(p)}$, where finite-dimensionality makes spectral convergence tractable.
+The proof covers both Parts (ii) ($G_\infty = I_k$) and (iii) (general positive-definite $G_\infty$) in a single argument. The key device is to work in the non-orthonormalized loading frame $\Phi_p(x) = Bx/\sqrt{p}$ rather than the SVD basis $U(p)$. Because $\Phi_p^\top\Phi_p = B^\top B/p = \Gamma_p \to \Gamma_B$ for the full sequence (Assumptions 1–2), the rotational ambiguity created by coalescing singular values of $b(p)$ (when $G_\infty = I_k$) never appears. The proof proceeds in seven steps: (7.1) decompose the misalignment; (7.2–7.3) compute the limiting spectrum of the small Gram matrix $W^{(p)}$; (7.4) apply eigenprojection continuity to pass limits through eigenvectors; (7.5) establish convergence of both the sample and population in-subspace directions in $\Gamma_B$ coordinates; (7.6) compute the floor and in-subspace angle; (7.7) assemble. Steps 7.2–7.4 operate on the fixed-size $n\times n$ matrix $W^{(p)}$, where finite-dimensionality makes spectral analysis tractable.
 
 ### 7.1 Parallel/Perpendicular Decomposition
 
@@ -466,221 +468,183 @@ This follows from $\sin^2\angle(h,b) = 1-\langle h,b\rangle^2$, $\langle h_j^\pe
 
 ### 7.2 Expansion of $W^{(p)}$ and Its Limit
 
-Substitute $Y = bAF^\top + Z$ into $W^{(p)} = Y^\top Y/(np)$:
+Define $\Gamma_B := C^{1/2}G_\infty C^{1/2}$. Substitute $Y = BF^\top + Z$ into $W^{(p)} = Y^\top Y/(np)$:
 
 $$
-W^{(p)} = \underbrace{\frac{F\,A(p)\,G(p)\,A(p)\,F^\top}{np}}_{(\mathrm{A})} \;+\; \underbrace{\frac{F\,A(p)\,b(p)^\top Z + Z^\top b(p)\,A(p)\,F^\top}{np}}_{(\mathrm{B})} \;+\; \underbrace{\frac{Z^\top Z}{np}}_{(\mathrm{C})}. \tag{10}
+W^{(p)} = \underbrace{\frac{F\,(B^\top B/p)\,F^\top}{n}}_{(\mathrm{A})} \;+\; \underbrace{\frac{F\,B^\top Z + Z^\top B\,F^\top}{np}}_{(\mathrm{B})} \;+\; \underbrace{\frac{Z^\top Z}{np}}_{(\mathrm{C})}. \tag{10}
 $$
 
-**Term (A).** Write $A(p)/\sqrt{p} \to C^{1/2}$ by Assumption 1. Since $G(p)\to I_k$, $(A(p)/\sqrt{p})G(p)(A(p)/\sqrt{p})\to C$, giving
+**Term (A).** $B^\top B/p = \Gamma_p \to \Gamma_B$ by Assumptions 1–2, giving
 
 $$
-(\mathrm{A}) \;\longrightarrow\; \frac{F\,C\,F^\top}{n} \;=\; \frac{(F^\#)^\top F^\#}{n}.
+(\mathrm{A}) \;\longrightarrow\; \frac{F\,\Gamma_B\,F^\top}{n}.
 $$
 
-**Term (B).** By Lemma 3, $\xi_p := \|U^\top Z\|_F^2$ satisfies $\xi_p/p\to 0$ a.s. Since $b = U\Sigma V^\top$ and $\|b^\top Z\|_F\le\|\Sigma\|_{\mathrm{op}}\|U^\top Z\|_F$, and $A(p)/\sqrt{p}\to C^{1/2}$ (bounded), term (B) vanishes in Frobenius norm and hence in spectral norm.
+When $G_\infty = I_k$: $\Gamma_B = C$, so $F\Gamma_B F^\top/n = FCF^\top/n = (F^\#)^\top F^\#/n$. For general $G_\infty$: $\Gamma_B = C^{1/2}G_\infty C^{1/2}$, so $F\Gamma_B F^\top/n = (F^\#)^\top G_\infty F^\#/n$. Both cases are covered by the single formula $F\Gamma_B F^\top/n$.
 
-**Term (C).** By Lemma 4(a), $(\mathrm{C}) \to (\delta^2/n)I_n$ a.s.
+**Term (B).** Each column $b_j(p) = \beta_j/\|\beta_j\|$ of $b(p)$ is a deterministic unit vector. Corollary 1.1 gives $\|b(p)^\top Z\|_F^2/p \to 0$ a.s. Since $B^\top Z = A(p)\cdot b(p)^\top Z$ and $A(p)/\sqrt{p} \to C^{1/2}$ (bounded), $\|B^\top Z\|_F/(p\sqrt{n}) \to 0$ a.s., so term (B) vanishes in spectral norm.
+
+**Term (C).** By Lemma 4, $(\mathrm{C}) \to (\delta^2/n)I_n$ a.s.
 
 Combining:
 
 $$
-W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{11}
+W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{F\,\Gamma_B\,F^\top}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{11}
 $$
 
 ### 7.3 Eigenstructure of $W_\infty$
 
-**Lemma 7** (Eigenstructure of $W_\infty$, diagonal-Gram case). *The matrix $W_\infty$ has eigenvalues $\tau_j = \rho_j + \delta^2/n$ for $j\le k$ and $\delta^2/n$ for $j > k$, where $\rho_1 > \cdots > \rho_k > 0$ are the eigenvalues of $\hat{D} = F^\#(F^\#)^\top/n$. The top-$k$ eigenvectors are*
+**Lemma 7** (Eigenstructure of $W_\infty$). *The matrix $W_\infty = F\Gamma_B F^\top/n + (\delta^2/n)I_n$ has eigenvalues $\tau_j = \rho_j + \delta^2/n$ for $j\le k$ and $\delta^2/n$ for $j > k$, where $\rho_1 > \cdots > \rho_k > 0$ are the eigenvalues of $\hat{M} = \Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}$. The top-$k$ eigenvectors are*
 
 $$
-v_j \;=\; \frac{(F^\#)^\top\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}. \tag{12}
+v_j \;=\; \frac{F\,C^{1/2}Q\,\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{(F^\#)^\top Q\,\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}, \tag{12}
 $$
 
-**Proof.** The nonzero eigenvalues of $(F^\#)^\top F^\#/n$ equal those of $F^\#(F^\#)^\top/n = \hat{D}$ (by the AB/BA identity: if $ABx = \lambda x$ with $\lambda\ne 0$, set $y = Bx$; then $y \ne 0$ and $BAy = \lambda y$). For $v_j$ as in (12):
+*where $\hat{w}_j$ is the $j$-th eigenvector of $\hat{M}$ and $(F^\#)^\top = FC^{1/2}\in\mathbb{R}^{n\times k}$.* When $G_\infty = I_k$: $\hat{M} = \hat{D}$, $Q = I_k$, $\Lambda_G = I_k$, and (12) reduces to $v_j = (F^\#)^\top\hat{w}_j/\sqrt{n\rho_j}$.
 
-$$
-\frac{(F^\#)^\top F^\#}{n}\,v_j \;=\; \frac{(F^\#)^\top\,\hat{D}\,\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{\rho_j(F^\#)^\top\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \rho_j\,v_j,
-$$
+**Proof.** Write $\Gamma_B = PP^\top$ with $P = C^{1/2}Q\Lambda_G^{1/2} \in \mathbb{R}^{k\times k}$, so $W_\infty - (\delta^2/n)I_n = (FP)(FP)^\top/n$ with $FP \in \mathbb{R}^{n\times k}$.
 
-and $\|v_j\|^2 = \hat{w}_j^\top\hat{D}\hat{w}_j/\rho_j = 1$. For the bottom $n-k$ eigenvalues: any $u$ orthogonal to $\mathrm{col}((F^\#)^\top)$ satisfies $F^\# u = 0$, so $W_\infty u = (\delta^2/n)u$. $\square$
+*Step 1: Nonzero eigenvalues via AB/BA.* The nonzero eigenvalues of $(FP)(FP)^\top/n$ equal those of $(FP)^\top(FP)/n$ (AB/BA: if $ABx = \rho x$ with $\rho\ne 0$, then $BA(Ax) = \rho(Ax)$). Compute: $$\frac{(FP)^\top(FP)}{n} \;=\; P^\top\!\left(\frac{F^\top F}{n}\right)P \;=\; \Lambda_G^{1/2}Q^\top\cdot\hat{D}\cdot Q\Lambda_G^{1/2} \;=\; \hat{M},$$ using $F^\top F/n = C^{-1/2}\hat{D}C^{-1/2}$ (from $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$) and $P = C^{1/2}Q\Lambda_G^{1/2}$. Hence the nonzero eigenvalues of $W_\infty - (\delta^2/n)I_n$ are exactly $\rho_1,\ldots,\rho_k$.
 
-*Intuition.* $W_\infty$ is a rank-$k$ signal matrix shifted up by the noise floor $\delta^2/n$. The top-$k$ eigenvalues $\rho_j + \delta^2/n$ are signal-plus-noise; the remaining $n-k$ eigenvalues equal the pure-noise level $\delta^2/n$. The gap $\rho_k$ separates the two groups, enabling the eigenvector convergence in Step 7.4.
+*Step 2: Verify $v_j$ is an eigenvector.* Since $\hat{M}\hat{w}_j = \rho_j\hat{w}_j$, we have $(FP)^\top(FP)\hat{w}_j = n\rho_j\hat{w}_j$. Set $v_j = (FP)\hat{w}_j/\sqrt{n\rho_j}$. Then: $$\frac{(FP)(FP)^\top}{n}\,v_j \;=\; \frac{(FP)\,(FP)^\top(FP)\,\hat{w}_j}{n\sqrt{n\rho_j}} \;=\; \frac{(FP)\,n\rho_j\,\hat{w}_j}{n\sqrt{n\rho_j}} \;=\; \rho_j\,v_j.$$ Expanding $FP = FC^{1/2}Q\Lambda_G^{1/2} = (F^\#)^\top Q\Lambda_G^{1/2}$ gives formula (12).
+
+A key identity used in §7.6: from $\hat{M}\hat{w}_j = \rho_j\hat{w}_j$, left-multiplying successively by $\Lambda_G^{-1/2}$ and $Q$ gives: $$\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j \;=\; Q\,\rho_j\,\Lambda_G^{-1/2}\hat{w}_j. \tag{$*$}$$
+
+*Step 3: Unit norm.* $\|v_j\|^2 = \hat{w}_j^\top(FP)^\top(FP)\hat{w}_j/(n\rho_j) = \hat{w}_j^\top\hat{M}\hat{w}_j/\rho_j = 1$.
+
+*Step 4: Bottom eigenvalues.* Any $u \perp \mathrm{col}(FP)$ satisfies $(FP)(FP)^\top u = 0$, so $W_\infty u = (\delta^2/n)u$. $\square$
+
+*Intuition.* $W_\infty$ is a rank-$k$ perturbation of the noise floor $(\delta^2/n)I_n$. The top-$k$ eigenvalues $\rho_j + \delta^2/n$ are signal-plus-noise; the remaining $n-k$ equal $\delta^2/n$. The gap $\rho_k > 0$ enables eigenvector convergence in step 7.4. The $\hat{M}$ eigenvalues $\rho_j$ encode the signal strengths under both the factor covariance $\hat{D}$ and the loading geometry $G_\infty$; when $G_\infty = I_k$ they reduce to eigenvalues of $\hat{D}$ directly.
 
 ### 7.4 Spectral Convergence
 
-By (11), $W^{(p)}\to W_\infty$ a.s. in operator norm on the fixed finite-dimensional space $\mathbb{R}^{n\times n}$. The top-$k$ eigenvalues of $W_\infty$ are simple (Assumption 3) and separated from the noise level $\delta^2/n$ by the spectral gap $\rho_k > 0$.
+By (11), $W^{(p)}\to W_\infty$ a.s. in operator norm on the fixed finite-dimensional space $\mathbb{R}^{n\times n}$. The top-$k$ eigenvalues of $W_\infty$ are simple (Assumption 3 is equivalent to saying $\hat{M}$ has $k$ distinct positive eigenvalues, which by Lemma 7 are exactly the top-$k$ eigenvalues of $W_\infty - (\delta^2/n)I_n$) and separated from the noise level $\delta^2/n$ by the spectral gap $\rho_k > 0$.
 
-**Davis–Kahan theorem** (Kato 1995, §V.4). *If $A_p \to A_\infty$ in operator norm and a simple eigenvalue $\tau$ of $A_\infty$ is separated from the rest of the spectrum by gap $\gamma > 0$, then the corresponding eigenvalue of $A_p$ converges to $\tau$ and the corresponding eigenvector converges (up to sign) to that of $A_\infty$.*
+**Eigenprojection continuity** (Kato 1995, §II.1). *If $A_p \to A_\infty$ in operator norm and $\tau$ is a simple eigenvalue of $A_\infty$ separated from the rest of the spectrum by a gap $\gamma > 0$, then the eigenprojection of $A_p$ onto the corresponding eigenspace converges in operator norm to that of $A_\infty$. In particular, the eigenvalue converges to $\tau$ and the eigenvector converges (up to sign) to that of $A_\infty$.*
 
-Applying this with gap $\gamma = \rho_k > 0$, for each $j\in\{1,\ldots,k\}$:
+This is the qualitative version only — no explicit angular bound is produced. The eigenvalue convergence alone follows from Weyl's inequality applied to $W^{(p)} \to W_\infty$: since $s_{p,j}^2/p$ is the $j$-th eigenvalue of $W^{(p)}$ and $\tau_j$ is the $j$-th eigenvalue of $W_\infty$, $|s_{p,j}^2/p - \tau_j| \le \|W^{(p)} - W_\infty\|_{\mathrm{op}} \to 0$ a.s.
+
+Applying eigenprojection continuity with gap $\gamma = \rho_k > 0$, for each $j\in\{1,\ldots,k\}$:
 
 $$
 \frac{s_{p,j}^2}{p} \;\longrightarrow\; \tau_j = \rho_j + \frac{\delta^2}{n}, \qquad \chi_{p,j} \;\longrightarrow\; v_j \quad\text{a.s., up to sign.} \tag{13}
 $$
 
-### 7.5 Out-of-Subspace Limit
+### 7.5 The $\Gamma_B$-Coordinate Framework
 
-From (4), $h_j = Y\chi_{p,j}/(\sqrt{n}\,s_{p,j})$. Projecting onto the noise subspace:
-
+*The loading map.* Define $\Phi_p : \mathbb{R}^k \to \mathcal{B}$ by
 $$
-\|h_j^\perp\|^2 \;=\; \frac{\chi_{p,j}^\top Z^\top(I-\Pi_U)Z\,\chi_{p,j}}{n\,s_{p,j}^2} \;=\; \frac{1}{n}\cdot\frac{\chi_{p,j}^\top\bigl(Z^\top(I-\Pi_U)Z/p\bigr)\chi_{p,j}}{s_{p,j}^2/p}.
+\Phi_p(x) \;=\; \frac{Bx}{\sqrt{p}},
 $$
+so that $\Phi_p^\top\Phi_p = B^\top B/p = \Gamma_p \to \Gamma_B$ (Assumptions 1–2). The map $\Phi_p$ is not orthonormalized: it carries no rotational ambiguity, and $\Gamma_p$ is the natural inner-product matrix on $\mathbb{R}^k$ for expressing lengths and angles inside $\mathcal{B}$. Both the population loading direction and the in-subspace component of $h_j$ can be expressed as $\Phi_p$-images of convergent $k$-vectors, which is the content of the next two paragraphs.
 
-By Lemma 4(b), $Z^\top(I-\Pi_U)Z/p\to\delta^2 I_n$ a.s. Since $\|\chi_{p,j}\|=1$ and $\chi_{p,j}\to v_j$:
-
+*Population direction.* Since $\bar{b}_j \in \mathcal{B}$ and $B$ has full column rank, write $\bar{b}_j = \Phi_p(a_j^{(p)})$ uniquely. Substituting into the eigenvalue equation $\Sigma_0^{(p)}\bar{b}_j = \lambda_j\bar{b}_j$ (with $\Sigma_0^{(p)} = B\Sigma_F B^\top/p$) and left-multiplying by $B^\top/\sqrt{p}$:
 $$
-\chi_{p,j}^\top\left(\frac{Z^\top(I-\Pi_U)Z}{p}\right)\chi_{p,j} \;\longrightarrow\; \delta^2 \quad\text{a.s.}
+(B^\top B/p)\,\Sigma_F\,(B^\top B/p)\,a_j^{(p)} \;=\; \lambda_j\,(B^\top B/p)\,a_j^{(p)},
 $$
-
-And $s_{p,j}^2/p\to\rho_j+\delta^2/n$ by (13). Therefore
-
+which (since $\Gamma_p$ is invertible for large $p$) simplifies to
 $$
-\|h_j^\perp\|^2 \;\longrightarrow\; \frac{\delta^2}{n\rho_j+\delta^2} \quad\text{a.s.} \tag{14}
+\Sigma_F\,\Gamma_p\,a_j^{(p)} \;=\; \lambda_j\,a_j^{(p)}.
 $$
+The normalization $\|\bar{b}_j\|^2 = (a_j^{(p)})^\top\Gamma_p a_j^{(p)} = 1$ holds since $\bar{b}_j$ is a unit vector.
 
-### 7.6 In-Subspace Limit
-
-*Plan.* We fix an arbitrary subsequence along which $V(p)\to V_\infty$ (compactness of $O(k)$ guarantees such subsequences exist), compute the in-subspace limit along that subsequence, then verify the formula is $V_\infty$-independent — establishing the full a.s. limit.
-
-Apply $U(p)^\top$ to (4). Using $b(p) = U\Sigma V^\top$ and $Y = bAF^\top + Z$:
-
+As $\Gamma_p \to \Gamma_B$, the matrix $\Sigma_F\Gamma_p \to \Sigma_F\Gamma_B$ in operator norm. The eigenvalues of $\Sigma_F\Gamma_B$ are simple. To see this: by AB/BA, eigenvalues of $\Sigma_F\Gamma_B$ equal eigenvalues of $\Gamma_B\Sigma_F = C^{1/2}G_\infty D C^{-1/2}$ (using $D = C^{1/2}\Sigma_F C^{1/2}$), which by successive conjugation (first by $C^{-1/2}$, then by $Q^\top$, then by $\Lambda_G^{-1/2}$) equal the eigenvalues of $M = \Lambda_G^{1/2}(Q^\top DQ)\Lambda_G^{1/2}$. Assumption 3 says exactly that $M$ has $k$ distinct positive eigenvalues. Eigenprojection continuity (Kato §II.1) applied to $\Sigma_F\Gamma_p \to \Sigma_F\Gamma_B$ therefore gives convergence of the $j$-th eigenvector for the **full sequence** (no subsequence):
 $$
-\frac{s_{p,j}}{\sqrt{p}}\,U^\top h_j \;=\; \underbrace{\frac{\Sigma\,V^\top R(p)\,F^\#\,\chi_{p,j}}{\sqrt{n}}}_{\text{signal}} \;+\; \underbrace{\frac{U^\top Z\,\chi_{p,j}}{\sqrt{np}}}_{\text{noise}}, \tag{15}
+a_j^{(p)} \;\longrightarrow\; a_j^\infty \quad\text{a.s.,}
 $$
+where $\Sigma_F\Gamma_B a_j^\infty = \lambda_j a_j^\infty$ and $(a_j^\infty)^\top\Gamma_B a_j^\infty = 1$. One can verify that $a_j^\infty = C^{-1/2}Q\Lambda_G^{-1/2}w_j$, where $w_j$ is the $j$-th eigenvector of $M$: substituting into $\Sigma_F\Gamma_B a_j^\infty = \lambda_j a_j^\infty$ and using the eigen-equation for $M$ confirms this. (The $\Gamma_B$-normalization $(a_j^\infty)^\top\Gamma_B a_j^\infty = w_j^\top w_j = 1$ holds since $w_j$ is a unit eigenvector of $M$.)
 
-where $R(p) = A(p)C^{-1/2}/\sqrt{p}\to I_k$.
-
-**Noise part.** Lemma 3 gives $\xi_p = \|U^\top Z\|_F^2$ bounded in $(1+\eta/2)$-th moment. Cauchy–Schwarz and $\|\chi_{p,j}\|=1$ give $\|U^\top Z\chi_{p,j}\|^2 \le \xi_p$. Lemma 2 with $\phi(p) = np$ gives $\|U^\top Z\chi_{p,j}\|^2/(np)\to 0$ a.s.
-
-**Signal part.** Along the subsequence where $V(p)\to V_\infty$: $\Sigma(p)\to I_k$ (since $\Sigma(p)^2 = G(p)\to I_k$), $R(p)\to I_k$, and $\chi_{p,j}\to v_j$ by (13). Substituting (12):
-
+*Sample direction.* From (4), the in-subspace component of $h_j$ is $\Pi_B h_j = \Pi_B Y\chi_{p,j}/(\sqrt{n}s_{p,j})$. Using $Y = BF^\top + Z$ and $\Pi_B B = B$:
 $$
-\frac{F^\#\,v_j}{\sqrt{n}} \;=\; \frac{F^\#(F^\#)^\top\hat{w}_j}{n\sqrt{\rho_j}} \;=\; \frac{\hat{D}\,\hat{w}_j}{\sqrt{\rho_j}} \;=\; \sqrt{\rho_j}\,\hat{w}_j.
+\Pi_B h_j \;=\; \frac{BF^\top\chi_{p,j}}{\sqrt{n}\,s_{p,j}} \;+\; \frac{\Pi_B Z\chi_{p,j}}{\sqrt{n}\,s_{p,j}}.
 $$
 
-Hence the signal part converges to $V_\infty^\top\sqrt{\rho_j}\hat{w}_j$. Dividing by $s_{p,j}/\sqrt{p}\to\sqrt{\rho_j+\delta^2/n}$:
+For the noise term: each column $b_l = \beta_l/\|\beta_l\|$ of $b(p)$ is a deterministic unit vector, so Corollary 1.1 gives $\|b(p)^\top Z\|_F^2/p \to 0$ a.s., hence $\|\Pi_B Z\chi_{p,j}\|/\sqrt{p} \to 0$ a.s. Since $s_{p,j} \asymp \sqrt{p}$ a.s. (from §7.4), this noise term is $o(1)$ a.s.
 
+For the signal term: $BF^\top\chi_{p,j}/(\sqrt{n}s_{p,j}) = \Phi_p(g_j^{(p)})$ where
 $$
-U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,V_\infty^\top\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{16}
+g_j^{(p)} \;=\; \frac{\sqrt{p}\,F^\top\chi_{p,j}}{\sqrt{n}\,s_{p,j}}.
 $$
+Therefore $\Pi_B h_j = \Phi_p(g_j^{(p)}) + o(1)$ a.s.
 
-In particular, $\|h_j^\|\|^2 \to n\rho_j/(n\rho_j+\delta^2)$ a.s. (this limit is $V_\infty$-independent, consistent with (14) and $\|h_j\|^2 = 1$).
-
-### 7.7 Population Eigenvector Target
-
-The population signal covariance $\Sigma_0^{(p)}$ is supported on $\mathrm{col}(U)$; its $k\times k$ reduced form converges:
-
+*Convergence of $g_j^{(p)}$.* Since $s_{p,j}^2/p \to \rho_j + \delta^2/n$ a.s. and $\chi_{p,j} \to v_j$ a.s. by (13), we have $\sqrt{p}/s_{p,j} \to 1/\sqrt{\rho_j + \delta^2/n}$ a.s. and $F^\top\chi_{p,j} \to F^\top v_j$. Hence:
 $$
-\frac{\Sigma V^\top\,[A(p)\Sigma_F A(p)]\,V\Sigma}{p} \;\longrightarrow\; V_\infty^\top\,D\,V_\infty \quad\text{as }p\to\infty,
+g_j^{(p)} \;\longrightarrow\; g_j^\infty \;:=\; \frac{F^\top v_j}{\sqrt{n\rho_j + \delta^2}} \quad\text{a.s.}
 $$
+This limit holds for the **full sequence**: every factor in (13) converges without subsequence extraction.
 
-using $A(p)/\sqrt{p}\to C^{1/2}$ and $\Sigma(p)\to I_k$, where $D = C^{1/2}\Sigma_F C^{1/2}$. Under $G_\infty = I_k$, $D = \mathrm{diag}(c_j\sigma_j^2)$ has eigenvectors $e_j$, so $V_\infty^\top D V_\infty$ has eigenvectors $V_\infty^\top e_j$.
+### 7.6 Floor and In-Subspace Angle via $\Gamma_B$ Inner Products
 
-Since $\bar{b}_j$ is the $j$-th eigenvector of $\Sigma_0^{(p)}$ supported on $\mathrm{col}(U)$, there exist coefficient vectors $w_j^{(p)}\in\mathbb{R}^k$ with $\bar{b}_j = U(p)\,w_j^{(p)}$, and
-
+With $g_j^{(p)} \to g_j^\infty$, $a_j^{(p)} \to a_j^\infty$, and $\Gamma_p \to \Gamma_B$ all holding for the full sequence, joint continuity of bilinear forms gives:
 $$
-w_j^{(p)} \;\longrightarrow\; V_\infty^\top e_j \quad\text{a.s. along the subsequence.} \tag{17}
+\|\Pi_B h_j\|^2 \;=\; (g_j^{(p)})^\top\Gamma_p\,g_j^{(p)} + o(1) \;\longrightarrow\; (g_j^\infty)^\top\Gamma_B\,g_j^\infty \quad\text{a.s.}
 $$
-
-### 7.8 Assembly
-
-Combining (9), (14), (16), and (17) along the fixed subsequence:
-
 $$
-\sin^2\angle\!\left(\frac{h_j^\|}{\|h_j^\|\|},\,\bar{b}_j\right) \;=\; \sin^2\angle(V_\infty^\top\hat{w}_j,\,V_\infty^\top e_j) \;=\; \sin^2\angle(\hat{w}_j,\,e_j),
+\langle\Pi_B h_j,\,\bar{b}_j\rangle \;=\; (g_j^{(p)})^\top\Gamma_p\,a_j^{(p)} + o(1) \;\longrightarrow\; (g_j^\infty)^\top\Gamma_B\,a_j^\infty \quad\text{a.s.}
 $$
 
-using that $V_\infty^\top$ is an isometry. Substituting into (9):
+The following three steps evaluate these inner products explicitly, using the formula for $v_j$ from (12).
 
+*Step 1: Compute $g_j^\infty$ explicitly.* From (12), $v_j = FC^{1/2}Q\Lambda_G^{1/2}\hat{w}_j/\sqrt{n\rho_j}$. Apply $F^\top$ (dimension: $k\times n$) to get $F^\top v_j \in \mathbb{R}^k$:
 $$
-\sin^2\angle(h_j,\,\bar{b}_j) \;\to\; \frac{\delta^2}{n\rho_j+\delta^2} \;+\; \frac{n\rho_j}{n\rho_j+\delta^2}\,(1-(\hat{w}_j)_j^2).
+F^\top v_j \;=\; \frac{F^\top F\cdot C^{1/2}Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}}.
+$$
+Use $F^\top F = nC^{-1/2}\hat{D}C^{-1/2}$ (from $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$) and the key identity $(*)$ from Lemma 7, $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$:
+$$
+F^\top v_j \;=\; \frac{n\,C^{-1/2}\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{n\,C^{-1/2}\cdot Q\rho_j\Lambda_G^{-1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \sqrt{n\rho_j}\cdot C^{-1/2}Q\Lambda_G^{-1/2}\hat{w}_j.
+$$
+Dividing by $\sqrt{n\rho_j + \delta^2}$:
+$$
+g_j^\infty \;=\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\cdot C^{-1/2}Q\Lambda_G^{-1/2}\hat{w}_j. \tag{14}
 $$
 
-The right-hand side does not involve $V_\infty$, so the limit is the same along every subsequence, and the full a.s. limit (6) exists. $\square$
+*Step 2: In-subspace squared norm and floor.* Compute $(g_j^\infty)^\top\Gamma_B g_j^\infty$. Since $\Gamma_B = C^{1/2}Q\Lambda_G Q^\top C^{1/2}$, the middle factor simplifies as $\Lambda_G^{-1/2}Q^\top C^{-1/2}\cdot C^{1/2}Q\Lambda_G Q^\top C^{1/2}\cdot C^{-1/2}Q\Lambda_G^{-1/2} = I_k$. Therefore:
+$$
+(g_j^\infty)^\top\Gamma_B g_j^\infty \;=\; \frac{n\rho_j}{n\rho_j+\delta^2}\cdot\hat{w}_j^\top I_k\,\hat{w}_j \;=\; \frac{n\rho_j}{n\rho_j+\delta^2}.
+$$
+So $\|\Pi_B h_j\|^2 \to n\rho_j/(n\rho_j+\delta^2)$ a.s. The floor then follows from $\|h_j\| = 1$:
+$$
+\|h_j^\perp\|^2 \;=\; 1 - \|\Pi_B h_j\|^2 \;\longrightarrow\; \frac{\delta^2}{n\rho_j+\delta^2} \quad\text{a.s.} \tag{15}
+$$
+
+*Step 3: In-subspace inner product.* Recall $a_j^\infty = C^{-1/2}Q\Lambda_G^{-1/2}w_j$. The same simplification $\Lambda_G^{-1/2}Q^\top C^{-1/2}\cdot\Gamma_B\cdot C^{-1/2}Q\Lambda_G^{-1/2} = I_k$ gives:
+$$
+(g_j^\infty)^\top\Gamma_B a_j^\infty \;=\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\cdot\hat{w}_j^\top I_k\,w_j \;=\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\cdot\hat{w}_j^\top w_j.
+$$
+So $\langle\Pi_B h_j, \bar{b}_j\rangle \to \sqrt{n\rho_j/(n\rho_j+\delta^2)}\cdot\hat{w}_j^\top w_j$ a.s.
+
+*Step 4: In-subspace angle.* Using (9) and the limits from Steps 2–3:
+$$
+\sin^2\!\angle\!\left(\frac{\Pi_B h_j}{\|\Pi_B h_j\|},\,\bar{b}_j\right) \;=\; 1 - \frac{\langle\Pi_B h_j, \bar{b}_j\rangle^2}{\|\Pi_B h_j\|^2} \;\longrightarrow\; 1 - \frac{(n\rho_j/(n\rho_j+\delta^2))\cdot(\hat{w}_j^\top w_j)^2}{n\rho_j/(n\rho_j+\delta^2)} \;=\; \sin^2\!\angle(\hat{w}_j,\,w_j).
+$$
+
+*Diagonal-Gram specialization.* When $G_\infty = I_k$: $Q = I_k$, $\Lambda_G = I_k$, $w_j = e_j$ (since $M = D$ is diagonal under the ordering Assumption 3). Then $a_j^\infty = C^{-1/2}e_j = e_j/\sqrt{c_j}$, $\hat{w}_j^\top w_j = (\hat{w}_j)_j$, and $\sin^2\angle(\hat{w}_j, w_j) = \sin^2\angle(\hat{w}_j, e_j) = 1 - (\hat{w}_j)_j^2$, recovering formula (6).
+
+### 7.7 Assembly
+
+Substituting (15) and Step 4 of §7.6 into the decomposition (9):
+$$
+\sin^2\angle(h_j,\,\bar{b}_j) \;=\; \|h_j^\perp\|^2 \;+\; \|\Pi_B h_j\|^2\cdot\sin^2\!\angle\!\left(\frac{\Pi_B h_j}{\|\Pi_B h_j\|},\,\bar{b}_j\right)
+$$
+$$
+\;\longrightarrow\; \frac{\delta^2}{n\rho_j+\delta^2} \;+\; \frac{n\rho_j}{n\rho_j+\delta^2}\cdot\sin^2\!\angle(\hat{w}_j,\,w_j) \quad\text{a.s.}
+$$
+
+This is formula (7) for general $G_\infty$; formula (6) follows when $G_\infty = I_k$ as noted in §7.6. All limits hold for the full sequence — no subsequence extraction is needed, because the $\Gamma_B$-coordinate framework operates directly on $\Gamma_p \to \Gamma_B$, bypassing the rotational ambiguity of $V(p)$ in the SVD basis. $\square$
 
 ---
 
-## 8. Proof of Part (iii): General $G_\infty$
+## 8. Unification of Parts (ii) and (iii)
 
-We indicate the modifications to §7 needed when $G_\infty \ne I_k$. The lemma framework (§5) and parallel/perpendicular decomposition (§7.1) are unchanged. The out-of-subspace computation (§7.5) is also unchanged, since Lemma 4(b) depends only on $\Pi_U$ and not on the internal geometry of $G_\infty$.
+The proof of §7 covers both Parts (ii) ($G_\infty = I_k$) and (iii) (general positive-definite $G_\infty$) in a single argument.
 
-### 8.1 Strategy for General $G_\infty$
+The two parts differ only in the value of $\Gamma_B = C^{1/2}G_\infty C^{1/2}$:
 
-When $G_\infty = I_k$, the value of $V_\infty$ in the subsequence limit does not affect the final formula. For general $G_\infty = Q\Lambda_G Q^\top$, we fix a subsequence with $V(p)\to Q$ (identifying $V_\infty = Q$) and $\Sigma(p)\to\Lambda_G^{1/2}$. The final formula will turn out to depend on $Q$ only through $Q$-invariant quantities (the eigenvalues $\rho_j$ and angles $\sin^2\angle(\hat{w}_j, w_j)$ of $\hat{M}$ and $M$), so the limit is the same along every subsequence.
+- **Part (ii)** ($G_\infty = I_k$): $\Gamma_B = C$, $\hat{M} = \hat{D}$, $M = D$, $w_j = e_j$, and $\sin^2\angle(\hat{w}_j, w_j) = \sin^2\angle(\hat{w}_j, e_j) = 1 - (\hat{w}_j)_j^2$. Formula (7) reduces to formula (6).
 
-### 8.2 Expansion of $W^{(p)}$ and Its Limit
+- **Part (iii)** (general $G_\infty$): $\Gamma_B$ is a general positive-definite matrix, and formula (7) holds as stated.
 
-Term (A) of (10) now converges to $(F^\#)^\top G_\infty F^\#/n$ (replacing $I_k$ by $G_\infty$):
-
-$$
-W^{(p)} \;\longrightarrow\; W_\infty \;:=\; \frac{(F^\#)^\top G_\infty F^\#}{n} \;+\; \frac{\delta^2}{n}\,I_n \quad\text{a.s. in spectral norm.} \tag{18}
-$$
-
-**Lemma 8** (Eigenstructure of $W_\infty$, general case). *The matrix $W_\infty$ has eigenvalues $\tau_j = \rho_j + \delta^2/n$ for $j\le k$ and $\delta^2/n$ for $j > k$, where $\rho_j$ is the $j$-th eigenvalue of $\hat{M} = \Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}$. The top-$k$ eigenvectors are*
-
-$$
-v_j \;=\; \frac{(F^\#)^\top Q\,\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}}, \quad j\in\{1,\ldots,k\}, \tag{19}
-$$
-
-*where $\hat{w}_j$ is the $j$-th eigenvector of $\hat{M}$.*
-
-**Proof.** The nonzero spectrum of $(F^\#)^\top G_\infty F^\#/n$ equals the nonzero spectrum of $G_\infty F^\#(F^\#)^\top/n$ (by the AB/BA identity). Writing $G_\infty = Q\Lambda_G Q^\top$:
-
-$$
-G_\infty F^\#(F^\#)^\top/n \;=\; Q\Lambda_G^{1/2}\cdot\Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}\cdot\Lambda_G^{-1/2}Q^\top \;=\; Q\,\hat{M}\,Q^\top,
-$$
-
-so the nonzero eigenvalues of $W_\infty - (\delta^2/n)I$ equal those of $\hat{M}$, namely $\rho_1,\ldots,\rho_k$.
-
-To verify that $v_j$ in (19) is the corresponding eigenvector, we need $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$. This follows from $\hat{M}\hat{w}_j = \rho_j\hat{w}_j$ by three steps: $\Lambda_G^{1/2}(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\hat{w}_j$ implies $(Q^\top\hat{D}Q)\Lambda_G^{1/2}\hat{w}_j = \rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $\Lambda_G^{-1/2}$) implies $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ (left-multiply by $Q$). Then:
-
-$$
-\frac{(F^\#)^\top G_\infty F^\#}{n}\,v_j \;=\; \frac{(F^\#)^\top Q\Lambda_G^{1/2}\,\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \frac{\rho_j(F^\#)^\top Q\Lambda_G^{1/2}\cdot\Lambda_G^{-1/2}\hat{w}_j}{\sqrt{n\rho_j}} \;=\; \rho_j\,v_j.
-$$
-
-Unit norm: $\|v_j\|^2 = \hat{w}_j^\top\Lambda_G^{1/2}Q^\top\hat{D}Q\Lambda_G^{1/2}\hat{w}_j/(n\rho_j) = \hat{w}_j^\top\hat{M}\hat{w}_j/\rho_j = 1$. Bottom eigenvalues follow as in Lemma 7. $\square$
-
-Spectral convergence (§7.4) applies verbatim with gap $\gamma = \rho_k > 0$.
-
-### 8.3 In-Subspace Limit and Population Target
-
-**In-subspace limit.** The signal part of (15) uses $\Sigma(p)\to\Lambda_G^{1/2}$ and $V(p)\to Q$. Substituting (19) and the identity $\hat{D}Q\Lambda_G^{1/2}\hat{w}_j = Q\rho_j\Lambda_G^{-1/2}\hat{w}_j$ derived above:
-
-$$
-\frac{F^\#\,v_j}{\sqrt{n}} \;=\; \frac{\hat{D}\,Q\Lambda_G^{1/2}\hat{w}_j}{\sqrt{\rho_j}} \;=\; \sqrt{\rho_j}\,Q\Lambda_G^{-1/2}\hat{w}_j.
-$$
-
-The signal limit then simplifies to:
-
-$$
-\Lambda_G^{1/2}Q^\top\cdot\sqrt{\rho_j}Q\Lambda_G^{-1/2}\hat{w}_j \;=\; \sqrt{\rho_j}\,\hat{w}_j.
-$$
-
-Dividing by $s_{p,j}/\sqrt{p}\to\sqrt{\rho_j+\delta^2/n}$:
-
-$$
-U(p)^\top h_j \;\longrightarrow\; \sqrt{\frac{n\rho_j}{n\rho_j+\delta^2}}\,\hat{w}_j \quad\text{a.s. along the subsequence.} \tag{20}
-$$
-
-The geometry encoded by $G_\infty$ is absorbed into the definition of $\hat{M}$, so the limiting in-subspace component is $\hat{w}_j$ directly (not $V_\infty^\top\hat{w}_j$ as in (16)).
-
-**Population target.** The limiting $k\times k$ signal block in the $U$-basis converges to $M = \Lambda_G^{1/2}(Q^\top D Q)\Lambda_G^{1/2}$, so the $j$-th population loading direction satisfies
-
-$$
-w_j^{(p)} \;\longrightarrow\; w_j \quad\text{a.s. along the subsequence,} \tag{21}
-$$
-
-where $w_j$ is the $j$-th eigenvector of $M$.
-
-### 8.4 Assembly, General Case
-
-From (9), (14), (20), and (21):
-
-$$
-\sin^2\angle(h_j,\bar{b}_j) \;\to\; \frac{\delta^2}{n\rho_j+\delta^2} \;+\; \frac{n\rho_j}{n\rho_j+\delta^2}\,\sin^2\angle(\hat{w}_j,w_j).
-$$
-
-By Remark 12 of AK's work, the quantities $\rho_j$ and $\sin^2\angle(\hat{w}_j,w_j)$ depend on $Q$ only through $Q$-invariant combinations (they are eigenvalues and principal angles of $\hat{M}$ and $M$, which are defined in terms of $Q$ but whose spectral properties do not depend on the particular choice of $Q$ in the decomposition (2)). Hence the limit is the same along every subsequence, and the full a.s. limit (7) exists. $\square$
+The proof of §7 treats $\Gamma_B$ as an arbitrary positive-definite matrix throughout — the diagonal vs. non-diagonal distinction plays no role. In the earlier proof architecture (following the SVD basis $U(p)$), Parts (ii) and (iii) required separate treatment because $V(p)$ — the right singular factor of $b(p) = U(p)\Sigma(p)V(p)^\top$ — has a rotational ambiguity when $G_\infty = I_k$ makes the singular values of $b(p)$ coalesce. Working in $\Gamma_B$ coordinates removes this artifact entirely: $\Gamma_p = B^\top B/p$ converges to $\Gamma_B$ for the full sequence, independently of any singular-value ordering, and neither the SVD of $b(p)$ nor the matrix $V(p)$ ever appears in the argument. $\square$
 
 ---
 
@@ -784,7 +748,7 @@ $$
 
 where $h_j^\perp = (I - \Pi_B)h_j$ is the out-of-subspace component of $h_j$. To see this: the principal angles are defined by the singular values of $H^\top U$ (where $U$ spans $\mathcal{B}$), with $\cos\theta_j = \sigma_j(H^\top U)$. Hence $\sum_j\cos^2\theta_j = \|H^\top U\|_F^2 = \mathrm{tr}(H^\top\Pi_B H) = \|\Pi_B H\|_F^2 = \sum_j\|h_j^\|\|^2$. Since $\|h_j^\perp\|^2 + \|h_j^\|\|^2 = 1$, summing gives $\sum_j\sin^2\theta_j = \sum_j\|h_j^\perp\|^2$.
 
-The limit now follows directly from equation (14): $\|h_j^\perp\|^2\to\delta^2/(n\rho_j+\delta^2)$ a.s. for each $j$, and $k$ is fixed. $\square$
+The limit now follows directly from equation (15): $\|h_j^\perp\|^2\to\delta^2/(n\rho_j+\delta^2)$ a.s. for each $j$, and $k$ is fixed. $\square$
 
 *Remark.* The in-subspace rotation term in the per-vector formula (6)/(7) does not appear in Corollary 4. This is not a coincidence: the Grassmannian distance depends only on $\Pi_H = HH^\top$, which is invariant under orthogonal rotations of the columns of $H$ within $\mathrm{col}(H)$. The in-subspace rotation is precisely such a rotation — it displaces each $h_j$ within $\mathcal{B}$ without changing the subspace $\mathrm{col}(H)$. Corollary 4 therefore provides a strictly weaker error criterion than the per-vector formulas, and achieves a correspondingly smaller limiting error.
 
@@ -888,6 +852,12 @@ By the NG recovery in §9 (which additionally requires orthogonal factor returns
 
 ## 11. Discussion
 
+### Asymptotic regime: HDLSS, not proportional
+
+The theorem operates in the *high-dimension, low-sample-size* (HDLSS) regime: $p \to \infty$ with $n$ and $k$ fixed. This is the setting studied by Jung and Marron (2009, "PCA consistency in high dimension, low sample size context") and the follow-up work of Shen, Shen, and Marron. That literature establishes a qualitative trichotomy: sample PC directions are *consistent*, *strongly inconsistent*, or *subspace-consistent up to a rotation*, depending on signal-to-noise structure. The present theorem makes this trichotomy quantitative: the "floor" $\delta^2/(n\rho_j+\delta^2)$ is HDLSS inconsistency made exact, and the "rotation" $\sin^2\angle(\hat{w}_j, w_j)$ is HDLSS subspace consistency made exact.
+
+The HDLSS regime is *not* the proportional regime $p, n \to \infty$ with $p/n \to \gamma$, which is the setting of the Baik–Ben Arous–Péché (BBP) and Benaych-Georges–Nadakuditi spiked-covariance results. Those results do not apply here: in the fixed-$n$ regime the $n \times n$ Gram matrix $W^{(p)}$ converges to a deterministic limit by the ordinary law of large numbers, with no Marchenko–Pastur bulk and no random-matrix-theoretic limit required. The fixed-$n$ world is the simpler one analytically; importing the proportional-regime machinery would use a harder theorem in the wrong regime.
+
 ### Two orthogonal sources of misalignment
 
 The main formula decomposes $\sin^2\angle(h_j,\bar{b}_j)$ into two terms with distinct origins and distinct remedies.
@@ -984,4 +954,8 @@ The theorem extends the GPS2022 single-factor result through a three-level assum
 
 Four corollaries extract the principal consequences. Corollary 1 supplies the observable shrinkage estimator $\hat{\psi}_{p,j} = \sqrt{\max(0,\, 1 - \ell_p^2/s_{p,j}^2)}$, which estimates the alignment ceiling $\sqrt{n\rho_j/(n\rho_j + \delta^2)}$ from the sample singular values of $Y$ alone, with no knowledge of $B$, $F$, or $G_\infty$. Corollary 3 translates the per-column angle formula into a dispersion bias statement: the squared projection $|\Pi_H z|^2$ falls short of $|\Pi_B z|^2$ by $\sum_j (1 - \psi_{\infty,j}^2)\, c_j^2$ almost surely. Corollary 4 shows that for Grassmannian subspace estimation the in-subspace rotation drops out entirely via the identity $d_{\mathrm{Gr}}^2(\mathrm{col}(H), \mathcal{B}) = \sum_j \|h_j^\perp\|^2$: the total subspace error is $\sum_j \delta^2/(n\rho_j + \delta^2)$, a sum of per-factor floors with no rotation contribution. Corollary 5 extends the frame-level analysis to a $k$-column probe $W \in \mathbb{R}^{p \times k_W}$: the Frobenius deficit $\|\Pi_B W\|_F^2 - \|\Pi_H W\|_F^2$ converges to $\sum_j (\delta^2/(n\rho_j + \delta^2))(\Gamma_\infty \Gamma_\infty^\top)_{jj}$, a weighted sum of floors in which the weights $(\Gamma_\infty\Gamma_\infty^\top)_{jj}$ measure how much the probe aligns with each factor direction; at the canonical choice $W = \tilde{B}$, the deficit equals $d_{\mathrm{Gr}}^2$, linking the frame-level and subspace-level criteria.
 
-Two practical conclusions follow. The out-of-subspace floor $\delta^2/(n\rho_j + \delta^2)$ is irreducible in the cross-section: adding more assets (larger $p$) does not reduce it, because the signal-to-noise ratio is determined by $n$ alone. The unique remedy for a large floor is a longer time series. Tasks that can be formulated at the subspace level — factor neutralization, risk subspace projection, portfolio hedging — achieve this floor without any rotation penalty and require no correction; the estimator $\mathrm{col}(H)$ is already optimal for the Grassmannian distance criterion. Tasks that demand individual loading directions — factor attribution, per-column exposure calculation — incur the additional rotation excess $\mathcal{E}_{\mathrm{rotation}} = \sum_j (n\rho_j/(n\rho_j + \delta^2))\sin^2\angle(\hat{w}_j, w_j)$. This excess can be partially reduced by replacing $H$ with the shrinkage estimator $H \cdot \mathrm{diag}(\hat{\psi}_{p,j})$ (which corrects for the floor component of the dispersion bias), but the rotation excess itself cannot be eliminated without either orthogonal factor returns or a longer time series that drives $\hat{M} \to M$.
+Two practical conclusions follow.
+
+*First*, the out-of-subspace floor $\delta^2/(n\rho_j + \delta^2)$ is irreducible in the cross-section: adding more assets (larger $p$) does not reduce it, because the signal-to-noise ratio is determined by $n$ alone. The unique lever is a longer time series.
+
+*Second*, the floor and the rotation excess respond to different estimation strategies. Tasks that can be formulated at the subspace level — factor neutralization, risk subspace projection, portfolio hedging — achieve this floor without any rotation penalty and require no correction; the estimator $\mathrm{col}(H)$ is already optimal for the Grassmannian distance criterion. Tasks that demand individual loading directions — factor attribution, per-column exposure calculation — incur the additional rotation excess $\mathcal{E}_{\mathrm{rotation}} = \sum_j (n\rho_j/(n\rho_j + \delta^2))\sin^2\angle(\hat{w}_j, w_j)$. This excess can be partially reduced by replacing $H$ with the shrinkage estimator $H \cdot \mathrm{diag}(\hat{\psi}_{p,j})$ (which corrects for the floor component of the dispersion bias), but the rotation excess itself cannot be eliminated without either orthogonal factor returns or a longer time series that drives $\hat{M} \to M$.
