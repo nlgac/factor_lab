@@ -1,0 +1,24 @@
+{
+  "_comment": "Standard setup for sim_theorem_partii.py. σⱼ are factor volatilities (NOT variances); factor_variances = σⱼ². Returns model: r_i = σ₁·β_{1,i}·f̃₁ + σ₂·β_{2,i}·f̃₂ + σ₃·β_{3,i}·f̃₃ + ε_i, with f̃ⱼ ~ N(0, 1).",
+
+  "k_factors": 3,
+  "n_values": [30, 60, 120],
+  "p_values": [200, 500, 1000, 2000, 5000, 10000, 15000,20000],
+  "n_reps": 300,
+  "random_seed": 20260511,
+
+  "_sigma_note": "σ = [0.16, 0.07, 0.03] → σ² = [0.0256, 0.0049, 0.0009].",
+  "factor_variances": [0.0256, 0.0049, 0.0009],
+
+  "_beta_note": "Factor 1 loadings are biased (mean 1) — market-like. Factors 2+ are zero-mean unit-scale. Independence keeps off-diagonal Gram entries → 0; ‖β₁‖²/p → 1.25, ‖β_{j≥2}‖²/p → 1.",
+  "beta_samplers": [
+    {"distribution": "normal", "loc": 1.0, "scale": 0.5},
+    {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+    {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+  ],
+
+  "idio_vol_sampler": {"distribution": "constant", "value": 0.5},
+
+  "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "idio_return_sampler":   {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "Spec for sim_theorem_partii.py — reproduces the original hardcoded experiment exactly. k=3, diagonal-Gram case (G∞ = I_k). Effective spikes d_j = c_j·σ_j² = [0.040, 0.016, 0.006] satisfy Assumption 3 (strict decrease).",
+
+  "k_factors": 3,
+  "n_values": [30, 60, 120],
+  "p_values": [200, 500, 1000, 2000, 5000, 10000],
+  "n_reps": 300,
+  "random_seed": 20260511,
+
+  "factor_variances": [0.04, 0.02, 0.01],
+
+  "_beta_samplers_note": "Per-factor loading samplers. For the diagonal-Gram case, draw β_j ~ N(0, c_j) so ‖β_j‖²/p → c_j and off-diagonal Gram entries vanish. scale_j = √c_j with c = [1.0, 0.8, 0.6].",
+  "beta_samplers": [
+    {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+    {"distribution": "normal", "loc": 0.0, "scale": 0.8944271909999159},
+    {"distribution": "normal", "loc": 0.0, "scale": 0.7745966692414834}
+  ],
+
+  "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+
+  "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "idio_return_sampler":   {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+}

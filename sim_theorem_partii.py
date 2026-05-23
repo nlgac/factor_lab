@@ -29,14 +29,30 @@ Setup
 
 Outputs
 -------
+By default outputs go to ``results/MM-DD_run_NN/`` (NN sequential per date):
 - sim_thmptii.parquet               — raw per-rep records
 - fig_theorem1_convergence_v2.png   — gap sin²∠−RHS vs p, for each n and factor
-- fig_theorem1_scatter_v2.png       — sin²∠ vs RHS scatter at p=P_VALUES[-2]
+- fig_theorem1_scatter_v2.png       — sin²∠ vs RHS scatter at p=p_values[-2]
 - fig_theorem1_components_v2.png    — floor and rotation convergence separately
+
+Override the directory with ``--out PATH`` (CLI) or ``"output_path": "..."``
+(JSON spec).
+
+Usage
+-----
+    python sim_theorem_partii.py                            # built-in defaults
+    python sim_theorem_partii.py sim_thmptii_spec.json
+    python sim_theorem_partii.py sim_thmptii_spec.json --plot
+    python sim_theorem_partii.py sim_thmptii_spec.json --plot-save --out results.parquet
 """
 
+import json
+import re
 import sys
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -53,25 +69,115 @@ from factor_lab.analysis import SimulationContext
 from factor_lab.analyses.spectral import compute_true_eigenvalues
 from factor_lab.analyses import compute_sine_alignment, register_manifold_distance
 
-# ── Experiment parameters ─────────────────────────────────────────────────────
+# ── Experiment specification ──────────────────────────────────────────────────
 
-K = 3
 
-# Factor return variances. Assumption 3 requires c₁σ₁² > c₂σ₂² > c₃σ₃².
-# With C2 = [1.0, 0.8, 0.6] the effective spikes are d_j = cⱼ·σⱼ²:
-#   d₁ = 0.040 > d₂ = 0.016 > d₃ = 0.006  ✓
-SIGMA2 = np.array([0.04, 0.02, 0.01])
+@dataclass
+class SimSpec:
+    """Specification for the Eq. (6) Part-(ii) simulation.
 
-# Prevalences cⱼ = lim ‖βⱼ‖²/p (Assumption 1); diagonal C = diag(c₁, c₂, c₃)
-C2 = np.array([1.00, 0.80, 0.60])
+    Loaded from a JSON file. Keys starting with ``_`` are treated as comments
+    and ignored. Sampler fields use the same ``{"distribution": name, ...}``
+    shape consumed by :func:`factor_lab.distributions.create_sampler`.
 
-# Idiosyncratic noise variance
-DELTA2 = 1.0
+    The defaults below reproduce the original hardcoded experiment:
+    Assumption 3 requires c₁σ₁² > c₂σ₂² > c₃σ₃². With prevalences inherited
+    from the loading scales (cⱼ = scaleⱼ²) and σ² = [.04, .02, .01], the
+    effective spikes are dⱼ = cⱼσⱼ² = [.040, .016, .006] ✓.
+    """
 
-N_VALUES = [30, 60, 120]
-P_VALUES = [200, 500, 1000, 2000, 5000, 10_000]
-N_REPS   = 300
-SEED     = 20260511
+    k_factors: int = 3
+    n_values: list[int] = field(default_factory=lambda: [30, 60, 120])
+    p_values: list[int] = field(
+        default_factory=lambda: [200, 500, 1000, 2000, 5000, 10_000]
+    )
+    n_reps: int = 300
+    random_seed: int = 20260511
+
+    # Factor return variances σⱼ², length k.
+    factor_variances: list[float] = field(
+        default_factory=lambda: [0.04, 0.02, 0.01]
+    )
+
+    # Per-factor loading samplers (broadcast scalar OK). For the diagonal-Gram
+    # case use independent zero-mean draws with scaleⱼ = √cⱼ so ‖βⱼ‖²/p → cⱼ
+    # and the off-diagonal Gram entries vanish.
+    beta_samplers: Union[list[dict], dict] = field(
+        default_factory=lambda: [
+            {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.8))},
+            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.6))},
+        ]
+    )
+    # Idiosyncratic vol sampler; "constant" with value √δ² reproduces the
+    # uniform-δ noise model in the theorem statement.
+    idio_vol_sampler: dict = field(
+        default_factory=lambda: {"distribution": "constant", "value": 1.0}
+    )
+    # Per-rep factor return sampler (broadcast scalar OK).
+    factor_return_sampler: Union[list[dict], dict] = field(
+        default_factory=lambda: {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    )
+    # Per-rep idiosyncratic return sampler.
+    idio_return_sampler: dict = field(
+        default_factory=lambda: {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    )
+
+    # Optional overrides for CLI behavior. CLI flags take precedence when set.
+    output_path: Optional[str] = None
+    plot_mode: Optional[str] = None   # None | "plot" | "plot-save"
+
+    @classmethod
+    def from_json(cls, filepath: Union[str, Path]) -> "SimSpec":
+        with open(filepath) as f:
+            config = json.load(f)
+        # Drop "_..."  commentary keys.
+        config = {k: v for k, v in config.items() if not k.startswith("_")}
+        return cls(**config)
+
+
+def _make_one_sampler(spec: dict, rng: np.random.Generator):
+    """Materialize a single sampler from a {"distribution": name, ...} dict."""
+    params = {k: v for k, v in spec.items() if k != "distribution"}
+    return create_sampler(spec["distribution"], rng, **params)
+
+
+def _make_samplers(
+    spec: Union[list[dict], dict], rng: np.random.Generator, k: int
+):
+    """List-or-broadcast sampler resolution matching FactorModelBuilder.build."""
+    if isinstance(spec, list):
+        if len(spec) != k:
+            raise ValueError(
+                f"Expected {k} per-factor samplers, got {len(spec)}: {spec!r}"
+            )
+        return [_make_one_sampler(s, rng) for s in spec]
+    return _make_one_sampler(spec, rng)
+
+
+def _next_run_dir(base: Path) -> Path:
+    """Allocate and return ``{base}/results/MM-DD_run_NN`` with NN sequential per date.
+
+    Scans existing siblings matching the date prefix, picks ``max(NN)+1``, and
+    creates the directory. NN is zero-padded to 2 digits (01, 02, …, 99, 100).
+
+    Example:
+        # On 2026-05-19, with results/05-19_run_01 and 05-19_run_02 present,
+        _next_run_dir(Path('.'))  # → Path('results/05-19_run_03'), created.
+    """
+    today = datetime.now().strftime("%m-%d")
+    results_root = base / "results"
+    results_root.mkdir(parents=True, exist_ok=True)
+    pat = re.compile(rf"^{re.escape(today)}_run_(\d+)$")
+    used = [
+        int(m.group(1))
+        for d in results_root.iterdir() if d.is_dir()
+        for m in [pat.match(d.name)] if m
+    ]
+    next_num = max(used, default=0) + 1
+    run_dir = results_root / f"{today}_run_{next_num:02d}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
 
 # ── SimulationAnalysis implementations ───────────────────────────────────────
 
@@ -117,14 +223,15 @@ class Eq6RHSAnalysis:
     Uses factor returns F from the context and empirical prevalences cⱼ = ‖B[j,:]‖²/p
     from the model loadings. Computes D̂ = C^{1/2}(F^T F/n)C^{1/2}.
 
-    Example:
-        analysis = Eq6RHSAnalysis(delta2=1.0)
-        result = analysis.analyze(context)
-        # keys: "rhs", "floor", "rotation", "rhos"
-    """
+    δ² is taken from ``context.model.D`` as the mean of its diagonal (D already
+    holds variances — the idio_vol_sampler outputs vols which FactorModelBuilder
+    squares internally).
 
-    def __init__(self, delta2: float):
-        self.delta2 = delta2
+    Example:
+        analysis = Eq6RHSAnalysis()
+        result = analysis.analyze(context)
+        # keys: "rhs", "floor", "rotation", "rhos", "delta2"
+    """
 
     def analyze(self, context: SimulationContext) -> dict:
         k, n = context.k, context.T
@@ -135,45 +242,46 @@ class Eq6RHSAnalysis:
         idx = np.argsort(vals)[::-1]
         rhos = vals[idx]
         W = vecs[:, idx]
-        floor = self.delta2 / (n * rhos + self.delta2)
-        weight = n * rhos / (n * rhos + self.delta2)
+        delta2 = float(np.diag(context.model.D).mean())
+        floor = delta2 / (n * rhos + delta2)
+        weight = n * rhos / (n * rhos + delta2)
         # sin²∠(ŵⱼ, eⱼ) = 1 − (ŵⱼ)ⱼ²; squaring the diagonal removes sign ambiguity.
         rotation = 1.0 - np.diag(W) ** 2
         return {"rhs": floor + weight * rotation, "floor": floor,
-                "rotation": rotation, "rhos": rhos}
+                "rotation": rotation, "rhos": rhos, "delta2": delta2}
 
 
 # ── Model construction ────────────────────────────────────────────────────────
 
 
-def build_model(p: int, rng: np.random.Generator):
-    """Build a k-factor model for the diagonal-Gram experiment (G∞ = I_k).
+def build_model(spec: SimSpec, p: int, rng: np.random.Generator):
+    """Build a k-factor model from the spec for the given p.
 
-    Loading entries for factor j are i.i.d. N(0, cⱼ), so by LLN (Assumption 1)
-    ‖B[j,:]‖²/p → cⱼ and off-diagonal unit-loading Gram entries → 0, giving G∞ = I_k.
-    Idiosyncratic volatility is uniform at δ for all assets.
+    Loading samplers, idio-vol sampler, and factor variances all come from
+    ``spec``. For the diagonal-Gram case (G∞ = I_k), loadings should be
+    independent zero-mean draws with scaleⱼ = √cⱼ so ‖βⱼ‖²/p → cⱼ and
+    off-diagonal unit-loading Gram entries vanish.
 
     Example:
-        model = build_model(p=1000, rng=np.random.default_rng(0))
-        # model.B.shape == (3, 1000), model.F == diag(SIGMA2), model.D == DELTA2·I
+        model = build_model(SimSpec(), p=1000, rng=np.random.default_rng(0))
+        # model.B.shape == (3, 1000), model.F == diag(spec.factor_variances)
     """
     return FactorModelBuilder(rng=rng).build(
         p=p,
-        k=K,
-        beta_samplers=[
-            create_sampler("normal", rng, loc=0, scale=np.sqrt(c))
-            for c in C2
-        ],
-        idio_vol_sampler=create_sampler("constant", rng, value=np.sqrt(DELTA2)),
-        factor_variances=SIGMA2.tolist(),
+        k=spec.k_factors,
+        beta_samplers=_make_samplers(spec.beta_samplers, rng, spec.k_factors),
+        idio_vol_sampler=_make_one_sampler(spec.idio_vol_sampler, rng),
+        factor_variances=list(spec.factor_variances),
     )
 
 
 # ── Simulation helpers ────────────────────────────────────────────────────────
 
 
-def _rep_records(n: int, p: int, lhs_res: dict, rhs_res: dict) -> list[dict]:
-    """Flatten one replication's analysis results into K per-factor records."""
+def _rep_records(
+    k: int, n: int, p: int, lhs_res: dict, rhs_res: dict
+) -> list[dict]:
+    """Flatten one replication's analysis results into k per-factor records."""
     gap = lhs_res["sin2_j"] - rhs_res["rhs"]
     return [
         {"n": n, "p": p, "j": j + 1,
@@ -183,14 +291,14 @@ def _rep_records(n: int, p: int, lhs_res: dict, rhs_res: dict) -> list[dict]:
          "floor":    float(rhs_res["floor"][j]),
          "rotation": float(rhs_res["rotation"][j]),
          "rho":      float(rhs_res["rhos"][j])}
-        for j in range(K)
+        for j in range(k)
     ]
 
 
 # ── Main simulation ───────────────────────────────────────────────────────────
 
 
-def simulate() -> pd.DataFrame:
+def simulate(spec: SimSpec) -> pd.DataFrame:
     # Register sine distance once per process so ManifoldDistanceAnalysis
     # picks it up when used alongside this simulation.  The registration is
     # guarded to be idempotent; the centering difference vs. uncentered Y
@@ -202,36 +310,37 @@ def simulate() -> pd.DataFrame:
             lambda bt, be: compute_sine_alignment(bt, be)[1],
         )
 
-    rng_master = np.random.default_rng(SEED)
+    rng_master = np.random.default_rng(spec.random_seed)
     simulator = ReturnsSimulator()   # stateless; all draws go through samplers
-    rhs_analysis = Eq6RHSAnalysis(DELTA2)
+    rhs_analysis = Eq6RHSAnalysis()
     records: list[dict] = []
 
-    for n in N_VALUES:
+    for n in spec.n_values:
         logger.info("Starting n = {}", n)
-        for p in tqdm(P_VALUES, desc=f"n={n}", unit="p"):
+        for p in tqdm(spec.p_values, desc=f"n={n}", unit="p"):
 
             # Build model once per (n, p) cell — fresh β each time.
-            model = build_model(p, rng_master)
+            model = build_model(spec, p, rng_master)
 
             # Population directions computed once here; ARPACK skips the rep loop.
-            _, b_pop = compute_true_eigenvalues(model, K)
+            _, b_pop = compute_true_eigenvalues(model, spec.k_factors)
             lhs_analysis = SineAlignmentAnalysis(b_pop)
 
-            logger.debug("n={}, p={}: c={:.4f}, {:.4f}, {:.4f}",
-                         n, p, *(model.B ** 2).mean(axis=1))
+            logger.debug("n={}, p={}: c={}",
+                         n, p, list((model.B ** 2).mean(axis=1)))
 
             # Independent seed per rep; master rng advances only here.
-            rep_seeds = rng_master.integers(0, 2 ** 31, size=N_REPS)
-            for _ in range(N_REPS):
-                rep_rng = np.random.default_rng(int(rep_seeds[_]))
-                normal = create_sampler("normal", rep_rng)
-                # factor and idio draws share rep_rng via the same sampler —
-                # sequential draws are independent, replication is reproducible.
+            rep_seeds = rng_master.integers(0, 2 ** 31, size=spec.n_reps)
+            for r in range(spec.n_reps):
+                rep_rng = np.random.default_rng(int(rep_seeds[r]))
+                factor_samplers = _make_samplers(
+                    spec.factor_return_sampler, rep_rng, spec.k_factors
+                )
+                idio_sampler = _make_one_sampler(spec.idio_return_sampler, rep_rng)
                 sim_out = simulator.simulate(
                     model=model, n_periods=n,
-                    factor_return_samplers=normal,
-                    idio_return_sampler=normal,
+                    factor_return_samplers=factor_samplers,
+                    idio_return_sampler=idio_sampler,
                 )
                 context = SimulationContext(
                     model=model,
@@ -240,7 +349,8 @@ def simulate() -> pd.DataFrame:
                     idio_returns=sim_out["idio_returns"],
                 )
                 records.extend(
-                    _rep_records(n, p, lhs_analysis.analyze(context),
+                    _rep_records(spec.k_factors, n, p,
+                                 lhs_analysis.analyze(context),
                                  rhs_analysis.analyze(context))
                 )
 
@@ -270,11 +380,18 @@ def print_summary(df: pd.DataFrame) -> None:
 
 def main() -> None:
     import argparse
-    parser = argparse.ArgumentParser(description="Run Multifactor Dispersion Bias simulation (Theorem, Part ii, Eq. (6)).")
+    parser = argparse.ArgumentParser(
+        description="Run Multifactor Dispersion Bias simulation (Theorem, Part ii, Eq. (6)).",
+    )
     parser.add_argument(
-        "--out", type=Path,
-        default=ROOT / "sim_thmptii.parquet",
-        help="Output path for the .parquet file (default: next to this script).",
+        "config_file", type=str, nargs="?", default=None,
+        help="JSON spec file with experiment parameters (see SimSpec). "
+             "If omitted, uses the built-in defaults (the original experiment).",
+    )
+    parser.add_argument(
+        "--out", type=Path, default=None,
+        help="Output path for the .parquet file. Overrides spec.output_path; "
+             "defaults to sim_thmptii.parquet next to this script.",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -287,22 +404,48 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    parquet_path: Path = args.out.with_suffix(".parquet")
+    if args.config_file is None:
+        logger.info("No config file given; using built-in SimSpec defaults.")
+        spec = SimSpec()
+    else:
+        spec = SimSpec.from_json(args.config_file)
+
+    # Resolve output path: CLI --out > spec.output_path > auto-allocated run dir.
+    # Default places results in {ROOT}/results/MM-DD_run_NN/sim_thmptii.parquet
+    # with NN sequential within each date.
+    if args.out is not None:
+        parquet_path = args.out.with_suffix(".parquet")
+    elif spec.output_path is not None:
+        parquet_path = Path(spec.output_path).with_suffix(".parquet")
+    else:
+        run_dir = _next_run_dir(ROOT)
+        parquet_path = run_dir / "sim_thmptii.parquet"
+        logger.info("Auto-allocated run directory: {}", run_dir)
+
+    # Resolve plot mode: CLI flags > spec.plot_mode > none.
+    if args.plot:
+        plot_mode = "plot"
+    elif args.plot_save:
+        plot_mode = "plot-save"
+    else:
+        plot_mode = spec.plot_mode   # may be None
 
     logger.info(
         "Simulation: k={}, n={}, p={}, reps={}, seed={}",
-        K, N_VALUES, P_VALUES, N_REPS, SEED,
+        spec.k_factors, spec.n_values, spec.p_values, spec.n_reps, spec.random_seed,
     )
-    logger.info("σ²={}, c²={}, δ²={}, spikes={}",
-                SIGMA2.tolist(), C2.tolist(), DELTA2, (C2 * SIGMA2).tolist())
+    logger.info(
+        "σ²={}, idio_vol_sampler={}",
+        list(spec.factor_variances), spec.idio_vol_sampler,
+    )
 
-    df = simulate()
+    df = simulate(spec)
 
-    if not args.plot:
+    if plot_mode != "plot":
         df.to_parquet(parquet_path, index=False)
         logger.info("Saved {} rows to {}", len(df), parquet_path)
 
-    if args.plot or args.plot_save:
+    if plot_mode in ("plot", "plot-save"):
         from fl_graphics import plot_all
         plot_all(df, out_dir=parquet_path.parent)
 
