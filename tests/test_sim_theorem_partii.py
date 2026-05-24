@@ -187,6 +187,60 @@ class TestSimSpec:
             assert len(spec.factor_variances) == 3
             assert len(spec.beta_samplers) == 3
 
+    def test_from_json_handles_non_ascii(self, tmp_path):
+        """Specs may contain σ/β/δ etc. in comment fields — must load on
+        any platform, not just utf-8-default systems (regression: Windows
+        cp1252 raised UnicodeDecodeError on byte 0x81)."""
+        cfg = {
+            "_comment": "σⱼ are volatilities; β samples drawn N(0, √cⱼ); δ² ≈ 1.",
+            "k_factors": 2,
+            "n_values": [30],
+            "p_values": [100],
+            "n_reps": 1,
+            "random_seed": 0,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }
+        path = tmp_path / "spec_unicode.json"
+        # Explicit utf-8 write — matches how the shipped specs are stored.
+        path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+        # Sanity: file actually contains the non-ASCII bytes that broke Windows.
+        assert "σ" in path.read_text(encoding="utf-8")
+        spec = sim.SimSpec.from_json(path)
+        assert spec.k_factors == 2
+
+    def test_from_json_opens_with_utf8(self, tmp_path, monkeypatch):
+        """Cross-platform: from_json must explicitly request utf-8 so that
+        systems with a non-utf-8 default (e.g. Windows cp1252) still load
+        the σ/β/δ characters in our shipped specs."""
+        import builtins
+        opened_with = {}
+        real_open = builtins.open
+
+        def spy(file, mode="r", *args, **kwargs):
+            opened_with[str(file)] = kwargs.get("encoding")
+            return real_open(file, mode, *args, **kwargs)
+
+        path = tmp_path / "spec.json"
+        path.write_text(json.dumps({
+            "k_factors": 2, "n_values": [30], "p_values": [100],
+            "n_reps": 1, "random_seed": 0,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }))
+        monkeypatch.setattr(builtins, "open", spy)
+        sim.SimSpec.from_json(path)
+        assert opened_with.get(str(path)) == "utf-8", (
+            f"from_json must open with encoding='utf-8'; got "
+            f"{opened_with.get(str(path))!r}"
+        )
+
 
 # ── _make_one_sampler / _make_samplers ────────────────────────────────────────
 

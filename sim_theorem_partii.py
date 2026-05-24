@@ -129,7 +129,10 @@ class SimSpec:
 
     @classmethod
     def from_json(cls, filepath: Union[str, Path]) -> "SimSpec":
-        with open(filepath) as f:
+        # Explicit utf-8: JSON is utf-8 by spec, and our shipped specs use
+        # σ/β/δ in _comment fields — on Windows the default encoding (cp1252)
+        # can't decode those bytes.
+        with open(filepath, encoding="utf-8") as f:
             config = json.load(f)
         # Drop "_..."  commentary keys.
         config = {k: v for k, v in config.items() if not k.startswith("_")}
