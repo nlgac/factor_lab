@@ -2,7 +2,7 @@
 
 *Supersedes `KT_proof_theorem3.1prime.md`, `KT_extension_to_nonorthogonal_factors.md`, and `KT_update_2026-05-04.md`. Self-contained briefing for a fresh session.*
 
-> Staleness: Drifting — §3 (Document Inventory) and §5 (Completed Work) substantially updated to reflect proof walkthrough files and notation migration work added after 2026-05-13.
+> Last updated: 2026-05-26 | Trigger: manual | Staleness: Drifting — §2 (notation updated to migrated convention), §3 (new files, filename changes, migration status), §5 (new session 2026-05-26). Minor edits to §1, §6, §8.
 
 ---
 
@@ -12,8 +12,9 @@ This project proves and develops the **multifactor dispersion bias**: in a $k$-f
 
 The project has three interlocking strands:
 
-1. **The proof** — Theorem 3.1′ (NG, single author, $k$-factor, diagonal $G_\infty$) and its unification with AK's result (general $G_\infty$), now in `unified_dispersion_bias_proof_050726.md`.
-2. **The correction** — The James-Stein correction $\hat\Pi_B^{\mathrm{JS}} z = HD_\psi^{-1}H^\top z$, developed through the $k$-frame probe extension, in `dispersion_bias_correction_v2_051226.md`.
+1. **The proof** — Theorem 3.1′ (NG, single author, $k$-factor, diagonal $G^\infty_B$) and its unification with AK's result (general $G^\infty_B$), now in `unified_dispersion_bias_proof_051926_cleaned.md`.
+2. **The correction** — The James-Stein correction $\hat\Pi_B^{\mathrm{JS}} z = HD_\psi^{-1}H^\top z$, developed through the $k$-frame probe extension, in `dispersion_bias_correction_cleaned.md` *(note: `dispersion_bias_correction_v2_051226.md` referenced in earlier KT is not found on disk — verify which file is current)*.
+
 3. **Manuscript preparation** — LaTeX conversion, citation hygiene, SIAM J. Financial Math format. Not yet started.
 
 ---
@@ -28,7 +29,7 @@ $$
 
 $B \in \mathbb{R}^{p \times k}$ (loadings, columns $\beta_1,\ldots,\beta_k$), $F \in \mathbb{R}^{n \times k}$ (factor returns, columns $X_1,\ldots,X_k$), $Z$ (noise, i.i.d. mean-zero, variance $\delta^2$, bounded 4th moments). $H \in \mathbb{R}^{p \times k}$: top-$k$ left singular vectors of $Y/\sqrt{n}$.
 
-Key scalar: $\rho_j$ = $j$-th eigenvalue of $\hat{D} = C^{1/2}(F^\top F/n)C^{1/2}$ where $C = \lim B^\top B/p$ (the prevalence/loading Gram). In the diagonal case ($G_\infty = I_k$), $\rho_j = c_j\sigma_j^2$ where $c_j = \lim\|\beta_j\|^2/p$ and $\sigma_j^2 = \|X_j\|^2/n$.
+Key matrices: $G^\infty_B = \lim_{p\to\infty} B^\top B/p$ (loading Gram limit, positive definite). $\hat{M} = (G^\infty_B)^{1/2}(F^\top F/n)(G^\infty_B)^{1/2}$ (sample signal matrix); $M = (G^\infty_B)^{1/2}\Sigma_F(G^\infty_B)^{1/2}$ (population limit). Eigenvalues of $\hat{M}$: $\hat\lambda_1 > \cdots > \hat\lambda_k > 0$, eigenvectors $\hat{w}_j$. Eigenvalues of $M$: $\lambda_1 > \cdots > \lambda_k > 0$, eigenvectors $w_j$. In the diagonal case ($G^\infty_b = I_k$), $G^\infty_B = C = \mathrm{diag}(c_j)$ and $\lambda_j = c_j\sigma_j^2$ where $c_j = \lim\|\beta_j\|^2/p$.
 
 ### 2.2 Unified Theorem (Three Parts)
 
@@ -37,41 +38,39 @@ $$
 H^\top v - H^\top\Pi_B v \to 0 \quad\text{a.s.}
 $$
 
-**Part (ii-diag)** *($G_\infty = I_k$, orthogonal loadings and orthogonal factor returns)*:
+**Part (ii)** *(general $G^\infty_B$; replaces earlier "Part (ii-diag)" + "Part (iii)" split)*:
 $$
-\sin^2\angle(h_j,\bar{b}_j) \xrightarrow{\text{a.s.}}
-\underbrace{\frac{\delta^2}{n\rho_j+\delta^2}}_{\text{out-of-subspace floor}}
+\sin^2\angle(h_j, b_j) \xrightarrow{\text{a.s.}}
+\underbrace{\frac{\delta^2}{n\hat\lambda_j+\delta^2}}_{\text{out-of-subspace floor}}
 +
-\underbrace{\frac{n\rho_j}{n\rho_j+\delta^2}\sin^2\angle(\hat{w}_j, e_j)}_{\text{in-subspace rotation}},
+\underbrace{\frac{n\hat\lambda_j}{n\hat\lambda_j+\delta^2}\sin^2\angle(\hat{w}_j, w_j)}_{\text{in-subspace rotation}},
 $$
-where $\hat{w}_j$ is the $j$-th eigenvector of $\hat{D}$ and $e_j$ is the $j$-th standard basis vector.
+where $\hat{w}_j$ are eigenvectors of $\hat{M}$ and $w_j$ are eigenvectors of $M$. In the diagonal case ($G^\infty_b = I_k$), $w_j = e_j$ and the rotation reduces to $\sin^2\angle(\hat{w}_j, e_j)$.
 
-**Part (iii)** *(general $G_\infty$)*: Same formula with $\sin^2\angle(\hat{w}_j, w_j)$ in place of $\sin^2\angle(\hat{w}_j, e_j)$, where $w_j$ is the $j$-th eigenvector of the population matrix $M = G_\infty^{1/2}(F^\top F/n)G_\infty^{1/2}$.
-
-The **floor** $\delta^2/(n\rho_j+\delta^2) = 1/(1+\text{SNR}_j)$ is irreducible — more assets do not reduce it. The **rotation** term vanishes when factor returns are orthogonal ($\hat{w}_j = e_j$) and as $n\to\infty$.
+The **floor** $\delta^2/(n\hat\lambda_j+\delta^2) = 1/(1+\widehat{\mathrm{SNR}}_j)$ is irreducible — more assets do not reduce it. The **rotation** term vanishes when $\hat{M} = M$ (equivalently, as $n\to\infty$); in the noiseless limit $\delta^2\to 0$ it survives with weight 1.
 
 ### 2.3 Key Corollaries
 
-**Corollary 3 (Dispersion bias — NG case)**: With $z = e/\sqrt{p}$ (equal-weight portfolio) and $c_j = \langle\bar{b}_j, z\rangle_\infty$,
+**Corollary 3 (Dispersion bias — NG case)**: With $z = e/\sqrt{p}$ (equal-weight portfolio) and $c_j = \langle b_j, z\rangle_\infty$,
 $$
 |\Pi_B z|^2 - |\Pi_H z|^2 \to \sum_j (1-\psi_{\infty,j}^2)c_j^2 > 0 \quad\text{a.s.}
 $$
-where $\psi_{\infty,j} = \sqrt{n\rho_j/(n\rho_j+\delta^2)} \in (0,1)$.
+where $\psi_{\infty,j} = \sqrt{n\hat\lambda_j/(n\hat\lambda_j+\delta^2)} \in (0,1)$.
 
 **Corollary 4 (Grassmannian subspace distance)**:
 $$
-d_{\mathrm{Gr}}^2(\mathrm{col}(H),\mathcal{B}) \to \sum_j \frac{\delta^2}{n\rho_j+\delta^2} \quad\text{a.s.}
+d_{\mathrm{Gr}}^2(\mathrm{col}(H),\mathcal{B}) \to \sum_j \frac{\delta^2}{n\hat\lambda_j+\delta^2} \quad\text{a.s.}
 $$
 This equals the sum of out-of-subspace floors only — the in-subspace rotation cancels in the Grassmannian metric. Subspace estimation is therefore strictly more efficient than frame estimation when factors are correlated.
 
-**Corollary 5 (Frame-level dispersion bias)**: For a probe frame $W \in \mathbb{R}^{p\times k_W}$ with $W^\top W = I_{k_W}$ and frame alignment matrix $\Gamma_\infty = \lim B^\top W/\sqrt{p} \cdot (\text{appropriate normalization})$:
+**Corollary 5 (Frame-level dispersion bias)**: For a probe frame $\tilde{W} \in \mathbb{R}^{p\times k_W}$ with $\tilde{W}^\top \tilde{W} = I_{k_W}$ and frame alignment matrix $\Gamma_\infty = \lim B^\top \tilde{W}/\sqrt{p} \cdot (\text{appropriate normalization})$:
 
 - *Part (i)*: $H^\top W - H^\top\Pi_B W \to 0$ a.s. (minimal assumptions).
 - *Part (ii) (NG case)*: $H^\top W \to \Psi_\infty\Gamma_\infty$ a.s., where $\Psi_\infty = \mathrm{diag}(\psi_{\infty,j})$.
-- *Frobenius deficit*: $\|\Pi_B W\|_F^2 - \|\Pi_H W\|_F^2 \to \sum_j [\delta^2/(n\rho_j+\delta^2)](\Gamma_\infty\Gamma_\infty^\top)_{jj}$.
-- *Principal angle shrinkage*: $\sigma_l(H^\top W) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$.
-- *Grassmannian bridge*: Setting $W = \tilde{B}$ (population loading frame) gives deficit $= d_{\mathrm{Gr}}^2$.
-- *General $G_\infty$*: $H^\top W \to \Psi_\infty\hat{W}^\top\Gamma_U$ where $\Gamma_U = \lim U^\top W$ and $\hat{W} \in O(k)$ is the limiting rotation of sample eigenvectors.
+- *Frobenius deficit*: $\|\Pi_B \tilde{W}\|_F^2 - \|\Pi_H \tilde{W}\|_F^2 \to \sum_j [\delta^2/(n\hat\lambda_j+\delta^2)](\Gamma_\infty\Gamma_\infty^\top)_{jj}$.
+- *Principal angle shrinkage*: $\sigma_l(H^\top \tilde{W}) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$.
+- *Grassmannian bridge*: Setting $\tilde{W} = B_\infty$ (population loading frame) gives deficit $= d_{\mathrm{Gr}}^2$.
+- *General $G^\infty_B$*: $H^\top \tilde{W} \to \Psi_\infty\hat{W}^\top\Gamma_U$ where $\Gamma_U = \lim U^\top \tilde{W}$ and $\hat{W} \in O(k)$ is the limiting rotation of sample eigenvectors.
 
 ### 2.4 The James-Stein Correction
 
@@ -87,7 +86,7 @@ $$
 $$
 The Frobenius norm $\|\hat\Pi_B^{\mathrm{JS}} W\|_F^2 \to \|\Pi_B W\|_F^2$ a.s. The corrected principal cosines $\sigma_l(D_\psi^{-1}H^\top W) \to \sigma_l(\Gamma_\infty)$ — principal angle shrinkage is fully restored.
 
-**What cannot be corrected**: The directional residual $\Pi_B W - \hat\Pi_B^{\mathrm{JS}} W$ lies in $\mathcal{B}\cap\mathcal{H}^\perp$ and its squared Frobenius norm equals the Frobenius deficit — irreducible, bounded below by $\sum_j[\delta^2/(n\rho_j+\delta^2)]\|\hat{w}_j^\top\Gamma_U\|^2$.
+**What cannot be corrected**: The directional residual $\Pi_B \tilde{W} - \hat\Pi_B^{\mathrm{JS}} \tilde{W}$ lies in $\mathcal{B}\cap\mathcal{H}^\perp$ and its squared Frobenius norm equals the Frobenius deficit — irreducible, bounded below by $\sum_j[\delta^2/(n\hat\lambda_j+\delta^2)]\|\hat{w}_j^\top\Gamma_U\|^2$.
 
 ---
 
@@ -99,17 +98,22 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 
 | File | Purpose | Status |
 |---|---|---|
-| `unified_dispersion_bias_proof_050726.md` | Full proof of unified theorem (Parts i–iii) + Corollaries 1–5 + §12 Grassmannian vs. frame estimation. ~900 lines. | **Primary proof reference** |
-| `dispersion_bias_correction_v2_051226.md` | James-Stein correction: scalar (§1–5), general $G_\infty$ (§6), $k$-frame probe (§7). 702 lines. | **Primary correction reference** |
+| `unified_dispersion_bias_proof_051926_cleaned.md` | Full proof of unified theorem (Parts i–iii) + Corollaries 1–5 + §12 Grassmannian vs. frame estimation. ~900 lines. | **Primary proof reference** (old notation; migration pending) |
+| `dispersion_bias_correction_cleaned.md` | James-Stein correction document. *(Verify: `v2_051226` referenced in older KT not found on disk; this is the current best candidate.)* | **Primary correction reference** *(needs verification)* |
 | `Proof_Theorem_3.1_prime_v3.md` | Full proof of NG's Theorem 3.1′ only (~935 lines, manuscript-quality). | Still valid; superseded mathematically by the unified proof but cleaner for the NG-only result |
-| `multifactor_dispersion_prevalence_v7.pdf` | AK's paper. $k=3$, general $G_\infty$. Has observable bounds (Cor 2, Thm 2, Prop 1) not yet in the unified proof. | External reference; see §4.3 below |
-| `proof_walkthrough_k3_cleaned.md` | Step-by-step illustrated walkthrough of Theorem Part (ii) with $k=3$, $p=500$, $n=60$ concrete example. Follows Appendix B.3. | **Primary expository reference for the proof** |
+| `multifactor_dispersion_prevalence_v7.pdf` | AK's paper. $k=3$, general $G^\infty_B$. Has observable bounds (Cor 2, Thm 2, Prop 1) not yet in the unified proof. | External reference; see §4.3 below |
+| `proof_walkthrough_k3_cleaned.md` | Step-by-step illustrated walkthrough of Theorem Part (ii) with $k=3$, $p=500$, $n=60$ concrete example. Follows Appendix B.3. **Notation migration applied 2026-05-26.** | **Primary expository reference for the proof** |
+| `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7, inline k=3 callouts, Corollary 4, worked example. Generated 2026-05-26 per expansion plan. | **New — accessible proof document** |
+| `theorem_part_ii_3_expanded_cleaned.md` / `.pdf` | Earlier expanded proof document (pre-2026-05-26 session). *(inferred — content similar to above; relationship to new `_expanded.md` needs clarification.)* | Superseded *(inferred)* |
+| `theorem_part_ii_1.md` | Theorem statement and notation from `theorem_part_ii_1.pdf`, converted to markdown with migrated notation. | Created 2026-05-26 |
+| `Notation Migration Guide.md` | Complete two-table guide: symbol renames + affected locations for all documents. | Reference |
+| `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf` into an accessible proof document. | Implemented in `theorem_part_ii_3_expanded.md` |
 
 ### 3.2 Supporting / Historical
 
 | File | Notes |
 |---|---|
-| `dispersion_bias_correction_v1_050726.md` | Prior version of the correction doc; §7 was placeholder. Superseded by v2. |
+| `dispersion_bias_correction_v1_050726.md` | Prior version of the correction doc; §7 was placeholder. Superseded. |
 | `reflection_fundamental_nonorthogonal_factors.md` | Deep analysis of doubly-extended $\Xi$ for fundamental factor models. Still relevant for open Task 1. |
 | `KT_proof_theorem3.1prime.md` | Session KT through 2026-04-26. Superseded by this file. |
 | `KT_extension_to_nonorthogonal_factors.md` | KT for non-orthogonal extension (dropping 2.6′). Superseded by this file; §6 sketch now formalized in unified proof. |
@@ -121,7 +125,7 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | File | Purpose |
 |---|---|
 | `bias_correction_demo.py` | Main simulation: k=2 illustration, MSE tables, stability floor $\tau$. Reproduces v2 correction tables. |
-| `sim_theorem_eq.py` | Canonical simulation for the theorem equation. |
+| `sim_theorem_partii.py` | Canonical simulation for the theorem equation (renamed from `sim_theorem_eq.py`). Accepts JSON spec file. |
 | `factor_sims.py` | General simulation engine. |
 | `reformat_math.py` | Math formatter: canonical `$$` blocks, semicolons, inline joins. Idempotent. |
 | `reformat_math_extra.py` | Extended math formatter; accepts `-o console` to pipe output to stdout (UTF-8 safe). |
@@ -144,13 +148,19 @@ A notation migration plan for `proof_walkthrough_k3_cleaned.md` was developed in
 - **Decoration convention**: superscript $(p)$ = varies with $p$; hat = finite-$n$ sample; no decoration = limit.
 - **$\hat{\cdot}$ retained** (not replaced by $^{(n)}$) for finite-$n$ quantities, given its standard statistical meaning and use in the theorem statement.
 
-The full migration table (old symbol → new symbol, with every affected location) exists in the conversation history of session 2026-05-23.
+The full migration table (old symbol → new symbol, with every affected location) is in `Notation Migration Guide.md` (created session 2026-05-23).
+
+**Migration status:**
+- `proof_walkthrough_k3_cleaned.md` — **applied 2026-05-26** ✓
+- `theorem_part_ii_1.md` — **created with migrated notation 2026-05-26** ✓
+- `unified_dispersion_bias_proof_051926_cleaned.md` — pending
+- `dispersion_bias_correction_cleaned.md` — pending
 
 ---
 
 ## 4. What Each Document Contains (Detail)
 
-### 4.1 `unified_dispersion_bias_proof_050726.md`
+### 4.1 `unified_dispersion_bias_proof_051926_cleaned.md`
 
 Structure (13 sections):
 
@@ -170,7 +180,7 @@ Structure (13 sections):
 | 12 | Grassmannian subspace estimation vs. frame estimation |
 | 13 | Summary |
 
-### 4.2 `dispersion_bias_correction_v2_051226.md`
+### 4.2 `dispersion_bias_correction_cleaned.md` *(needs verification — see §3.1)*
 
 Structure (7 sections):
 
@@ -196,6 +206,13 @@ These are the key missing piece for making the results statistically operational
 ---
 
 ## 5. Completed Work (Chronological)
+
+**Session 2026-05-26**:
+- Applied full notation migration (per `Notation Migration Guide.md`) to `proof_walkthrough_k3_cleaned.md`. All old symbols replaced: $\rho_j \to \hat\lambda_j$, $\hat{D} \to \hat{M}$, $G_\infty \to G^\infty_B$, $\Gamma_p \to G^{(p)}_B$, $d_j \to \lambda_j$, $W_\infty \to W$, $\chi_{p,j} \to v^{(p)}_j$, $s_{p,j} \to s^{(p)}_j$, and related changes.
+- Resolved eigenvector naming question: confirmed $w_j$/$\hat{w}_j$ should be retained (not renamed to $v_j$/$\hat{v}_j$, which would collide with $v^{(p)}_j$ = eigenvectors of the dual matrix $W$).
+- Created `theorem_part_ii_1.md`: full markdown transcription of `theorem_part_ii_1.pdf` with migrated notation ($G^\infty_B$, $\hat\lambda_j$, $\lambda_j$, $\widehat{\mathrm{SNR}}_j$, $w_j$).
+- Created `proof_expansion_plan.md`: 9-section detailed plan for expanding `theorem_part_ii_3.pdf` into an accessible proof document with 7-step structure, k=3 inline callouts, and worked example.
+- Created `theorem_part_ii_3_expanded.md`: implemented the expansion plan in full — statement (from PDF), auxiliary lemmas (Lemmas 1, 4, 7 with Lemma 7 proved in detail), 7 proof steps each with k=3 callouts, Corollary 4, and complete worked example section.
 
 **Sessions through 2026-04-25**: Proved $k$-factor generalization (Theorem 3.1′). Established projection argument ($\Pi_B^\perp$ applied to SVD identity) as the correct approach — removes need for Assumption 2.5′ in Part (i). Fixed $\epsilon < 1/4$ error in Borel–Cantelli. Created `Proof_Theorem_3.1_prime_v3.md` and `reformat_math.py`.
 
@@ -242,9 +259,11 @@ These are the key missing piece for making the results statistically operational
    - Sign convention: ensure `revisedProofTheorem3.1+.md_cleaned.md` explicitly states $e^\top h_i/p \ge 0$.
    - Atomlessness in 2.1′: align wording with KT extension's requirement for joint atomlessness.
 
-**4. Manuscript preparation**: LaTeX conversion of `unified_dispersion_bias_proof_050726.md`, length check against SIAM J. Financial Math style (target 6–8 pages per the earlier brief), citation hygiene (Davis–Kahan via Bhatia or Stewart–Sun; GPS2022 explicit citation for Lemma A.1).
+**4. Apply notation migration to primary proof documents.** `proof_walkthrough_k3_cleaned.md` is done (2026-05-26). Still pending: `unified_dispersion_bias_proof_051926_cleaned.md` and the correction document (verify which is current — see §3.1). Use `Notation Migration Guide.md` as the source.
 
-**5. Observable estimation for the $k$-frame correction.** Section §7 of the correction document estimates the Frobenius deficit but does not give a CLT or confidence interval for $\|\Pi_B W\|_F^2$. The AK observable bounds (Task 1 above) would fill this gap.
+**5. Manuscript preparation**: LaTeX conversion of `unified_dispersion_bias_proof_051926_cleaned.md`, length check against SIAM J. Financial Math style (target 6–8 pages per the earlier brief), citation hygiene (Davis–Kahan via Bhatia or Stewart–Sun; GPS2022 explicit citation for Lemma A.1).
+
+**6. Observable estimation for the $k$-frame correction.** Section §7 of the correction document estimates the Frobenius deficit but does not give a CLT or confidence interval for $\|\Pi_B W\|_F^2$. The AK observable bounds (Task 1 above) would fill this gap.
 
 ---
 
@@ -260,11 +279,11 @@ These are the key missing piece for making the results statistically operational
 
 **Z-scoring degeneracy.** For z-scored fundamental loadings, $\mu_p(\beta_j) = 0$ so $c_j = 0$ for all $j$, and the equal-weight portfolio dispersion bias is zero by construction. The interesting quantity for fundamental factor practitioners is the bias for *factor-tilted* portfolios with $c_j \ne 0$.
 
-**Grassmannian vs. frame estimation.** The Grassmannian metric $d_{\mathrm{Gr}}^2 = \sum_j\delta^2/(n\rho_j+\delta^2)$ accumulates only the irreducible floors; the in-subspace rotation cancels. Frame estimation adds the rotation term, which is non-zero when factors are correlated. So: measuring subspace alignment by $d_{\mathrm{Gr}}^2$ is *strictly easier* than measuring it by per-direction cosines when $G_\infty \ne I_k$.
+**Grassmannian vs. frame estimation.** The Grassmannian metric $d_{\mathrm{Gr}}^2 = \sum_j\delta^2/(n\hat\lambda_j+\delta^2)$ accumulates only the irreducible floors; the in-subspace rotation cancels. Frame estimation adds the rotation term, which is non-zero when factors are correlated. So: measuring subspace alignment by $d_{\mathrm{Gr}}^2$ is *strictly easier* than measuring it by per-direction cosines when $G^\infty_B \ne I_k$.
 
 **JSE correction is factor-specific.** The operator $D_\psi^{-1} = \mathrm{diag}(1/\hat\psi_1,\ldots,1/\hat\psi_k)$ inflates each factor-$j$ coordinate differently. Weaker factors ($\hat\psi_j$ closer to 0) receive larger inflation. This is a feature: the correction is proportionally stronger where the bias is worst.
 
-**Principal angle shrinkage is a new phenomenon at $k_W > 1$.** The scalar bias ($k_W = 1$) says only that $|H^\top z|^2 < |\Pi_B z|^2$. For a frame ($k_W > 1$), the singular values of $H^\top W$ are all strictly shrunk: $\sigma_l(H^\top W) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$. The JSE correction restores them: $\sigma_l(D_\psi^{-1}H^\top W) \to \sigma_l(\Gamma_\infty)$.
+**Principal angle shrinkage is a new phenomenon at $k_W > 1$.** The scalar bias ($k_W = 1$) says only that $|H^\top z|^2 < |\Pi_B z|^2$. For a frame ($k_W > 1$), the singular values of $H^\top \tilde{W}$ are all strictly shrunk: $\sigma_l(H^\top \tilde{W}) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$. The JSE correction restores them: $\sigma_l(D_\psi^{-1}H^\top \tilde{W}) \to \sigma_l(\Gamma_\infty)$.
 
 ---
 
@@ -273,9 +292,10 @@ These are the key missing piece for making the results statistically operational
 To come up to speed, read in this order:
 
 1. **This file** (`docs/KT.md`) — project overview.
-2. `unified_dispersion_bias_proof_050726.md` §1–4 — theorem statement and examples.
-3. `dispersion_bias_correction_v2_051226.md` §1–2, §7 — correction and k-frame extension.
-4. `unified_dispersion_bias_proof_050726.md` §10–12 — corollaries and Grassmannian discussion.
+2. `unified_dispersion_bias_proof_051926_cleaned.md` §1–4 — theorem statement and examples.
+3. `dispersion_bias_correction_cleaned.md` §1–2, §7 — correction and k-frame extension *(verify filename — see §3.1)*.
+4. `unified_dispersion_bias_proof_051926_cleaned.md` §10–12 — corollaries and Grassmannian discussion.
+4b. `theorem_part_ii_3_expanded.md` — accessible proof of Part (ii) with full derivation and k=3 worked example.
 5. `reflection_fundamental_nonorthogonal_factors.md` — if working on fundamental factor extension.
 6. `multifactor_dispersion_prevalence_v7.pdf` §3.6–3.7 — for observable bounds (Task 1).
 
