@@ -2,7 +2,7 @@
 
 *Supersedes `KT_proof_theorem3.1prime.md`, `KT_extension_to_nonorthogonal_factors.md`, and `KT_update_2026-05-04.md`. Self-contained briefing for a fresh session.*
 
-> Last updated: 2026-05-26 | Trigger: manual | Staleness: Drifting — §2 (notation updated to migrated convention), §3 (new files, filename changes, migration status), §5 (new session 2026-05-26). Minor edits to §1, §6, §8.
+> Last updated: 2026-05-26 (session 2) | Trigger: manual | Staleness: Drifting — §3.1 (correction file verified, .tex output noted), §3.3 (tool descriptions updated), §5 (new session work), §6 (resolved correction-file uncertainty).
 
 ---
 
@@ -99,12 +99,13 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | File | Purpose | Status |
 |---|---|---|
 | `unified_dispersion_bias_proof_051926_cleaned.md` | Full proof of unified theorem (Parts i–iii) + Corollaries 1–5 + §12 Grassmannian vs. frame estimation. ~900 lines. | **Primary proof reference** (old notation; migration pending) |
-| `dispersion_bias_correction_cleaned.md` | James-Stein correction document. *(Verify: `v2_051226` referenced in older KT not found on disk; this is the current best candidate.)* | **Primary correction reference** *(needs verification)* |
+| `dispersion_bias_correction_cleaned.md` | James-Stein correction document. | **Primary correction reference** |
+| `dispersion_bias_correction_v2_051226.md` | Complete §7 ($k$-frame probe extension) — the most recent version with full Frobenius deficit theorem, JSE correction, principal angle shrinkage. | **Most complete correction document** |
 | `Proof_Theorem_3.1_prime_v3.md` | Full proof of NG's Theorem 3.1′ only (~935 lines, manuscript-quality). | Still valid; superseded mathematically by the unified proof but cleaner for the NG-only result |
 | `multifactor_dispersion_prevalence_v7.pdf` | AK's paper. $k=3$, general $G^\infty_B$. Has observable bounds (Cor 2, Thm 2, Prop 1) not yet in the unified proof. | External reference; see §4.3 below |
 | `proof_walkthrough_k3_cleaned.md` | Step-by-step illustrated walkthrough of Theorem Part (ii) with $k=3$, $p=500$, $n=60$ concrete example. Follows Appendix B.3. **Notation migration applied 2026-05-26.** | **Primary expository reference for the proof** |
-| `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7, inline k=3 callouts, Corollary 4, worked example. Generated 2026-05-26 per expansion plan. | **New — accessible proof document** |
-| `theorem_part_ii_3_expanded_cleaned.md` / `.pdf` | Earlier expanded proof document (pre-2026-05-26 session). *(inferred — content similar to above; relationship to new `_expanded.md` needs clarification.)* | Superseded *(inferred)* |
+| `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7 (fully proved with Borel–Cantelli + Kolmogorov SLLN), inline k=3 callouts, Corollary 4, worked example. | **Primary accessible proof document** |
+| `latex/theorem_part_ii_3_expanded.tex` | LaTeX conversion of the above via `md_to_latex.py`. Blockquote-wrapped tables and Unicode ✓ handled correctly. | LaTeX artefact — regenerate as needed |
 | `theorem_part_ii_1.md` | Theorem statement and notation from `theorem_part_ii_1.pdf`, converted to markdown with migrated notation. | Created 2026-05-26 |
 | `Notation Migration Guide.md` | Complete two-table guide: symbol renames + affected locations for all documents. | Reference |
 | `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf` into an accessible proof document. | Implemented in `theorem_part_ii_3_expanded.md` |
@@ -128,8 +129,9 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `sim_theorem_partii.py` | Canonical simulation for the theorem equation (renamed from `sim_theorem_eq.py`). Accepts JSON spec file. |
 | `factor_sims.py` | General simulation engine. |
 | `reformat_math.py` | Math formatter: canonical `$$` blocks, semicolons, inline joins. Idempotent. |
-| `reformat_math_extra.py` | Extended math formatter; accepts `-o console` to pipe output to stdout (UTF-8 safe). |
+| `reformat_math_extra.py` | Extended math formatter; accepts `-o console` to pipe output to stdout (UTF-8 safe). Fixes: blockquote table pipe protection (`> \| ...\|` lines now correctly handled); `\emph{}` inside math replaced with `\text{}`. |
 | `reflow_md.py` | Reflows hard-wrapped Markdown prose to long lines. Accepts `-` for stdin and `-o` for output path; pipe-composable with `reformat_math_extra.py`. |
+| `md_to_latex.py` | Converts math-heavy Markdown to compilable LaTeX. Fixes (2026-05-26): blockquote-wrapped table rows correctly converted to `tabular` environments (not emitted as raw `\begin{quote}` text); Unicode characters (✓, —, …, ×, etc.) substituted with LaTeX equivalents. Run: `python md_to_latex.py input.md [output.tex]`. |
 | `proof_walkthrough_k3.py` | Generates all numerical outputs for the k=3 walkthrough. |
 | `proof_walkthrough_figures.py` | Generates all figures (`walkthrough_figs/fig_w0*.png`) for `proof_walkthrough_k3_cleaned.md`. |
 
@@ -180,7 +182,7 @@ Structure (13 sections):
 | 12 | Grassmannian subspace estimation vs. frame estimation |
 | 13 | Summary |
 
-### 4.2 `dispersion_bias_correction_cleaned.md` *(needs verification — see §3.1)*
+### 4.2 `dispersion_bias_correction_v2_051226.md` (most complete; `dispersion_bias_correction_cleaned.md` is an earlier version)
 
 Structure (7 sections):
 
@@ -206,6 +208,14 @@ These are the key missing piece for making the results statistically operational
 ---
 
 ## 5. Completed Work (Chronological)
+
+**Session 2026-05-26 (session 2 — tooling fixes)**:
+- Fixed `reformat_math_extra.py`: blockquote table rows (`> | ... |`) were not having pipe characters protected inside inline math because the parser checked `line.startswith('|')` after stripping `> `; fixed by stripping `'> \t'` before the check. Also added `\emph{} → \text{}` replacement inside math spans.
+- Fixed `md_to_latex.py` (multiple issues):
+  - Blockquote-wrapped table rows (`> | ... |`) were being emitted as `\begin{quote}` prose instead of `tabular` environments. Fix: detect `inner.startswith('|')` in the blockquote handler; accumulate rows in `_table_rows` with `_table_in_blockquote = True`; `_flush_table()` wraps with `\end{quote}...\begin{quote}` so the surrounding blockquote context is preserved.
+  - Unicode characters not supported by pdflatex (✓, —, –, …, ×, ±, ≈, ≤, ≥, ∞, smart quotes) were passed through raw. Fixed by adding `_UNICODE_SUBS` list applied in `_escape_text()`.
+  - File had been silently truncated by earlier edit-tool operations; repaired by rewriting the full file via `Write` tool and stripping trailing null bytes.
+- Generated `latex/theorem_part_ii_3_expanded.tex` from the expanded proof document; all tables and math render correctly.
 
 **Session 2026-05-26**:
 - Applied full notation migration (per `Notation Migration Guide.md`) to `proof_walkthrough_k3_cleaned.md`. All old symbols replaced: $\rho_j \to \hat\lambda_j$, $\hat{D} \to \hat{M}$, $G_\infty \to G^\infty_B$, $\Gamma_p \to G^{(p)}_B$, $d_j \to \lambda_j$, $W_\infty \to W$, $\chi_{p,j} \to v^{(p)}_j$, $s_{p,j} \to s^{(p)}_j$, and related changes.
@@ -259,7 +269,7 @@ These are the key missing piece for making the results statistically operational
    - Sign convention: ensure `revisedProofTheorem3.1+.md_cleaned.md` explicitly states $e^\top h_i/p \ge 0$.
    - Atomlessness in 2.1′: align wording with KT extension's requirement for joint atomlessness.
 
-**4. Apply notation migration to primary proof documents.** `proof_walkthrough_k3_cleaned.md` is done (2026-05-26). Still pending: `unified_dispersion_bias_proof_051926_cleaned.md` and the correction document (verify which is current — see §3.1). Use `Notation Migration Guide.md` as the source.
+**4. Apply notation migration to primary proof documents.** `proof_walkthrough_k3_cleaned.md` is done (2026-05-26). Still pending: `unified_dispersion_bias_proof_051926_cleaned.md` and `dispersion_bias_correction_v2_051226.md` (the most complete correction document — both confirmed present on disk). Use `Notation Migration Guide.md` as the source.
 
 **5. Manuscript preparation**: LaTeX conversion of `unified_dispersion_bias_proof_051926_cleaned.md`, length check against SIAM J. Financial Math style (target 6–8 pages per the earlier brief), citation hygiene (Davis–Kahan via Bhatia or Stewart–Sun; GPS2022 explicit citation for Lemma A.1).
 
