@@ -79,13 +79,14 @@ def draw_F_and_Mhat(model, n, rng):
     (F_draw [k x n], M-hat [k x k]).
     """
     simulator = fs.FlexibleReturnsSimulator(rng=rng)
+    # factor_lab scales each sampler by sqrt(diag(F)) internally (F = diag(sigma^2)), so the samplers here should be standardized (scale=1.0).
+    # Passing scale=sqrt(sigma2) here would double-scale the factor returns (variance being sigma2**2) and shrink the measured eigenvector rotation.
     factor_return_samplers = [
-        fs.create_sampler("normal", rng, loc=0.0, scale=float(np.sqrt(sigma2[j])))
+        fs.create_sampler("normal", rng, loc=0.0, scale=1.0)
         for j in range(k)
     ]
-    idio_return_sampler = fs.create_sampler(
-        "normal", rng, loc=0.0, scale=float(np.sqrt(delta2))
-    )
+    # D = diag(delta^2) via the builder, so the idio sampler here should be standardized too.
+    idio_return_sampler = fs.create_sampler("normal", rng, loc=0.0, scale=1.0)
     result = simulator.simulate(
         model=model,
         n_periods=n,
