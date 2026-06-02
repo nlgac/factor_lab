@@ -1,19 +1,29 @@
 """
 fl_graphics.py
 ==============
-Graphics for the Theorem 1 / Equation (20) simulation study.
+Dispersion-bias figures for the Theorem 1 / Equation (20) simulation study.
 
-Consumes a pandas DataFrame — produced by sim_theorem_partii.simulate() or
-loaded from a .parquet or .csv file — with columns:
+These are the *study-specific* figures (gap-convergence, LHS-vs-RHS scatter,
+floor/rotation components). The generic save/IO/dispatch plumbing lives in
+``fl_visualization``; this module supplies the dispersion-bias content and
+registers each figure into that harness, so a future script can render them via:
+
+    from fl_visualization import render_figures
+    render_figures(df, out_dir, names=["theorem1_convergence", ...], n_show=60)
+
+or keep using the convenience wrappers preserved here.
+
+Consumes a pandas DataFrame — produced by sim_theorem_partii.simulate() or loaded
+from a .parquet/.csv file — with columns:
 
     n, p, j, sin2_j, rhs, gap, floor, rotation, rho
 
-Can be run standalone:
+Standalone:
 
     python fl_graphics.py                          # loads default parquet path
     python fl_graphics.py sim_thmptii.parquet
 
-Or called programmatically after a live simulation:
+Programmatic:
 
     from fl_graphics import plot_all
     plot_all(df, out_dir=Path("."), n_show=60)
@@ -30,38 +40,44 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from loguru import logger
 
+from fl_visualization import (
+    register_figure,
+    render_figures,
+    load_results,
+    set_theme,
+    save_fig as _save_fig,
+)
+
 ROOT = Path(__file__).resolve().parent
 
 _DEFAULT_DATA_PATH = ROOT / "sim_thmptii.parquet"
 
+# Study-specific figure names and their output filenames, in render order.
+THEOREM_FIGURES = ["theorem1_convergence", "theorem1_scatter", "theorem1_components"]
 
-# ── I/O ───────────────────────────────────────────────────────────────────────
+__all__ = [
+    "load_results",
+    "plot_convergence",
+    "plot_scatter",
+    "plot_components",
+    "plot_all",
+    "THEOREM_FIGURES",
+    "main",
+]
 
 
-def load_results(path: Path | str) -> pd.DataFrame:
-    """Load simulation results from a .parquet or .csv file."""
-    path = Path(path)
-    if path.suffix == ".parquet":
-        return pd.read_parquet(path)
-    return pd.read_csv(path)
-
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
-
-
-def _save_fig(fig, out_path: Path) -> None:
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("Saved {}", out_path.name)
+def _infer_n_show(df: pd.DataFrame) -> int:
+    """Median of the available n values (the original plot_all default)."""
+    n_values = sorted(df["n"].unique())
+    return n_values[len(n_values) // 2]
 
 
 # ── Public plot functions ─────────────────────────────────────────────────────
 
 
-def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
+def plot_convergence(df: pd.DataFrame, out_path: Path, **kwargs) -> None:
     """Gap sin²∠ − RHS vs p, median ± IQR, for each n and factor."""
-    sns.set_theme(style="whitegrid", context="paper")
+    set_theme()
 
     g = sns.relplot(
         data=df, x="p", y="gap", hue="n", col="j",
@@ -82,12 +98,12 @@ def plot_convergence(df: pd.DataFrame, out_path: Path) -> None:
     _save_fig(g.fig, out_path)
 
 
-def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
+def plot_scatter(df: pd.DataFrame, out_path: Path, **kwargs) -> None:
     """sin²∠ vs RHS scatter at the second-largest p value."""
     p_scatter = sorted(df["p"].unique())[-2]
     sub = df[df["p"] == p_scatter]
 
-    sns.set_theme(style="whitegrid", context="paper")
+    set_theme()
 
     g = sns.relplot(
         data=sub, x="rhs", y="sin2_j", hue="n", col="j",
@@ -95,7 +111,7 @@ def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
         height=3.5, aspect=1.1, palette="tab10",
     )
 
-    def _draw_45(**kwargs):
+    def _draw_45(**kw):
         ax = plt.gca()
         lims = [min(ax.get_xlim()[0], ax.get_ylim()[0]),
                 max(ax.get_xlim()[1], ax.get_ylim()[1])]
@@ -116,8 +132,9 @@ def plot_scatter(df: pd.DataFrame, out_path: Path) -> None:
 def plot_components(
     df: pd.DataFrame,
     out_path: Path,
-    n_show: int,
+    n_show: int | None = None,
     top_margin: float = 0.03,
+    **kwargs,
 ) -> None:
     """Floor and rotation terms vs p for each factor at n=n_show.
 
@@ -125,9 +142,13 @@ def plot_components(
     Row 0 (Floor / Observed): predicted floor vs observed sin²∠.
     Row 1 (Rotation): rotation term 1 − (ŵⱼ)ⱼ² — p-stable, set by F and C alone.
 
-    top_margin: fractional headroom added above the top-row data maximum
-                to prevent whisker clipping (default 0.03 = 3%).
+    n_show: which n to slice; inferred as the median n when None.
+    top_margin: fractional headroom above the top-row data maximum to prevent
+                whisker clipping (default 0.03 = 3%).
     """
+    if n_show is None:
+        n_show = _infer_n_show(df)
+
     sub = df[df["n"] == n_show].copy()
     df_melt = sub.melt(
         id_vars=["n", "p", "j"],
@@ -138,7 +159,7 @@ def plot_components(
         lambda x: "Rotation" if x == "rotation" else "Floor / Observed"
     )
 
-    sns.set_theme(style="whitegrid", context="paper")
+    set_theme()
 
     g = sns.catplot(
         data=df_melt, x="p", y="value", hue="metric",
@@ -165,24 +186,30 @@ def plot_components(
     _save_fig(g.fig, out_path)
 
 
+# ── Registry wiring ───────────────────────────────────────────────────────────
+
+register_figure("theorem1_convergence", plot_convergence, "fig_theorem1_convergence_v2.png")
+register_figure("theorem1_scatter",     plot_scatter,     "fig_theorem1_scatter_v2.png")
+register_figure("theorem1_components",  plot_components,  "fig_theorem1_components_v2.png")
+
+
 def plot_all(
     df: pd.DataFrame,
     out_dir: Path,
     n_show: int | None = None,
 ) -> None:
-    """Generate all three plots and save to out_dir.
+    """Generate all three theorem figures and save to out_dir.
+
+    Thin wrapper over the harness: dispatches the registered THEOREM_FIGURES with
+    a resolved n_show. Output filenames are unchanged.
 
     Example:
         plot_all(df, Path("."), n_show=60)
         plot_all(df, Path("."))   # infers n_show as median of df["n"].unique()
     """
     if n_show is None:
-        n_values = sorted(df["n"].unique())
-        n_show = n_values[len(n_values) // 2]
-
-    plot_convergence(df, out_dir / "fig_theorem1_convergence_v2.png")
-    plot_scatter(df,     out_dir / "fig_theorem1_scatter_v2.png")
-    plot_components(df,  out_dir / "fig_theorem1_components_v2.png", n_show=n_show)
+        n_show = _infer_n_show(df)
+    render_figures(df, out_dir, names=THEOREM_FIGURES, n_show=n_show)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

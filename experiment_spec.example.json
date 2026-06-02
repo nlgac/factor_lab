@@ -1,0 +1,12 @@
+{
+  "_comment": "Experiment half of the split config — the sweep + return process. 'model' references the model spec by path (relative to this file) so one model can be reused across many experiments. Replace with an inline object to self-contain.",
+  "model": "model_spec.example.json",
+  "n_values": [30, 60, 120],
+  "p_values": [200, 500, 1000, 2000, 5000, 10000],
+  "n_reps": 300,
+  "random_seed": 20260511,
+  "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "idio_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "output_path": null,
+  "plot_mode": null
+}

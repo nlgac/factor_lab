@@ -1,0 +1,11 @@
+{
+  "_comment": "Model half of the split config — defines (B, F, D). Reusable across experiments. These values reproduce the canonical diagonal-Gram model: cⱼ=[1.0,0.8,0.6], σ²=[.04,.02,.01], spikes dⱼ=cⱼσⱼ²=[.040,.016,.006] (Assumption 3 ✓).",
+  "k_factors": 3,
+  "factor_variances": [0.04, 0.02, 0.01],
+  "beta_samplers": [
+    {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+    {"distribution": "normal", "loc": 0.0, "scale": 0.8944271909999159},
+    {"distribution": "normal", "loc": 0.0, "scale": 0.7745966692414834}
+  ],
+  "idio_vol_sampler": {"distribution": "constant", "value": 1.0}
+}
