@@ -17,6 +17,24 @@ on F and almost surely as p → ∞,
 where ρⱼ and ŵⱼ are the j-th eigenvalue/eigenvector of
 D̂ = C^{1/2}(F^T F/n)C^{1/2}, and eⱼ is the j-th standard basis vector.
 
+Architecture
+------------
+This script is the dispersion-bias-specific *theorem checker*. The generic,
+dispersion-agnostic mechanics (sampler resolution, return generation, analysis
+dispatch, run-dir allocation) live in ``fl_orchestration`` and are imported
+here. The four pipeline stages are decoupled:
+
+    build_model        — Stage 1: construct one (B, F, D) model for a (n, p) cell
+    simulate_returns   — Stages 2–4: sample one replication's returns  (imported)
+    run_analyses       — dispatch a list of analyses over a context     (imported)
+    run_cell           — drive one (n, p) cell: model → reps → records
+    simulate           — orchestrate cells into a tidy DataFrame
+
+``run_cell`` is the sole owner of the master-RNG draw order, which the
+verification depends on: per cell, ``build_model`` draws first, then the per-rep
+seeds are drawn, then each rep uses an independent child generator. Reordering
+that stream changes every downstream number.
+
 Setup
 -----
 - Loadings: B[j,:] has i.i.d. N(0, cⱼ) entries, independent across j.
@@ -44,13 +62,15 @@ Usage
     python sim_theorem_partii.py sim_thmptii_spec.json
     python sim_theorem_partii.py sim_thmptii_spec.json --plot
     python sim_theorem_partii.py sim_thmptii_spec.json --plot-save --out results.parquet
+
+Notebook idiom
+--------------
+    from sim_theorem_partii import SimSpec, simulate, SineAlignmentAnalysis, Eq6RHSAnalysis
 """
 
 import json
-import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
@@ -60,14 +80,40 @@ from loguru import logger
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from factor_lab.model_builder import FactorModelBuilder
-from factor_lab.flexible_simulator import ReturnsSimulator
-from factor_lab.distributions import create_sampler
 from factor_lab.analysis import SimulationContext
 from factor_lab.analyses.spectral import compute_true_eigenvalues
 from factor_lab.analyses import compute_sine_alignment, register_manifold_distance
+
+# Generic orchestration mechanics. Re-exported under their historical private
+# names so existing call sites and the test suite (sim._make_one_sampler, etc.)
+# keep resolving after the move to fl_orchestration.
+from fl_orchestration import (
+    make_one_sampler as _make_one_sampler,
+    make_samplers as _make_samplers,
+    next_run_dir as _next_run_dir,
+    simulate_returns,
+    run_analyses,
+)
+
+__all__ = [
+    "SimSpec",
+    "ModelSpec",
+    "ExperimentSpec",
+    "SineAlignmentAnalysis",
+    "Eq6RHSAnalysis",
+    "build_model",
+    "run_cell",
+    "simulate",
+    "print_summary",
+    "main",
+    "simulate_returns",
+    "run_analyses",
+    "compute_sine_alignment",
+]
 
 # ── Experiment specification ──────────────────────────────────────────────────
 
@@ -138,49 +184,142 @@ class SimSpec:
         config = {k: v for k, v in config.items() if not k.startswith("_")}
         return cls(**config)
 
+    @classmethod
+    def from_split(cls, model: "ModelSpec", experiment: "ExperimentSpec") -> "SimSpec":
+        """Compose a runtime SimSpec from a (model, experiment) pair.
 
-def _make_one_sampler(spec: dict, rng: np.random.Generator):
-    """Materialize a single sampler from a {"distribution": name, ...} dict."""
-    params = {k: v for k, v in spec.items() if k != "distribution"}
-    return create_sampler(spec["distribution"], rng, **params)
+        The model owns what defines the factor model (k, variances, loading and
+        idio-vol samplers); the experiment owns the sweep and return process
+        (n/p grids, reps, seed, return samplers, output). This keeps the runtime
+        object — what :func:`simulate` consumes — byte-for-byte equivalent to a
+        single unified SimSpec, so the verification path is unchanged.
+        """
+        return cls(
+            k_factors=model.k_factors,
+            factor_variances=list(model.factor_variances),
+            beta_samplers=model.beta_samplers,
+            idio_vol_sampler=model.idio_vol_sampler,
+            n_values=list(experiment.n_values),
+            p_values=list(experiment.p_values),
+            n_reps=experiment.n_reps,
+            random_seed=experiment.random_seed,
+            factor_return_sampler=experiment.factor_return_sampler,
+            idio_return_sampler=experiment.idio_return_sampler,
+            output_path=experiment.output_path,
+            plot_mode=experiment.plot_mode,
+        )
+
+    @classmethod
+    def from_experiment_json(cls, filepath: Union[str, Path]) -> "SimSpec":
+        """Load an experiment-spec JSON and resolve its model reference into a SimSpec.
+
+        The experiment JSON carries a ``"model"`` field that is either a path to
+        a model-spec JSON (resolved relative to the experiment file) or an inline
+        model-spec object. Everything else on the experiment file is the sweep /
+        return process.
+        """
+        experiment = ExperimentSpec.from_json(filepath)
+        model = experiment.resolve_model(base_dir=Path(filepath).resolve().parent)
+        return cls.from_split(model, experiment)
 
 
-def _make_samplers(
-    spec: Union[list[dict], dict], rng: np.random.Generator, k: int
-):
-    """List-or-broadcast sampler resolution matching FactorModelBuilder.build."""
-    if isinstance(spec, list):
-        if len(spec) != k:
-            raise ValueError(
-                f"Expected {k} per-factor samplers, got {len(spec)}: {spec!r}"
-            )
-        return [_make_one_sampler(s, rng) for s in spec]
-    return _make_one_sampler(spec, rng)
+def _drop_comment_keys(config: dict) -> dict:
+    """Drop ``_``-prefixed commentary keys (same convention as SimSpec.from_json)."""
+    return {k: v for k, v in config.items() if not k.startswith("_")}
 
 
-def _next_run_dir(base: Path) -> Path:
-    """Allocate and return ``{base}/results/MM-DD_run_NN`` with NN sequential per date.
+@dataclass
+class ModelSpec:
+    """The factor-model half of the split config: what defines (B, F, D).
 
-    Scans existing siblings matching the date prefix, picks ``max(NN)+1``, and
-    creates the directory. NN is zero-padded to 2 digits (01, 02, …, 99, 100).
-
-    Example:
-        # On 2026-05-19, with results/05-19_run_01 and 05-19_run_02 present,
-        _next_run_dir(Path('.'))  # → Path('results/05-19_run_03'), created.
+    Field semantics are identical to the matching fields on :class:`SimSpec`.
+    A model spec is reusable across many experiments — fix it once, vary the
+    return process / sweep in different experiment specs against it.
     """
-    today = datetime.now().strftime("%m-%d")
-    results_root = base / "results"
-    results_root.mkdir(parents=True, exist_ok=True)
-    pat = re.compile(rf"^{re.escape(today)}_run_(\d+)$")
-    used = [
-        int(m.group(1))
-        for d in results_root.iterdir() if d.is_dir()
-        for m in [pat.match(d.name)] if m
-    ]
-    next_num = max(used, default=0) + 1
-    run_dir = results_root / f"{today}_run_{next_num:02d}"
-    run_dir.mkdir(parents=True, exist_ok=False)
-    return run_dir
+
+    k_factors: int = 3
+    factor_variances: list[float] = field(
+        default_factory=lambda: [0.04, 0.02, 0.01]
+    )
+    beta_samplers: Union[list[dict], dict] = field(
+        default_factory=lambda: [
+            {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.8))},
+            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.6))},
+        ]
+    )
+    idio_vol_sampler: dict = field(
+        default_factory=lambda: {"distribution": "constant", "value": 1.0}
+    )
+
+    @classmethod
+    def from_json(cls, filepath: Union[str, Path]) -> "ModelSpec":
+        with open(filepath, encoding="utf-8") as f:
+            return cls(**_drop_comment_keys(json.load(f)))
+
+
+@dataclass
+class ExperimentSpec:
+    """The experiment half of the split config: the sweep and return process.
+
+    ``model`` references the factor-model half: either a path to a ModelSpec
+    JSON (resolved relative to the experiment file) or an inline model-spec
+    object. When omitted, the ModelSpec defaults are used.
+    """
+
+    model: Union[str, dict, None] = None
+    n_values: list[int] = field(default_factory=lambda: [30, 60, 120])
+    p_values: list[int] = field(
+        default_factory=lambda: [200, 500, 1000, 2000, 5000, 10_000]
+    )
+    n_reps: int = 300
+    random_seed: int = 20260511
+    factor_return_sampler: Union[list[dict], dict] = field(
+        default_factory=lambda: {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    )
+    idio_return_sampler: dict = field(
+        default_factory=lambda: {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+    )
+    output_path: Optional[str] = None
+    plot_mode: Optional[str] = None
+
+    @classmethod
+    def from_json(cls, filepath: Union[str, Path]) -> "ExperimentSpec":
+        with open(filepath, encoding="utf-8") as f:
+            return cls(**_drop_comment_keys(json.load(f)))
+
+    def resolve_model(self, base_dir: Path) -> ModelSpec:
+        """Resolve the ``model`` reference into a ModelSpec.
+
+        - ``None``  → ModelSpec defaults.
+        - ``dict``  → inline ModelSpec(**dict).
+        - ``str``   → path to a model-spec JSON, relative to ``base_dir`` if not
+                      absolute.
+        """
+        if self.model is None:
+            return ModelSpec()
+        if isinstance(self.model, dict):
+            return ModelSpec(**_drop_comment_keys(self.model))
+        model_path = Path(self.model)
+        if not model_path.is_absolute():
+            model_path = base_dir / model_path
+        return ModelSpec.from_json(model_path)
+
+
+def _register_sine_distance() -> None:
+    """Register the diagnostic ``dist_sine`` manifold distance, once per process.
+
+    Idempotent: a guard checks the registry first so repeated ``simulate`` calls
+    (and the test suite) do not double-register. The centering difference vs. the
+    uncentered Y used in the LHS means this value is diagnostic only.
+    """
+    from factor_lab.analyses.manifold import _EXTRA_DISTANCES
+    if 'dist_sine' not in _EXTRA_DISTANCES:
+        register_manifold_distance(
+            'dist_sine',
+            lambda bt, be: compute_sine_alignment(bt, be)[1],
+        )
+
 
 # ── SimulationAnalysis implementations ───────────────────────────────────────
 
@@ -254,7 +393,7 @@ class Eq6RHSAnalysis:
                 "rotation": rotation, "rhos": rhos, "delta2": delta2}
 
 
-# ── Model construction ────────────────────────────────────────────────────────
+# ── Model construction (Stage 1) ──────────────────────────────────────────────
 
 
 def build_model(spec: SimSpec, p: int, rng: np.random.Generator):
@@ -298,64 +437,69 @@ def _rep_records(
     ]
 
 
+def run_cell(spec: SimSpec, n: int, p: int, rng_master: np.random.Generator) -> list[dict]:
+    """Drive one (n, p) cell of the verification and return its per-factor records.
+
+    Owns the master-RNG draw order, which the verification's reproducibility
+    depends on:
+
+        1. ``build_model`` draws β (and idio vols) from ``rng_master`` — a
+           p-dependent number of draws.
+        2. ``compute_true_eigenvalues`` runs ARPACK on the fixed model and draws
+           nothing from ``rng_master``.
+        3. The n_reps per-rep seeds are drawn from ``rng_master``.
+        4. Each rep uses an independent child generator seeded from (3).
+
+    The model is rebuilt with fresh β every cell — the conditional-on-F regime
+    the Part-(ii) claim is stated under. This per-cell-fresh contract is specific
+    to the *verification*; reusing one model across cells (now possible via
+    ``simulate_returns``) would be a different experiment and must not be wired in
+    here.
+    """
+    # (1) fresh model for this cell.
+    model = build_model(spec, p, rng_master)
+    # (2) population directions once per cell; ARPACK stays out of the rep loop.
+    _, b_pop = compute_true_eigenvalues(model, spec.k_factors)
+    lhs_analysis = SineAlignmentAnalysis(b_pop)
+    rhs_analysis = Eq6RHSAnalysis()
+
+    logger.debug("n={}, p={}: c={}", n, p, list((model.B ** 2).mean(axis=1)))
+
+    # (3) independent seed per rep; master rng advances only here.
+    rep_seeds = rng_master.integers(0, 2 ** 31, size=spec.n_reps)
+    records: list[dict] = []
+    for r in range(spec.n_reps):
+        # (4) child generator — isolated from rng_master.
+        rep_rng = np.random.default_rng(int(rep_seeds[r]))
+        context = simulate_returns(
+            model=model, n=n,
+            factor_return_spec=spec.factor_return_sampler,
+            idio_return_spec=spec.idio_return_sampler,
+            k=spec.k_factors, rep_rng=rep_rng,
+        )
+        res = run_analyses(context, [lhs_analysis, rhs_analysis])
+        # LHS/RHS result keys are disjoint, so the merged dict serves as both.
+        records.extend(_rep_records(spec.k_factors, n, p, res, res))
+    return records
+
+
 # ── Main simulation ───────────────────────────────────────────────────────────
 
 
 def simulate(spec: SimSpec) -> pd.DataFrame:
-    # Register sine distance once per process so ManifoldDistanceAnalysis
-    # picks it up when used alongside this simulation.  The registration is
-    # guarded to be idempotent; the centering difference vs. uncentered Y
-    # used here means this value is diagnostic only.
-    from factor_lab.analyses.manifold import _EXTRA_DISTANCES
-    if 'dist_sine' not in _EXTRA_DISTANCES:
-        register_manifold_distance(
-            'dist_sine',
-            lambda bt, be: compute_sine_alignment(bt, be)[1],
-        )
+    """Run the full verification sweep and return a tidy per-rep DataFrame.
+
+    Thin orchestrator: register the diagnostic distance, then drive each (n, p)
+    cell via :func:`run_cell` in the original loop order, and concatenate.
+    """
+    _register_sine_distance()
 
     rng_master = np.random.default_rng(spec.random_seed)
-    simulator = ReturnsSimulator()   # stateless; all draws go through samplers
-    rhs_analysis = Eq6RHSAnalysis()
     records: list[dict] = []
-
     for n in spec.n_values:
         logger.info("Starting n = {}", n)
         for p in tqdm(spec.p_values, desc=f"n={n}", unit="p"):
-
-            # Build model once per (n, p) cell — fresh β each time.
-            model = build_model(spec, p, rng_master)
-
-            # Population directions computed once here; ARPACK skips the rep loop.
-            _, b_pop = compute_true_eigenvalues(model, spec.k_factors)
-            lhs_analysis = SineAlignmentAnalysis(b_pop)
-
-            logger.debug("n={}, p={}: c={}",
-                         n, p, list((model.B ** 2).mean(axis=1)))
-
-            # Independent seed per rep; master rng advances only here.
-            rep_seeds = rng_master.integers(0, 2 ** 31, size=spec.n_reps)
-            for r in range(spec.n_reps):
-                rep_rng = np.random.default_rng(int(rep_seeds[r]))
-                factor_samplers = _make_samplers(
-                    spec.factor_return_sampler, rep_rng, spec.k_factors
-                )
-                idio_sampler = _make_one_sampler(spec.idio_return_sampler, rep_rng)
-                sim_out = simulator.simulate(
-                    model=model, n_periods=n,
-                    factor_return_samplers=factor_samplers,
-                    idio_return_sampler=idio_sampler,
-                )
-                context = SimulationContext(
-                    model=model,
-                    security_returns=sim_out["security_returns"],
-                    factor_returns=sim_out["factor_returns"],
-                    idio_returns=sim_out["idio_returns"],
-                )
-                records.extend(
-                    _rep_records(spec.k_factors, n, p,
-                                 lhs_analysis.analyze(context),
-                                 rhs_analysis.analyze(context))
-                )
+            records.extend(run_cell(spec, n, p, rng_master))
 
     return pd.DataFrame(records)
 
@@ -392,6 +536,17 @@ def main() -> None:
              "If omitted, uses the built-in defaults (the original experiment).",
     )
     parser.add_argument(
+        "--experiment", type=str, default=None,
+        help="Experiment-spec JSON (split config). Its 'model' field references "
+             "a model-spec JSON by path or inline. Mutually exclusive with the "
+             "positional unified spec.",
+    )
+    parser.add_argument(
+        "--model", type=str, default=None,
+        help="Model-spec JSON (split config). Overrides the 'model' reference in "
+             "the --experiment file; pair with --experiment.",
+    )
+    parser.add_argument(
         "--out", type=Path, default=None,
         help="Output path for the .parquet file. Overrides spec.output_path; "
              "defaults to sim_thmptii.parquet next to this script.",
@@ -407,7 +562,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.config_file is None:
+    if args.experiment is not None:
+        # Split config: experiment references model (by path or inline). An
+        # explicit --model overrides whatever the experiment file points at.
+        experiment = ExperimentSpec.from_json(args.experiment)
+        if args.model is not None:
+            model = ModelSpec.from_json(args.model)
+        else:
+            model = experiment.resolve_model(
+                base_dir=Path(args.experiment).resolve().parent
+            )
+        spec = SimSpec.from_split(model, experiment)
+        logger.info("Loaded split config: model={}, experiment={}",
+                    args.model or experiment.model, args.experiment)
+    elif args.config_file is None:
         logger.info("No config file given; using built-in SimSpec defaults.")
         spec = SimSpec()
     else:
