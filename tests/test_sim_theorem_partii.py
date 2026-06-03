@@ -242,6 +242,246 @@ class TestSimSpec:
         )
 
 
+# ── ModelSpec / ExperimentSpec (split config) ────────────────────────────────
+
+class TestSplitConfig:
+    """The model/experiment JSON split — items 2 in the roadmap.
+
+    Each test pins down a contract that the rest of the verification depends on
+    or that a downstream consumer (notebook, second script) would lean on.
+    """
+
+    def test_model_spec_defaults_match_simspec(self, default_spec):
+        ms = sim.ModelSpec()
+        assert ms.k_factors == default_spec.k_factors
+        assert ms.factor_variances == default_spec.factor_variances
+        assert ms.beta_samplers == default_spec.beta_samplers
+        assert ms.idio_vol_sampler == default_spec.idio_vol_sampler
+
+    def test_experiment_spec_defaults_match_simspec(self, default_spec):
+        es = sim.ExperimentSpec()
+        assert es.model is None
+        assert es.n_values == default_spec.n_values
+        assert es.p_values == default_spec.p_values
+        assert es.n_reps == default_spec.n_reps
+        assert es.random_seed == default_spec.random_seed
+        assert es.factor_return_sampler == default_spec.factor_return_sampler
+        assert es.idio_return_sampler == default_spec.idio_return_sampler
+
+    def test_model_spec_from_json_strips_comments(self, tmp_path):
+        path = tmp_path / "model.json"
+        path.write_text(json.dumps({
+            "_comment": "ignored",
+            "k_factors": 2,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        loaded = sim.ModelSpec.from_json(path)
+        assert loaded.k_factors == 2
+
+    def test_experiment_spec_from_json_strips_comments(self, tmp_path):
+        path = tmp_path / "exp.json"
+        path.write_text(json.dumps({
+            "_comment": "ignored",
+            "n_values": [30],
+            "p_values": [100],
+            "n_reps": 1,
+            "random_seed": 7,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }))
+        loaded = sim.ExperimentSpec.from_json(path)
+        assert loaded.random_seed == 7
+
+    def test_resolve_model_none_uses_defaults(self, tmp_path):
+        spec = sim.ExperimentSpec(model=None).resolve_model(tmp_path)
+        assert isinstance(spec, sim.ModelSpec)
+        assert spec.k_factors == sim.ModelSpec().k_factors
+
+    def test_resolve_model_inline_dict(self, tmp_path):
+        inline = {
+            "k_factors": 5,
+            "factor_variances": [0.1] * 5,
+            "beta_samplers": [{"distribution": "normal"}] * 5,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }
+        spec = sim.ExperimentSpec(model=inline).resolve_model(tmp_path)
+        assert spec.k_factors == 5
+
+    def test_resolve_model_inline_dict_strips_comments(self, tmp_path):
+        """Inline model dicts should accept _-prefixed comment keys too."""
+        inline = {
+            "_comment": "ignored",
+            "k_factors": 2,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }
+        spec = sim.ExperimentSpec(model=inline).resolve_model(tmp_path)
+        assert spec.k_factors == 2
+
+    def test_resolve_model_relative_path(self, tmp_path):
+        (tmp_path / "model.json").write_text(json.dumps({
+            "k_factors": 4,
+            "factor_variances": [0.04, 0.02, 0.01, 0.005],
+            "beta_samplers": [{"distribution": "normal"}] * 4,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        spec = sim.ExperimentSpec(model="model.json").resolve_model(tmp_path)
+        assert spec.k_factors == 4
+
+    def test_resolve_model_absolute_path(self, tmp_path):
+        model_path = tmp_path / "abs_model.json"
+        model_path.write_text(json.dumps({
+            "k_factors": 2,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        # Pass a different base_dir to prove the absolute path wins.
+        spec = sim.ExperimentSpec(model=str(model_path)).resolve_model(
+            base_dir=Path("/nonexistent"),
+        )
+        assert spec.k_factors == 2
+
+    def test_from_split_equivalent_to_unified(self, default_spec):
+        composed = sim.SimSpec.from_split(sim.ModelSpec(), sim.ExperimentSpec())
+        for f in ("k_factors", "n_values", "p_values", "n_reps", "random_seed",
+                  "factor_variances", "beta_samplers", "idio_vol_sampler",
+                  "factor_return_sampler", "idio_return_sampler"):
+            assert getattr(composed, f) == getattr(default_spec, f), f"mismatch on {f}"
+
+    def test_from_experiment_json_end_to_end(self, tmp_path):
+        (tmp_path / "model.json").write_text(json.dumps({
+            "k_factors": 2,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        (tmp_path / "exp.json").write_text(json.dumps({
+            "model": "model.json",
+            "n_values": [30], "p_values": [100],
+            "n_reps": 1, "random_seed": 99,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }))
+        spec = sim.SimSpec.from_experiment_json(tmp_path / "exp.json")
+        assert spec.k_factors == 2
+        assert spec.random_seed == 99
+        assert spec.n_values == [30]
+
+    def test_split_runtime_matches_unified_byte_for_byte(self, tmp_path):
+        """Split-config SimSpec must produce the exact same DataFrame as the
+        equivalent unified SimSpec — the load-bearing reproducibility contract."""
+        small = dict(
+            k_factors=3,
+            n_values=[30], p_values=[100], n_reps=3, random_seed=2026,
+            factor_variances=[0.04, 0.02, 0.01],
+            beta_samplers=[{"distribution": "normal"}] * 3,
+            idio_vol_sampler={"distribution": "constant", "value": 1.0},
+            factor_return_sampler={"distribution": "normal"},
+            idio_return_sampler={"distribution": "normal"},
+        )
+        # Unified path.
+        unified = sim.SimSpec(**small)
+        # Split path: write to JSON, then round-trip via from_experiment_json.
+        (tmp_path / "m.json").write_text(json.dumps({
+            "k_factors": small["k_factors"],
+            "factor_variances": small["factor_variances"],
+            "beta_samplers": small["beta_samplers"],
+            "idio_vol_sampler": small["idio_vol_sampler"],
+        }))
+        (tmp_path / "e.json").write_text(json.dumps({
+            "model": "m.json",
+            "n_values": small["n_values"], "p_values": small["p_values"],
+            "n_reps": small["n_reps"], "random_seed": small["random_seed"],
+            "factor_return_sampler": small["factor_return_sampler"],
+            "idio_return_sampler": small["idio_return_sampler"],
+        }))
+        split = sim.SimSpec.from_experiment_json(tmp_path / "e.json")
+        pd.testing.assert_frame_equal(sim.simulate(unified), sim.simulate(split))
+
+
+# ── fl_orchestration generic seams ────────────────────────────────────────────
+
+class TestOrchestrationSeams:
+    """The dispersion-agnostic seams in fl_orchestration that the script and
+    any future second script consume. Verifies the public API stays callable
+    and that the stage separation (fix-model-vary-returns) actually works."""
+
+    def test_simulate_returns_isolates_to_rep_rng(self, default_spec):
+        """simulate_returns must draw strictly from rep_rng — passing the same
+        rep_rng seed must produce the same returns regardless of master state."""
+        from fl_orchestration import simulate_returns
+        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
+        ctx_a = simulate_returns(
+            model, n=30,
+            factor_return_spec=default_spec.factor_return_sampler,
+            idio_return_spec=default_spec.idio_return_sampler,
+            k=default_spec.k_factors,
+            rep_rng=np.random.default_rng(7),
+        )
+        ctx_b = simulate_returns(
+            model, n=30,
+            factor_return_spec=default_spec.factor_return_sampler,
+            idio_return_spec=default_spec.idio_return_sampler,
+            k=default_spec.k_factors,
+            rep_rng=np.random.default_rng(7),
+        )
+        np.testing.assert_array_equal(ctx_a.security_returns, ctx_b.security_returns)
+
+    def test_simulate_returns_fix_model_vary_distribution(self, default_spec):
+        """The headline use case from the spec: fix the model, vary the return
+        distribution. Different distributions must give different returns even
+        with the same per-rep seed."""
+        from fl_orchestration import simulate_returns
+        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
+        ctx_normal = simulate_returns(
+            model, n=30,
+            factor_return_spec={"distribution": "normal"},
+            idio_return_spec={"distribution": "normal"},
+            k=default_spec.k_factors,
+            rep_rng=np.random.default_rng(1),
+        )
+        ctx_t = simulate_returns(
+            model, n=30,
+            factor_return_spec={"distribution": "student_t", "df": 5},
+            idio_return_spec={"distribution": "normal"},
+            k=default_spec.k_factors,
+            rep_rng=np.random.default_rng(1),
+        )
+        assert not np.allclose(ctx_normal.security_returns, ctx_t.security_returns)
+        # Same model identity is preserved across both contexts.
+        assert ctx_normal.model is model and ctx_t.model is model
+
+    def test_run_analyses_merges_disjoint_results(self, default_spec):
+        """run_analyses concatenates result dicts; key collisions across analyses
+        would silently drop a value. The verification's LHS/RHS keys are disjoint,
+        which this test fixes as a contract."""
+        from fl_orchestration import simulate_returns, run_analyses
+        from factor_lab.analyses.spectral import compute_true_eigenvalues
+        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
+        _, b_pop = compute_true_eigenvalues(model, default_spec.k_factors)
+        ctx = simulate_returns(
+            model, n=30,
+            factor_return_spec=default_spec.factor_return_sampler,
+            idio_return_spec=default_spec.idio_return_sampler,
+            k=default_spec.k_factors,
+            rep_rng=np.random.default_rng(0),
+        )
+        lhs = sim.SineAlignmentAnalysis(b_pop)
+        rhs = sim.Eq6RHSAnalysis()
+        # Each analysis's result keys must not collide with the other's.
+        lhs_keys = set(lhs.analyze(ctx))
+        rhs_keys = set(rhs.analyze(ctx))
+        assert lhs_keys.isdisjoint(rhs_keys), (
+            f"LHS keys {lhs_keys} and RHS keys {rhs_keys} collide"
+        )
+        merged = run_analyses(ctx, [lhs, rhs])
+        assert set(merged) == lhs_keys | rhs_keys
+
+
 # ── _make_one_sampler / _make_samplers ────────────────────────────────────────
 
 class TestSamplerHelpers:
@@ -686,6 +926,75 @@ class TestMain:
         sim.main()
         assert out.exists()
         assert len(plot_calls) == 1
+
+    def test_experiment_flag_loads_split_config(self, monkeypatch, tmp_path, results_df):
+        """`--experiment exp.json` follows the model reference and composes a SimSpec."""
+        (tmp_path / "model.json").write_text(json.dumps({
+            "k_factors": 3,
+            "factor_variances": [0.04, 0.02, 0.01],
+            "beta_samplers": [{"distribution": "normal"}] * 3,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        (tmp_path / "exp.json").write_text(json.dumps({
+            "model": "model.json",
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 111,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }))
+        captured = {}
+
+        def fake_simulate(spec):
+            captured["spec"] = spec
+            return results_df
+
+        monkeypatch.setattr(sim, "simulate", fake_simulate)
+        out = tmp_path / "out.parquet"
+        monkeypatch.setattr(sys, "argv", [
+            "sim_theorem_partii.py",
+            "--experiment", str(tmp_path / "exp.json"),
+            "--out", str(out),
+        ])
+        sim.main()
+        assert captured["spec"].random_seed == 111
+        assert captured["spec"].k_factors == 3
+
+    def test_model_flag_overrides_experiment_reference(self, monkeypatch, tmp_path, results_df):
+        """`--model m.json` overrides whatever the experiment file points at."""
+        (tmp_path / "referenced.json").write_text(json.dumps({
+            "k_factors": 5,
+            "factor_variances": [0.04] * 5,
+            "beta_samplers": [{"distribution": "normal"}] * 5,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        (tmp_path / "override.json").write_text(json.dumps({
+            "k_factors": 2,
+            "factor_variances": [0.04, 0.02],
+            "beta_samplers": [{"distribution": "normal"}] * 2,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }))
+        (tmp_path / "exp.json").write_text(json.dumps({
+            "model": "referenced.json",
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }))
+        captured = {}
+
+        def fake_simulate(spec):
+            captured["spec"] = spec
+            return results_df
+
+        monkeypatch.setattr(sim, "simulate", fake_simulate)
+        out = tmp_path / "out.parquet"
+        monkeypatch.setattr(sys, "argv", [
+            "sim_theorem_partii.py",
+            "--experiment", str(tmp_path / "exp.json"),
+            "--model",      str(tmp_path / "override.json"),
+            "--out", str(out),
+        ])
+        sim.main()
+        # --model wins: composed SimSpec inherits k=2, not the referenced k=5.
+        assert captured["spec"].k_factors == 2
 
 
 # ── print_summary ─────────────────────────────────────────────────────────────
