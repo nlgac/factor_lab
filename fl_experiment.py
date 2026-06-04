@@ -258,13 +258,15 @@ def build_model(model_spec: ModelSpec, p: int, rng: np.random.Generator):
     model spec. Draws from ``rng`` — this is the master-RNG draw in step (1) of
     the per-cell order.
     """
-    return FactorModelBuilder(rng=rng).build(
+    model = FactorModelBuilder(rng=rng).build(
         p=p,
         k=model_spec.k_factors,
         beta_samplers=make_samplers(model_spec.beta_samplers, rng, model_spec.k_factors),
         idio_vol_sampler=make_one_sampler(model_spec.idio_vol_sampler, rng),
         factor_variances=list(model_spec.factor_variances),
     )
+    logger.debug("built model: k={}, p={}", model_spec.k_factors, p)
+    return model
 
 
 # ── The engine ────────────────────────────────────────────────────────────────
@@ -306,6 +308,7 @@ def run_cell(
         )
         merged = run_analyses(context, analyses)
         records.extend(experiment.record(n, p, merged))
+    logger.debug("cell n={}, p={} done: {} records", n, p, len(records))
     return records
 
 
@@ -342,22 +345,31 @@ def run_experiment(
     if callable(setup):
         setup()
 
+    logger.info(
+        "Running {} sweep: n={}, p={}, reps={}, seed={}",
+        design_spec.sampling, design_spec.n_values, design_spec.p_values,
+        design_spec.n_reps, design_spec.random_seed,
+    )
+
     if design_spec.sampling == "nested":
-        return _run_nested(model_spec, design_spec, experiment, rng, progress)
-    if design_spec.sampling != "independent":
+        df = _run_nested(model_spec, design_spec, experiment, rng, progress)
+    elif design_spec.sampling == "independent":
+        records: list[dict] = []
+        for n in design_spec.n_values:
+            logger.info("Starting n = {}", n)
+            p_iter = (tqdm(design_spec.p_values, desc=f"n={n}", unit="p")
+                      if progress else design_spec.p_values)
+            for p in p_iter:
+                records.extend(run_cell(model_spec, design_spec, experiment, n, p, rng))
+        df = pd.DataFrame(records)
+    else:
         raise ValueError(
             f"Unknown sampling mode {design_spec.sampling!r}; "
             "expected 'independent' or 'nested'."
         )
 
-    records: list[dict] = []
-    for n in design_spec.n_values:
-        logger.info("Starting n = {}", n)
-        p_iter = tqdm(design_spec.p_values, desc=f"n={n}", unit="p") if progress else design_spec.p_values
-        for p in p_iter:
-            records.extend(run_cell(model_spec, design_spec, experiment, n, p, rng))
-
-    return pd.DataFrame(records)
+    logger.info("Sweep complete: {} rows", len(df))
+    return df
 
 
 # ── Nested (monotone-in-p) sampling ───────────────────────────────────────────

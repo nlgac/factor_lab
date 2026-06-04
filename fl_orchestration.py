@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Sequence, Union
 
 import numpy as np
+from loguru import logger
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -103,6 +104,7 @@ def next_run_dir(base: Path) -> Path:
     next_num = max(used, default=0) + 1
     run_dir = results_root / f"{today}_run_{next_num:02d}"
     run_dir.mkdir(parents=True, exist_ok=False)
+    logger.debug("allocated run dir: {}", run_dir)
     return run_dir
 
 
@@ -137,6 +139,8 @@ def simulate_returns(
         factor_return_samplers=factor_samplers,
         idio_return_sampler=idio_sampler,
     )
+    # Per-rep stage: TRACE so it stays quiet at INFO/DEBUG but is capturable.
+    logger.trace("sampled returns: n={}, p={}", n, model.p)
     return SimulationContext(
         model=model,
         security_returns=sim_out["security_returns"],
@@ -160,4 +164,5 @@ def run_analyses(context: SimulationContext, analyses: Sequence) -> dict:
     merged: dict = {}
     for analysis in analyses:
         merged.update(analysis.analyze(context))
+    logger.trace("ran {} analyses -> {} result keys", len(analyses), len(merged))
     return merged
