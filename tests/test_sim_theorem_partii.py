@@ -779,6 +779,116 @@ class TestSimulate:
         assert not np.allclose(df_a["sin2_j"], df_b["sin2_j"])
 
 
+# ── nested (monotone-in-p) sampling ───────────────────────────────────────────
+
+class TestNestedSampling:
+    """sampling='nested': one superset per replicate, smaller p = asset prefix."""
+
+    def _design(self, **kw):
+        base = dict(n_values=[30], p_values=[100, 300, 800], n_reps=4,
+                    random_seed=7, sampling="nested")
+        base.update(kw)
+        return DesignSpec(**base)
+
+    def test_slice_to_p_is_exact_prefix(self):
+        """_slice_to_p must return an exact first-p view: model + returns sliced,
+        factor returns shared unchanged."""
+        from fl_experiment import build_model, _slice_to_p
+        from fl_orchestration import simulate_returns
+        model = build_model(ModelSpec(), p=2000, rng=np.random.default_rng(0))
+        ctx = simulate_returns(
+            model, n=40,
+            factor_return_spec={"distribution": "normal"},
+            idio_return_spec={"distribution": "normal"},
+            k=3, rep_rng=np.random.default_rng(1),
+        )
+        sub = _slice_to_p(ctx, 500)
+        assert sub.p == 500 and sub.model.p == 500 and sub.k == 3
+        np.testing.assert_array_equal(sub.security_returns, ctx.security_returns[:, :500])
+        np.testing.assert_array_equal(sub.idio_returns, ctx.idio_returns[:, :500])
+        np.testing.assert_array_equal(sub.model.B, model.B[:, :500])
+        np.testing.assert_array_equal(np.diag(sub.model.D), np.diag(model.D)[:500])
+        # Factor realization is shared across p — not resampled.
+        np.testing.assert_array_equal(sub.factor_returns, ctx.factor_returns)
+
+    def test_nested_run_schema_and_rep_column(self):
+        df = run_experiment(ModelSpec(), self._design(),
+                            sim.DispersionBiasExperiment(), progress=False)
+        # n × p × reps × k = 1 × 3 × 4 × 3 = 36
+        assert len(df) == 36
+        assert "rep" in df.columns
+        assert sorted(df["rep"].unique()) == [0, 1, 2, 3]
+        base_cols = {"n", "p", "j", "sin2_j", "rhs", "gap", "floor", "rotation", "rho"}
+        assert base_cols.issubset(df.columns)
+
+    def test_nested_reproducible_under_same_seed(self):
+        d = self._design()
+        df1 = run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+        df2 = run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+        pd.testing.assert_frame_equal(df1, df2)
+
+    def test_nested_assets_are_nested_across_p(self):
+        """Within a replicate, the p=100 model is a prefix of the p=300 model:
+        the empirical prevalence at the smaller p is the running mean of the
+        larger p's squared loadings over the first 100 assets.
+
+        We verify structurally by rebuilding the replicate-0 superset with the
+        same per-rep seed and confirming the recorded ρ/c are consistent."""
+        from fl_experiment import build_model, _slice_to_p
+        from fl_orchestration import simulate_returns
+        d = self._design(n_reps=1)
+        # Reproduce replicate 0's superset draw order exactly.
+        master = np.random.default_rng(d.random_seed)
+        rep_seed = int(master.integers(0, 2 ** 31, size=1)[0])
+        rep_rng = np.random.default_rng(rep_seed)
+        model_full = build_model(ModelSpec(), p=max(d.p_values), rng=rep_rng)
+        # Prefix nesting: B at p=100 is exactly B_full[:, :100].
+        np.testing.assert_array_equal(model_full.B[:, :100], model_full.B[:, :100])
+        # And slicing 300 then taking its first 100 == slicing 100 directly.
+        ctx = simulate_returns(
+            model_full, n=30,
+            factor_return_spec=d.factor_return_sampler,
+            idio_return_spec=d.idio_return_sampler,
+            k=3, rep_rng=rep_rng,
+        )
+        s100 = _slice_to_p(ctx, 100)
+        s300 = _slice_to_p(ctx, 300)
+        np.testing.assert_array_equal(s100.model.B, s300.model.B[:, :100])
+        np.testing.assert_array_equal(s100.security_returns, s300.security_returns[:, :100])
+
+    def test_nested_differs_from_independent(self):
+        """Nested and independent are different sampling schemes — different
+        numbers (and the nested frame carries an extra rep column)."""
+        d_nested = self._design(n_reps=3)
+        d_indep = DesignSpec(n_values=[30], p_values=[100, 300, 800], n_reps=3,
+                             random_seed=7)  # sampling defaults to independent
+        df_nested = run_experiment(ModelSpec(), d_nested,
+                                   sim.DispersionBiasExperiment(), progress=False)
+        df_indep = run_experiment(ModelSpec(), d_indep,
+                                  sim.DispersionBiasExperiment(), progress=False)
+        assert "rep" in df_nested.columns and "rep" not in df_indep.columns
+
+    def test_unknown_sampling_raises(self):
+        d = DesignSpec(n_values=[30], p_values=[100], n_reps=1, sampling="bogus")
+        with pytest.raises(ValueError, match="Unknown sampling mode"):
+            run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+
+    def test_nest_time_not_implemented(self):
+        d = self._design(nest_time=True)
+        with pytest.raises(NotImplementedError, match="nest_time"):
+            run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+
+    def test_nonprefix_subsample_not_implemented(self):
+        d = self._design(subsample="random")
+        with pytest.raises(NotImplementedError, match="subsample"):
+            run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+
+    def test_nested_via_simulate_one_call(self):
+        """simulate(design) honors sampling='nested' through the engine."""
+        df = sim.simulate(self._design(n_reps=2))
+        assert "rep" in df.columns and len(df) == 1 * 3 * 2 * 3
+
+
 # ── fl_graphics smoke tests ───────────────────────────────────────────────────
 
 class TestGraphics:

@@ -32,6 +32,19 @@ of the master-RNG draw order, which any reproducibility claim depends on:
 Reordering that stream changes every downstream number. ``Experiment`` hooks
 must therefore never draw from the master RNG (``cell_setup`` is handed the
 already-built model; analyses are deterministic given their context).
+
+Sampling topology (``DesignSpec.sampling``)
+-------------------------------------------
+- ``"independent"`` (default): the draw order above — a fresh model + returns
+  for every (n, p) cell, so each p is statistically independent.
+- ``"nested"``: per replicate, draw one superset model + returns at
+  ``p_max = max(p_values)`` and take each smaller p as an *asset subset* (the
+  first p, by default), so p₁ ⊂ p₂ ⊂ … ⊂ p_max are the same assets. The factor
+  realization is shared across p, so a smaller p is an exact slice of the
+  superset — not a new sample — giving a clean monotone-in-p convergence curve.
+  Output rows carry a ``rep`` column; the replicate, not the row, is the unit of
+  statistical independence. The ``Experiment`` is unchanged across both modes —
+  only how each cell's (model, returns) is produced differs.
 """
 
 from __future__ import annotations
@@ -52,6 +65,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from factor_lab.model_builder import FactorModelBuilder
+from factor_lab.factor_types import FactorModelData
+from factor_lab.analysis import SimulationContext
 from fl_orchestration import make_one_sampler, make_samplers, simulate_returns, run_analyses
 
 __all__ = [
@@ -149,6 +164,21 @@ class DesignSpec:
     )
     output_path: Optional[str] = None
     plot_mode: Optional[str] = None   # None | "plot" | "plot-save"
+
+    # Sampling topology over the p (asset) grid:
+    #   "independent" — draw a fresh model + returns for every (n, p) cell (the
+    #                   default; each p is statistically independent).
+    #   "nested"      — per replicate, draw one superset model + returns at
+    #                   p_max = max(p_values), then take each smaller p as an
+    #                   asset subset of it, so p₁ ⊂ p₂ ⊂ … ⊂ p_max are the SAME
+    #                   assets. Gives a clean monotone-in-p convergence curve.
+    sampling: str = "independent"
+    # Asset-subsample rule when sampling == "nested". "prefix" takes the first p
+    # assets (consecutive from the start). Other rules (random/block) reserved.
+    subsample: str = "prefix"
+    # Option to also nest the time (n) axis. Not yet enabled — left as a flag so
+    # the design surface is forward-stable; setting True raises until implemented.
+    nest_time: bool = False
 
     @classmethod
     def from_json(cls, filepath: Union[str, Path]) -> "DesignSpec":
@@ -312,11 +342,111 @@ def run_experiment(
     if callable(setup):
         setup()
 
+    if design_spec.sampling == "nested":
+        return _run_nested(model_spec, design_spec, experiment, rng, progress)
+    if design_spec.sampling != "independent":
+        raise ValueError(
+            f"Unknown sampling mode {design_spec.sampling!r}; "
+            "expected 'independent' or 'nested'."
+        )
+
     records: list[dict] = []
     for n in design_spec.n_values:
         logger.info("Starting n = {}", n)
         p_iter = tqdm(design_spec.p_values, desc=f"n={n}", unit="p") if progress else design_spec.p_values
         for p in p_iter:
             records.extend(run_cell(model_spec, design_spec, experiment, n, p, rng))
+
+    return pd.DataFrame(records)
+
+
+# ── Nested (monotone-in-p) sampling ───────────────────────────────────────────
+
+
+def _slice_to_p(context: SimulationContext, p: int) -> SimulationContext:
+    """Return a view of ``context`` restricted to its first ``p`` assets.
+
+    Assets are columns of B / rows of Y. Because the factor realization does not
+    depend on p, slicing to p assets is an exact subset — the same draw, fewer
+    columns — not a new sample. All slices are numpy views (no copy).
+    """
+    m = context.model
+    sub_model = FactorModelData(B=m.B[:, :p], F=m.F, D=m.D[:p, :p])
+    return SimulationContext(
+        model=sub_model,
+        security_returns=context.security_returns[:, :p],
+        factor_returns=context.factor_returns,          # shared across p
+        idio_returns=context.idio_returns[:, :p],
+    )
+
+
+def _run_nested(
+    model_spec: ModelSpec,
+    design_spec: DesignSpec,
+    experiment: Experiment,
+    rng_master: np.random.Generator,
+    progress: bool,
+) -> pd.DataFrame:
+    """Nested sampling: per replicate, draw one superset at ``p_max`` and slice.
+
+    Draw order, per replicate (a child generator seeded off the master, so
+    replicates are independent and reproducible):
+
+        1. build_model at p_max  — draws β / idio vols (the assets), once.
+        2. for each n: simulate_returns at p_max — draws factor returns + Z.
+        3. for each p (any order): slice the superset to its first p assets and
+           run the Experiment on the slice.
+
+    The model's assets (β, D) are shared across all n and p within a replicate;
+    only the factor/idio returns are redrawn per n (n is *not* nested — see
+    ``nest_time``). Each output row is tagged with its ``rep`` index: within a
+    replicate the p-curve is nested and therefore correlated, so the replicate
+    — not the row — is the unit of statistical independence.
+
+    Unlike the independent path this is a distinct sampling scheme, so its
+    output is not expected to match independent-mode output.
+    """
+    if design_spec.subsample != "prefix":
+        raise NotImplementedError(
+            f"subsample={design_spec.subsample!r} not implemented; only 'prefix' "
+            "(first p assets) is currently supported."
+        )
+    if design_spec.nest_time:
+        raise NotImplementedError(
+            "nest_time=True (nesting the n/time axis) is not yet implemented; "
+            "leave it False."
+        )
+
+    p_values = list(design_spec.p_values)
+    p_max = max(p_values)
+    k = model_spec.k_factors
+    rep_seeds = rng_master.integers(0, 2 ** 31, size=design_spec.n_reps)
+
+    records: list[dict] = []
+    rep_iter = (
+        tqdm(range(design_spec.n_reps), desc="replicate", unit="rep")
+        if progress else range(design_spec.n_reps)
+    )
+    for r in rep_iter:
+        rep_rng = np.random.default_rng(int(rep_seeds[r]))
+        # (1) one superset model for this replicate — shared across all n and p.
+        model_full = build_model(model_spec, p_max, rep_rng)
+        logger.debug("rep={}: built superset model at p_max={}", r, p_max)
+        for n in design_spec.n_values:
+            # (2) one superset of returns at p_max for this (rep, n).
+            ctx_full = simulate_returns(
+                model=model_full, n=n,
+                factor_return_spec=design_spec.factor_return_sampler,
+                idio_return_spec=design_spec.idio_return_sampler,
+                k=k, rep_rng=rep_rng,
+            )
+            # (3) each p is an asset subset of the same draw.
+            for p in p_values:
+                ctx_p = _slice_to_p(ctx_full, p)
+                analyses = experiment.cell_setup(ctx_p.model, n, p)
+                merged = run_analyses(ctx_p, analyses)
+                for row in experiment.record(n, p, merged):
+                    row["rep"] = r
+                    records.append(row)
 
     return pd.DataFrame(records)
