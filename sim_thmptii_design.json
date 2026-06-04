@@ -1,0 +1,10 @@
+{
+  "_comment": "Design half of the split config for sim_theorem_partii.py: the sweep + return process. 'model' references the model half by path (relative to this file). Run with:  python sim_theorem_partii.py --design sim_thmptii_design.json",
+  "model": "sim_thmptii_model.json",
+  "n_values": [30, 60, 120],
+  "p_values": [200, 500, 1000, 2000, 5000, 10000],
+  "n_reps": 300,
+  "random_seed": 20260511,
+  "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "idio_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+}

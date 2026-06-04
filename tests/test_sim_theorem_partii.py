@@ -4,8 +4,10 @@ tests/test_sim_theorem_partii.py
 Unit and smoke tests for sim_theorem_partii.py and fl_graphics.py.
 
 Covers:
-  - SimSpec: defaults reproduce the original experiment; from_json round-trip;
-    comment-key stripping; CLI override fields default to None.
+  - ModelSpec / DesignSpec: defaults reproduce the original experiment;
+    from_json round-trip; comment-key stripping; the unified single-file shape
+    (top-level model fields folded into an inline model); model reference forms
+    (None / inline dict / path); utf-8 loading.
   - _make_one_sampler / _make_samplers: dict → callable; broadcast vs. list;
     wrong-length raises.
   - build_model: shapes, factor covariance, idio variance (squared from vol),
@@ -17,11 +19,11 @@ Covers:
     1-indexed.
   - _next_run_dir: sequential allocation, ignores unrelated names, NN is two
     digits, directory is created.
-  - simulate(): schema and row count for a small spec.
+  - simulate() / run_experiment(): schema and row count for a small design.
   - fl_graphics: smoke tests for all three plot functions.
-  - main() CLI: no config_file → SimSpec(); positional spec → from_json;
-    --out > spec.output_path > auto-allocated run dir; --plot skips parquet;
-    --plot-save writes both.
+  - main() CLI: no config_file → defaults; positional design spec; --model
+    override; --out > design.output_path > auto-allocated run dir; --plot skips
+    parquet; --plot-save writes both.
   - print_summary: output content.
   - compute_sine_alignment: self-alignment, orthogonal rows, shape/range.
 """
@@ -39,6 +41,7 @@ sys.path.insert(0, str(ROOT))
 
 import sim_theorem_partii as sim
 import fl_graphics as gfx
+from fl_experiment import ModelSpec, DesignSpec, run_experiment
 from factor_lab.analysis import SimulationContext
 from factor_lab.factor_types import FactorModelData
 
@@ -63,16 +66,21 @@ def rng():
 
 
 @pytest.fixture
-def default_spec():
-    """The built-in SimSpec — reproduces the original hardcoded experiment."""
-    return sim.SimSpec()
+def default_model():
+    """The built-in ModelSpec — the model half of the original experiment."""
+    return ModelSpec()
 
 
 @pytest.fixture
-def small_spec():
-    """A tiny spec good enough for end-to-end smoke tests."""
-    return sim.SimSpec(
-        k_factors=3,
+def default_design():
+    """The built-in DesignSpec — the sweep/return half of the original experiment."""
+    return DesignSpec()
+
+
+@pytest.fixture
+def small_design():
+    """A tiny design good enough for end-to-end smoke tests (model = defaults)."""
+    return DesignSpec(
         n_values=[30],
         p_values=[100],
         n_reps=2,
@@ -81,10 +89,10 @@ def small_spec():
 
 
 @pytest.fixture
-def mock_context(rng, default_spec):
-    k, p, n = default_spec.k_factors, 50, 30
+def mock_context(rng, default_model):
+    k, p, n = default_model.k_factors, 50, 30
     B = rng.standard_normal((k, p))
-    F = np.diag(default_spec.factor_variances)
+    F = np.diag(default_model.factor_variances)
     D = np.eye(p)
     return SimulationContext(
         model=FactorModelData(B=B, F=F, D=D),
@@ -113,79 +121,102 @@ def results_df():
     return pd.DataFrame(records)
 
 
-# ── SimSpec ───────────────────────────────────────────────────────────────────
+# ── ModelSpec / DesignSpec ────────────────────────────────────────────────────
 
-class TestSimSpec:
+class TestSpecs:
+    """ModelSpec + DesignSpec defaults, loading, and the unified single-file fold."""
 
-    def test_defaults_reproduce_original(self, default_spec):
-        s = default_spec
-        assert s.k_factors == 3
-        assert s.n_values == [30, 60, 120]
-        assert s.p_values == [200, 500, 1000, 2000, 5000, 10_000]
-        assert s.n_reps == 300
-        assert s.random_seed == 20260511
-        assert s.factor_variances == [0.04, 0.02, 0.01]
+    def test_model_defaults_reproduce_original(self, default_model):
+        m = default_model
+        assert m.k_factors == 3
+        assert m.factor_variances == [0.04, 0.02, 0.01]
         # Beta sampler scales correspond to c = [1.0, 0.8, 0.6] (i.e. √c).
-        scales = [b["scale"] for b in s.beta_samplers]
+        scales = [b["scale"] for b in m.beta_samplers]
         np.testing.assert_allclose(np.array(scales) ** 2, [1.0, 0.8, 0.6], rtol=1e-10)
         # Idio sampler is constant vol 1.0 → D's diagonal will be 1.0.
-        assert s.idio_vol_sampler == {"distribution": "constant", "value": 1.0}
-        # Optional CLI overrides default to None.
-        assert s.output_path is None
-        assert s.plot_mode is None
+        assert m.idio_vol_sampler == {"distribution": "constant", "value": 1.0}
 
-    def test_from_json_roundtrip(self, tmp_path, default_spec):
+    def test_design_defaults_reproduce_original(self, default_design):
+        d = default_design
+        assert d.model is None
+        assert d.n_values == [30, 60, 120]
+        assert d.p_values == [200, 500, 1000, 2000, 5000, 10_000]
+        assert d.n_reps == 300
+        assert d.random_seed == 20260511
+        assert d.factor_return_sampler == {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+        assert d.idio_return_sampler == {"distribution": "normal", "loc": 0.0, "scale": 1.0}
+        # Optional CLI overrides default to None.
+        assert d.output_path is None
+        assert d.plot_mode is None
+
+    def test_unified_file_folds_top_level_model_fields(self, tmp_path, default_model):
+        """A single-file design with model fields at the top level folds them
+        into an inline model (the shipped 'unified' shape)."""
         cfg = {
-            "k_factors": 3,
             "n_values": [30, 60, 120],
             "p_values": [200, 500, 1000, 2000, 5000, 10000],
             "n_reps": 300,
             "random_seed": 20260511,
+            # model fields written flat at the top level:
+            "k_factors": 3,
             "factor_variances": [0.04, 0.02, 0.01],
-            "beta_samplers": default_spec.beta_samplers,
-            "idio_vol_sampler": default_spec.idio_vol_sampler,
-            "factor_return_sampler": default_spec.factor_return_sampler,
-            "idio_return_sampler": default_spec.idio_return_sampler,
-        }
-        path = tmp_path / "spec.json"
-        path.write_text(json.dumps(cfg))
-        loaded = sim.SimSpec.from_json(path)
-        assert loaded.k_factors == default_spec.k_factors
-        assert loaded.n_values == default_spec.n_values
-        assert loaded.factor_variances == default_spec.factor_variances
-        assert loaded.idio_vol_sampler == default_spec.idio_vol_sampler
-
-    def test_from_json_strips_comment_keys(self, tmp_path):
-        cfg = {
-            "_comment": "this should be ignored",
-            "_note": "and this too",
-            "k_factors": 2,
-            "n_values": [30],
-            "p_values": [100],
-            "n_reps": 1,
-            "random_seed": 0,
-            "factor_variances": [0.04, 0.02],
-            "beta_samplers": [
-                {"distribution": "normal", "loc": 0.0, "scale": 1.0},
-                {"distribution": "normal", "loc": 0.0, "scale": 1.0},
-            ],
-            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+            "beta_samplers": default_model.beta_samplers,
+            "idio_vol_sampler": default_model.idio_vol_sampler,
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }
-        path = tmp_path / "spec.json"
+        path = tmp_path / "unified.json"
         path.write_text(json.dumps(cfg))
-        # Would raise TypeError if "_comment" wasn't stripped (unknown kwarg).
-        loaded = sim.SimSpec.from_json(path)
-        assert loaded.k_factors == 2
+        design = DesignSpec.from_json(path)
+        # Top-level model fields were folded into an inline model dict.
+        assert isinstance(design.model, dict)
+        assert design.n_values == [30, 60, 120]
+        model = design.resolve_model(base_dir=tmp_path)
+        assert model.k_factors == 3
+        assert model.factor_variances == [0.04, 0.02, 0.01]
 
-    def test_shipped_spec_files_load(self):
-        """Both committed spec files load and produce a valid SimSpec."""
+    def test_fold_conflict_raises(self, tmp_path):
+        """Mixing top-level model fields with an explicit 'model' reference errors."""
+        cfg = {
+            "model": "model.json",
+            "k_factors": 3,           # also inline at top level → conflict
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
+        }
+        path = tmp_path / "conflict.json"
+        path.write_text(json.dumps(cfg))
+        with pytest.raises(ValueError, match="both inline .* and via a 'model' reference"):
+            DesignSpec.from_json(path)
+
+    def test_design_from_json_strips_comment_keys(self, tmp_path):
+        cfg = {
+            "_comment": "this should be ignored",
+            "_note": "and this too",
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }
+        path = tmp_path / "design.json"
+        path.write_text(json.dumps(cfg))
+        loaded = DesignSpec.from_json(path)
+        assert loaded.n_reps == 1
+
+    def test_shipped_unified_files_load(self):
+        """The committed single-file specs load and fold their model in."""
         for name in ("sim_thmptii_spec.json", "sim_thmptii_standard_setup.json"):
-            spec = sim.SimSpec.from_json(ROOT / name)
-            assert spec.k_factors == 3
-            assert len(spec.factor_variances) == 3
-            assert len(spec.beta_samplers) == 3
+            design = DesignSpec.from_json(ROOT / name)
+            model = design.resolve_model(base_dir=ROOT)
+            assert model.k_factors == 3
+            assert len(model.factor_variances) == 3
+            assert len(model.beta_samplers) == 3
+
+    def test_shipped_split_pair_loads(self):
+        """The committed split pair loads and resolves its model reference."""
+        design = DesignSpec.from_json(ROOT / "sim_thmptii_design.json")
+        model = design.resolve_model(base_dir=ROOT)
+        assert model.k_factors == 3
+        assert len(model.factor_variances) == 3
+        assert len(model.beta_samplers) == 3
+        assert design.n_values and design.p_values
 
     def test_from_json_handles_non_ascii(self, tmp_path):
         """Specs may contain σ/β/δ etc. in comment fields — must load on
@@ -194,10 +225,7 @@ class TestSimSpec:
         cfg = {
             "_comment": "σⱼ are volatilities; β samples drawn N(0, √cⱼ); δ² ≈ 1.",
             "k_factors": 2,
-            "n_values": [30],
-            "p_values": [100],
-            "n_reps": 1,
-            "random_seed": 0,
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
             "factor_variances": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
@@ -205,12 +233,11 @@ class TestSimSpec:
             "idio_return_sampler": {"distribution": "normal"},
         }
         path = tmp_path / "spec_unicode.json"
-        # Explicit utf-8 write — matches how the shipped specs are stored.
         path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
         # Sanity: file actually contains the non-ASCII bytes that broke Windows.
         assert "σ" in path.read_text(encoding="utf-8")
-        spec = sim.SimSpec.from_json(path)
-        assert spec.k_factors == 2
+        design = DesignSpec.from_json(path)
+        assert design.resolve_model(base_dir=tmp_path).k_factors == 2
 
     def test_from_json_opens_with_utf8(self, tmp_path, monkeypatch):
         """Cross-platform: from_json must explicitly request utf-8 so that
@@ -224,49 +251,28 @@ class TestSimSpec:
             opened_with[str(file)] = kwargs.get("encoding")
             return real_open(file, mode, *args, **kwargs)
 
-        path = tmp_path / "spec.json"
+        path = tmp_path / "design.json"
         path.write_text(json.dumps({
-            "k_factors": 2, "n_values": [30], "p_values": [100],
-            "n_reps": 1, "random_seed": 0,
-            "factor_variances": [0.04, 0.02],
-            "beta_samplers": [{"distribution": "normal"}] * 2,
-            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+            "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
         monkeypatch.setattr(builtins, "open", spy)
-        sim.SimSpec.from_json(path)
+        DesignSpec.from_json(path)
         assert opened_with.get(str(path)) == "utf-8", (
             f"from_json must open with encoding='utf-8'; got "
             f"{opened_with.get(str(path))!r}"
         )
 
 
-# ── ModelSpec / ExperimentSpec (split config) ────────────────────────────────
+# ── ModelSpec reference resolution ────────────────────────────────────────────
 
 class TestSplitConfig:
-    """The model/experiment JSON split — items 2 in the roadmap.
+    """The model reference forms and composition into a runtime pair.
 
-    Each test pins down a contract that the rest of the verification depends on
-    or that a downstream consumer (notebook, second script) would lean on.
+    Each test pins down a contract that the engine, a notebook, or a second
+    script would lean on.
     """
-
-    def test_model_spec_defaults_match_simspec(self, default_spec):
-        ms = sim.ModelSpec()
-        assert ms.k_factors == default_spec.k_factors
-        assert ms.factor_variances == default_spec.factor_variances
-        assert ms.beta_samplers == default_spec.beta_samplers
-        assert ms.idio_vol_sampler == default_spec.idio_vol_sampler
-
-    def test_experiment_spec_defaults_match_simspec(self, default_spec):
-        es = sim.ExperimentSpec()
-        assert es.model is None
-        assert es.n_values == default_spec.n_values
-        assert es.p_values == default_spec.p_values
-        assert es.n_reps == default_spec.n_reps
-        assert es.random_seed == default_spec.random_seed
-        assert es.factor_return_sampler == default_spec.factor_return_sampler
-        assert es.idio_return_sampler == default_spec.idio_return_sampler
 
     def test_model_spec_from_json_strips_comments(self, tmp_path):
         path = tmp_path / "model.json"
@@ -277,11 +283,11 @@ class TestSplitConfig:
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
-        loaded = sim.ModelSpec.from_json(path)
+        loaded = ModelSpec.from_json(path)
         assert loaded.k_factors == 2
 
-    def test_experiment_spec_from_json_strips_comments(self, tmp_path):
-        path = tmp_path / "exp.json"
+    def test_design_spec_from_json_strips_comments(self, tmp_path):
+        path = tmp_path / "design.json"
         path.write_text(json.dumps({
             "_comment": "ignored",
             "n_values": [30],
@@ -291,13 +297,13 @@ class TestSplitConfig:
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
-        loaded = sim.ExperimentSpec.from_json(path)
+        loaded = DesignSpec.from_json(path)
         assert loaded.random_seed == 7
 
     def test_resolve_model_none_uses_defaults(self, tmp_path):
-        spec = sim.ExperimentSpec(model=None).resolve_model(tmp_path)
-        assert isinstance(spec, sim.ModelSpec)
-        assert spec.k_factors == sim.ModelSpec().k_factors
+        spec = DesignSpec(model=None).resolve_model(tmp_path)
+        assert isinstance(spec, ModelSpec)
+        assert spec.k_factors == ModelSpec().k_factors
 
     def test_resolve_model_inline_dict(self, tmp_path):
         inline = {
@@ -306,7 +312,7 @@ class TestSplitConfig:
             "beta_samplers": [{"distribution": "normal"}] * 5,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }
-        spec = sim.ExperimentSpec(model=inline).resolve_model(tmp_path)
+        spec = DesignSpec(model=inline).resolve_model(tmp_path)
         assert spec.k_factors == 5
 
     def test_resolve_model_inline_dict_strips_comments(self, tmp_path):
@@ -318,7 +324,7 @@ class TestSplitConfig:
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }
-        spec = sim.ExperimentSpec(model=inline).resolve_model(tmp_path)
+        spec = DesignSpec(model=inline).resolve_model(tmp_path)
         assert spec.k_factors == 2
 
     def test_resolve_model_relative_path(self, tmp_path):
@@ -328,7 +334,7 @@ class TestSplitConfig:
             "beta_samplers": [{"distribution": "normal"}] * 4,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
-        spec = sim.ExperimentSpec(model="model.json").resolve_model(tmp_path)
+        spec = DesignSpec(model="model.json").resolve_model(tmp_path)
         assert spec.k_factors == 4
 
     def test_resolve_model_absolute_path(self, tmp_path):
@@ -340,67 +346,67 @@ class TestSplitConfig:
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
         # Pass a different base_dir to prove the absolute path wins.
-        spec = sim.ExperimentSpec(model=str(model_path)).resolve_model(
+        spec = DesignSpec(model=str(model_path)).resolve_model(
             base_dir=Path("/nonexistent"),
         )
         assert spec.k_factors == 2
 
-    def test_from_split_equivalent_to_unified(self, default_spec):
-        composed = sim.SimSpec.from_split(sim.ModelSpec(), sim.ExperimentSpec())
-        for f in ("k_factors", "n_values", "p_values", "n_reps", "random_seed",
-                  "factor_variances", "beta_samplers", "idio_vol_sampler",
-                  "factor_return_sampler", "idio_return_sampler"):
-            assert getattr(composed, f) == getattr(default_spec, f), f"mismatch on {f}"
-
-    def test_from_experiment_json_end_to_end(self, tmp_path):
+    def test_design_json_plus_resolve_model_end_to_end(self, tmp_path):
+        """The canonical split entry point: load a DesignSpec, resolve its model."""
         (tmp_path / "model.json").write_text(json.dumps({
             "k_factors": 2,
             "factor_variances": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
-        (tmp_path / "exp.json").write_text(json.dumps({
+        (tmp_path / "design.json").write_text(json.dumps({
             "model": "model.json",
             "n_values": [30], "p_values": [100],
             "n_reps": 1, "random_seed": 99,
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
-        spec = sim.SimSpec.from_experiment_json(tmp_path / "exp.json")
-        assert spec.k_factors == 2
-        assert spec.random_seed == 99
-        assert spec.n_values == [30]
+        design = DesignSpec.from_json(tmp_path / "design.json")
+        model = design.resolve_model(base_dir=tmp_path)
+        assert model.k_factors == 2
+        assert design.random_seed == 99
+        assert design.n_values == [30]
 
-    def test_split_runtime_matches_unified_byte_for_byte(self, tmp_path):
-        """Split-config SimSpec must produce the exact same DataFrame as the
-        equivalent unified SimSpec — the load-bearing reproducibility contract."""
-        small = dict(
-            k_factors=3,
-            n_values=[30], p_values=[100], n_reps=3, random_seed=2026,
-            factor_variances=[0.04, 0.02, 0.01],
-            beta_samplers=[{"distribution": "normal"}] * 3,
-            idio_vol_sampler={"distribution": "constant", "value": 1.0},
-            factor_return_sampler={"distribution": "normal"},
-            idio_return_sampler={"distribution": "normal"},
-        )
-        # Unified path.
-        unified = sim.SimSpec(**small)
-        # Split path: write to JSON, then round-trip via from_experiment_json.
-        (tmp_path / "m.json").write_text(json.dumps({
-            "k_factors": small["k_factors"],
-            "factor_variances": small["factor_variances"],
-            "beta_samplers": small["beta_samplers"],
-            "idio_vol_sampler": small["idio_vol_sampler"],
-        }))
-        (tmp_path / "e.json").write_text(json.dumps({
-            "model": "m.json",
-            "n_values": small["n_values"], "p_values": small["p_values"],
-            "n_reps": small["n_reps"], "random_seed": small["random_seed"],
-            "factor_return_sampler": small["factor_return_sampler"],
-            "idio_return_sampler": small["idio_return_sampler"],
-        }))
-        split = sim.SimSpec.from_experiment_json(tmp_path / "e.json")
-        pd.testing.assert_frame_equal(sim.simulate(unified), sim.simulate(split))
+    def test_split_matches_unified_byte_for_byte(self, tmp_path):
+        """A split (model.json + design-with-reference) must produce the exact
+        same DataFrame as the equivalent single unified file — the load-bearing
+        reproducibility contract across the two file shapes."""
+        model_fields = {
+            "k_factors": 3,
+            "factor_variances": [0.04, 0.02, 0.01],
+            "beta_samplers": [{"distribution": "normal"}] * 3,
+            "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+        }
+        design_fields = {
+            "n_values": [30], "p_values": [100], "n_reps": 3, "random_seed": 2026,
+            "factor_return_sampler": {"distribution": "normal"},
+            "idio_return_sampler": {"distribution": "normal"},
+        }
+        # Unified single file: model fields folded in at top level.
+        (tmp_path / "unified.json").write_text(json.dumps({**model_fields, **design_fields}))
+        # Split pair: model.json + design referencing it.
+        (tmp_path / "m.json").write_text(json.dumps(model_fields))
+        (tmp_path / "d.json").write_text(json.dumps({"model": "m.json", **design_fields}))
+
+        def run(name):
+            d = DesignSpec.from_json(tmp_path / name)
+            return run_experiment(d.resolve_model(tmp_path), d,
+                                  sim.DispersionBiasExperiment())
+
+        pd.testing.assert_frame_equal(run("unified.json"), run("d.json"))
+
+    def test_run_experiment_matches_simulate(self):
+        """run_experiment(model, design, probe) == simulate(design)."""
+        design = DesignSpec(n_values=[30], p_values=[100], n_reps=4, random_seed=7)
+        model = design.resolve_model(base_dir=ROOT)
+        via_engine = run_experiment(model, design, sim.DispersionBiasExperiment())
+        via_simulate = sim.simulate(design)
+        pd.testing.assert_frame_equal(via_engine, via_simulate)
 
 
 # ── fl_orchestration generic seams ────────────────────────────────────────────
@@ -410,64 +416,64 @@ class TestOrchestrationSeams:
     any future second script consume. Verifies the public API stays callable
     and that the stage separation (fix-model-vary-returns) actually works."""
 
-    def test_simulate_returns_isolates_to_rep_rng(self, default_spec):
+    def test_simulate_returns_isolates_to_rep_rng(self, default_model, default_design):
         """simulate_returns must draw strictly from rep_rng — passing the same
         rep_rng seed must produce the same returns regardless of master state."""
         from fl_orchestration import simulate_returns
-        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
+        model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
         ctx_a = simulate_returns(
             model, n=30,
-            factor_return_spec=default_spec.factor_return_sampler,
-            idio_return_spec=default_spec.idio_return_sampler,
-            k=default_spec.k_factors,
+            factor_return_spec=default_design.factor_return_sampler,
+            idio_return_spec=default_design.idio_return_sampler,
+            k=default_model.k_factors,
             rep_rng=np.random.default_rng(7),
         )
         ctx_b = simulate_returns(
             model, n=30,
-            factor_return_spec=default_spec.factor_return_sampler,
-            idio_return_spec=default_spec.idio_return_sampler,
-            k=default_spec.k_factors,
+            factor_return_spec=default_design.factor_return_sampler,
+            idio_return_spec=default_design.idio_return_sampler,
+            k=default_model.k_factors,
             rep_rng=np.random.default_rng(7),
         )
         np.testing.assert_array_equal(ctx_a.security_returns, ctx_b.security_returns)
 
-    def test_simulate_returns_fix_model_vary_distribution(self, default_spec):
+    def test_simulate_returns_fix_model_vary_distribution(self, default_model):
         """The headline use case from the spec: fix the model, vary the return
         distribution. Different distributions must give different returns even
         with the same per-rep seed."""
         from fl_orchestration import simulate_returns
-        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
+        model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
         ctx_normal = simulate_returns(
             model, n=30,
             factor_return_spec={"distribution": "normal"},
             idio_return_spec={"distribution": "normal"},
-            k=default_spec.k_factors,
+            k=default_model.k_factors,
             rep_rng=np.random.default_rng(1),
         )
         ctx_t = simulate_returns(
             model, n=30,
             factor_return_spec={"distribution": "student_t", "df": 5},
             idio_return_spec={"distribution": "normal"},
-            k=default_spec.k_factors,
+            k=default_model.k_factors,
             rep_rng=np.random.default_rng(1),
         )
         assert not np.allclose(ctx_normal.security_returns, ctx_t.security_returns)
         # Same model identity is preserved across both contexts.
         assert ctx_normal.model is model and ctx_t.model is model
 
-    def test_run_analyses_merges_disjoint_results(self, default_spec):
+    def test_run_analyses_merges_disjoint_results(self, default_model, default_design):
         """run_analyses concatenates result dicts; key collisions across analyses
         would silently drop a value. The verification's LHS/RHS keys are disjoint,
         which this test fixes as a contract."""
         from fl_orchestration import simulate_returns, run_analyses
         from factor_lab.analyses.spectral import compute_true_eigenvalues
-        model = sim.build_model(default_spec, p=200, rng=np.random.default_rng(0))
-        _, b_pop = compute_true_eigenvalues(model, default_spec.k_factors)
+        model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
+        _, b_pop = compute_true_eigenvalues(model, default_model.k_factors)
         ctx = simulate_returns(
             model, n=30,
-            factor_return_spec=default_spec.factor_return_sampler,
-            idio_return_spec=default_spec.idio_return_sampler,
-            k=default_spec.k_factors,
+            factor_return_spec=default_design.factor_return_sampler,
+            idio_return_spec=default_design.idio_return_sampler,
+            k=default_model.k_factors,
             rep_rng=np.random.default_rng(0),
         )
         lhs = sim.SineAlignmentAnalysis(b_pop)
@@ -527,30 +533,30 @@ class TestSamplerHelpers:
 
 class TestBuildModel:
 
-    def test_shapes(self, default_spec, rng):
-        model = sim.build_model(default_spec, p=100, rng=rng)
-        assert model.B.shape == (default_spec.k_factors, 100)
-        assert model.F.shape == (default_spec.k_factors, default_spec.k_factors)
+    def test_shapes(self, default_model, rng):
+        model = sim.build_model(default_model, p=100, rng=rng)
+        assert model.B.shape == (default_model.k_factors, 100)
+        assert model.F.shape == (default_model.k_factors, default_model.k_factors)
         assert model.D.shape == (100, 100)
 
-    def test_factor_covariance(self, default_spec, rng):
+    def test_factor_covariance(self, default_model, rng):
         np.testing.assert_array_almost_equal(
-            np.diag(sim.build_model(default_spec, 200, rng).F),
-            default_spec.factor_variances,
+            np.diag(sim.build_model(default_model, 200, rng).F),
+            default_model.factor_variances,
         )
 
     def test_idio_variance_is_vol_squared(self, rng):
         """idio_vol_sampler outputs vol; D's diagonal must hold vol² (variances)."""
-        spec = sim.SimSpec(
+        model_spec = ModelSpec(
             idio_vol_sampler={"distribution": "constant", "value": 0.5},
         )
-        D_diag = np.diag(sim.build_model(spec, p=200, rng=rng).D)
+        D_diag = np.diag(sim.build_model(model_spec, p=200, rng=rng).D)
         np.testing.assert_allclose(D_diag, 0.25, rtol=1e-10)
 
-    def test_prevalences_converge(self, default_spec, rng):
+    def test_prevalences_converge(self, default_model, rng):
         """At p=5000, ‖B[j,:]‖²/p → cⱼ (the squared β scales) within 5%."""
-        model = sim.build_model(default_spec, p=5_000, rng=rng)
-        expected_c = np.array([b["scale"] for b in default_spec.beta_samplers]) ** 2
+        model = sim.build_model(default_model, p=5_000, rng=rng)
+        expected_c = np.array([b["scale"] for b in default_model.beta_samplers]) ** 2
         np.testing.assert_allclose(
             (model.B ** 2).mean(axis=1), expected_c, rtol=0.05,
         )
@@ -630,15 +636,15 @@ class TestEq6RHSAnalysis:
 
     def test_delta2_squares_constant_vol(self):
         """idio_vol = v (sampler) → D's diagonal = v² → δ² in result = v²."""
-        spec = sim.SimSpec(
+        model_spec = ModelSpec(
             idio_vol_sampler={"distribution": "constant", "value": 0.5},
         )
-        model = sim.build_model(spec, p=30, rng=np.random.default_rng(0))
+        model = sim.build_model(model_spec, p=30, rng=np.random.default_rng(0))
         n = 20
         ctx = SimulationContext(
             model=model,
             security_returns=np.zeros((n, model.B.shape[1])),
-            factor_returns=np.random.default_rng(1).standard_normal((n, spec.k_factors)),
+            factor_returns=np.random.default_rng(1).standard_normal((n, model_spec.k_factors)),
             idio_returns=np.zeros((n, model.B.shape[1])),
         )
         result = sim.Eq6RHSAnalysis().analyze(ctx)
@@ -649,10 +655,10 @@ class TestEq6RHSAnalysis:
         np.testing.assert_allclose(result["rotation"], 0.0,             atol=1e-12)
         np.testing.assert_allclose(result["rhs"],      result["floor"], atol=1e-12)
 
-    def test_shape_and_range(self, default_spec):
+    def test_shape_and_range(self, default_model):
         result = sim.Eq6RHSAnalysis().analyze(self._diagonal_context())
         for key in ("rhs", "floor", "rotation"):
-            assert result[key].shape == (default_spec.k_factors,)
+            assert result[key].shape == (default_model.k_factors,)
         assert np.all(result["rhs"] >= -1e-12)
         assert np.all(result["rhs"] <=  1.0 + 1e-12)
 
@@ -747,8 +753,8 @@ class TestNextRunDir:
 
 class TestSimulate:
 
-    def test_schema_and_row_count(self, small_spec):
-        df = sim.simulate(small_spec)
+    def test_schema_and_row_count(self, small_design):
+        df = sim.simulate(small_design)
         assert isinstance(df, pd.DataFrame)
         # 1 n × 1 p × 2 reps × 3 factors = 6
         assert len(df) == 6
@@ -759,14 +765,14 @@ class TestSimulate:
         assert df["sin2_j"].between(0.0, 1.0).all()
         assert df["rhs"].between(0.0, 1.0).all()
 
-    def test_reproducible_under_same_seed(self, small_spec):
-        df1 = sim.simulate(small_spec)
-        df2 = sim.simulate(small_spec)
+    def test_reproducible_under_same_seed(self, small_design):
+        df1 = sim.simulate(small_design)
+        df2 = sim.simulate(small_design)
         pd.testing.assert_frame_equal(df1, df2)
 
     def test_different_seeds_differ(self):
-        a = sim.SimSpec(n_values=[30], p_values=[100], n_reps=2, random_seed=1)
-        b = sim.SimSpec(n_values=[30], p_values=[100], n_reps=2, random_seed=2)
+        a = DesignSpec(n_values=[30], p_values=[100], n_reps=2, random_seed=1)
+        b = DesignSpec(n_values=[30], p_values=[100], n_reps=2, random_seed=2)
         df_a = sim.simulate(a)
         df_b = sim.simulate(b)
         # At least some of the sin² values should differ.
@@ -809,25 +815,35 @@ class TestGraphics:
 class TestMain:
 
     @pytest.fixture(autouse=True)
-    def _patch_simulate(self, monkeypatch, results_df):
-        """Replace simulate() with a fast no-op returning the fixture DataFrame."""
-        monkeypatch.setattr(sim, "simulate", lambda spec: results_df)
+    def _patch_engine(self, monkeypatch, results_df):
+        """Replace run_experiment() with a fast no-op returning the fixture df."""
+        monkeypatch.setattr(
+            sim, "run_experiment", lambda model, design, experiment: results_df,
+        )
 
-    def test_no_config_uses_defaults(self, monkeypatch, tmp_path, results_df):
-        """No positional arg → SimSpec() is used; auto-allocates a run dir."""
+    def _capture_engine(self, monkeypatch, results_df):
+        """Patch run_experiment to record the (model, design) it was handed."""
         captured = {}
 
-        def fake_simulate(spec):
-            captured["spec"] = spec
+        def fake_run(model, design, experiment):
+            captured["model"] = model
+            captured["design"] = design
+            captured["experiment"] = experiment
             return results_df
 
+        monkeypatch.setattr(sim, "run_experiment", fake_run)
+        return captured
+
+    def test_no_config_uses_defaults(self, monkeypatch, tmp_path, results_df):
+        """No positional arg → ModelSpec()/DesignSpec() defaults; auto-allocates a run dir."""
+        captured = self._capture_engine(monkeypatch, results_df)
         monkeypatch.setattr(sim, "ROOT", tmp_path)
-        monkeypatch.setattr(sim, "simulate", fake_simulate)
         monkeypatch.setattr(sys, "argv", ["sim_theorem_partii.py"])
         sim.main()
-        # SimSpec() defaults were used.
-        assert captured["spec"].k_factors == 3
-        assert captured["spec"].random_seed == 20260511
+        # Built-in defaults were used.
+        assert captured["model"].k_factors == 3
+        assert captured["design"].random_seed == 20260511
+        assert isinstance(captured["experiment"], sim.DispersionBiasExperiment)
         # Auto-allocated results/MM-DD_run_NN exists.
         assert (tmp_path / "results").is_dir()
         run_dirs = list((tmp_path / "results").iterdir())
@@ -836,7 +852,7 @@ class TestMain:
         assert any(p.suffix == ".parquet" for p in run_dirs[0].iterdir())
 
     def test_config_file_loaded(self, monkeypatch, tmp_path, results_df):
-        """Positional spec arg routes through SimSpec.from_json."""
+        """Positional spec arg routes through DesignSpec.from_json (model folded)."""
         cfg = tmp_path / "spec.json"
         cfg.write_text(json.dumps({
             "k_factors": 3,
@@ -852,18 +868,12 @@ class TestMain:
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
-        captured = {}
-
-        def fake_simulate(spec):
-            captured["spec"] = spec
-            return results_df
-
-        monkeypatch.setattr(sim, "simulate", fake_simulate)
+        captured = self._capture_engine(monkeypatch, results_df)
         out = tmp_path / "out.parquet"
         monkeypatch.setattr(sys, "argv",
                             ["sim_theorem_partii.py", str(cfg), "--out", str(out)])
         sim.main()
-        assert captured["spec"].random_seed == 999
+        assert captured["design"].random_seed == 999
 
     def test_cli_out_overrides_spec(self, monkeypatch, tmp_path):
         """--out wins over spec.output_path and over auto-allocation."""
@@ -927,39 +937,33 @@ class TestMain:
         assert out.exists()
         assert len(plot_calls) == 1
 
-    def test_experiment_flag_loads_split_config(self, monkeypatch, tmp_path, results_df):
-        """`--experiment exp.json` follows the model reference and composes a SimSpec."""
+    def test_design_flag_loads_split_config(self, monkeypatch, tmp_path, results_df):
+        """`--design design.json` follows the model reference and feeds the engine."""
         (tmp_path / "model.json").write_text(json.dumps({
             "k_factors": 3,
             "factor_variances": [0.04, 0.02, 0.01],
             "beta_samplers": [{"distribution": "normal"}] * 3,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
-        (tmp_path / "exp.json").write_text(json.dumps({
+        (tmp_path / "design.json").write_text(json.dumps({
             "model": "model.json",
             "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 111,
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
-        captured = {}
-
-        def fake_simulate(spec):
-            captured["spec"] = spec
-            return results_df
-
-        monkeypatch.setattr(sim, "simulate", fake_simulate)
+        captured = self._capture_engine(monkeypatch, results_df)
         out = tmp_path / "out.parquet"
         monkeypatch.setattr(sys, "argv", [
             "sim_theorem_partii.py",
-            "--experiment", str(tmp_path / "exp.json"),
+            str(tmp_path / "design.json"),
             "--out", str(out),
         ])
         sim.main()
-        assert captured["spec"].random_seed == 111
-        assert captured["spec"].k_factors == 3
+        assert captured["design"].random_seed == 111
+        assert captured["model"].k_factors == 3
 
-    def test_model_flag_overrides_experiment_reference(self, monkeypatch, tmp_path, results_df):
-        """`--model m.json` overrides whatever the experiment file points at."""
+    def test_model_flag_overrides_design_reference(self, monkeypatch, tmp_path, results_df):
+        """`--model m.json` overrides whatever the design file points at."""
         (tmp_path / "referenced.json").write_text(json.dumps({
             "k_factors": 5,
             "factor_variances": [0.04] * 5,
@@ -972,29 +976,23 @@ class TestMain:
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
-        (tmp_path / "exp.json").write_text(json.dumps({
+        (tmp_path / "design.json").write_text(json.dumps({
             "model": "referenced.json",
             "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
             "factor_return_sampler": {"distribution": "normal"},
             "idio_return_sampler": {"distribution": "normal"},
         }))
-        captured = {}
-
-        def fake_simulate(spec):
-            captured["spec"] = spec
-            return results_df
-
-        monkeypatch.setattr(sim, "simulate", fake_simulate)
+        captured = self._capture_engine(monkeypatch, results_df)
         out = tmp_path / "out.parquet"
         monkeypatch.setattr(sys, "argv", [
             "sim_theorem_partii.py",
-            "--experiment", str(tmp_path / "exp.json"),
-            "--model",      str(tmp_path / "override.json"),
+            str(tmp_path / "design.json"),
+            "--model",  str(tmp_path / "override.json"),
             "--out", str(out),
         ])
         sim.main()
-        # --model wins: composed SimSpec inherits k=2, not the referenced k=5.
-        assert captured["spec"].k_factors == 2
+        # --model wins: engine receives k=2, not the referenced k=5.
+        assert captured["model"].k_factors == 2
 
 
 # ── print_summary ─────────────────────────────────────────────────────────────

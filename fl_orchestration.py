@@ -4,10 +4,10 @@ fl_orchestration.py
 Dispersion-agnostic orchestration mechanics shared across simulation scripts.
 
 This module holds the *general* plumbing that any factor-model experiment needs,
-deliberately kept free of dispersion-bias-specific concepts (no ``SimSpec``, no
-``SineAlignmentAnalysis``/``Eq6RHSAnalysis``). Those live in the experiment
-script (e.g. ``sim_theorem_partii.py``) so that the verification stays the
-property of the checker, not of this layer.
+deliberately kept free of dispersion-bias-specific concepts (no
+``DispersionBiasExperiment``, no ``SineAlignmentAnalysis``/``Eq6RHSAnalysis``).
+Those live in the probe script (e.g. ``sim_theorem_partii.py``) so that the
+verification stays the property of the checker, not of this layer.
 
 Seams provided
 --------------
