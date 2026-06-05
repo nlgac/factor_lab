@@ -1,0 +1,15 @@
+{
+  "_comment": "Nested (monotone-in-p) design example. Per replicate, one superset is drawn at p_max = max(p_values) and each smaller p is the first-p asset subset of it, so p₁ ⊂ p₂ ⊂ … ⊂ p_max are the SAME assets. Gives a clean monotone convergence curve; output rows carry a 'rep' column. Run with: python sim_theorem_partii.py experiment_spec.nested.example.json",
+  "model": "model_spec.example.json",
+  "n_values": [60],
+  "p_values": [200, 500, 1000, 2000, 5000],
+  "n_reps": 50,
+  "random_seed": 20260511,
+  "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+  "idio_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
+
+  "_sampling_comment": "sampling='nested' switches the engine from independent-per-cell draws to the superset/subset scheme. subsample='prefix' (first p assets) is the default and only supported rule; nest_time stays false.",
+  "sampling": "nested",
+  "subsample": "prefix",
+  "nest_time": false
+}
