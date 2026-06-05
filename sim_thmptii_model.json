@@ -1,11 +1,11 @@
 {
-  "_comment": "Model half of the split config for sim_theorem_partii.py. Diagonal-Gram baseline (G∞ = I_k): loadings β_j ~ N(0, √c_j) with c = [1.0, 0.8, 0.6]; idio vol constant 1.0 → δ² = 1 after squaring. Pairs with sim_thmptii_design.json (or any design spec referencing it).",
+  "_comment": "Model half of the split config for sim_theorem_partii.py. Diagonal-Gram baseline (G∞ = I_k): loadings β_j ~ N(0, √c_j) with c = [1.0, 0.8, 0.6]; factor vols σ = [.16, .08, .06]; idio vol constant 0.4 → δ² = 0.16. factor_vols and idio_vol are volatilities (squared internally). Pairs with sim_thmptii_design.json (or any design spec referencing it).",
   "k_factors": 3,
-  "factor_variances": [0.04, 0.02, 0.01],
+  "factor_vols": [0.16, 0.08, 0.06],
   "beta_samplers": [
     {"distribution": "normal", "loc": 0.0, "scale": 1.0},
     {"distribution": "normal", "loc": 0.0, "scale": 0.8944271909999159},
     {"distribution": "normal", "loc": 0.0, "scale": 0.7745966692414834}
   ],
-  "idio_vol_sampler": {"distribution": "constant", "value": 1.0}
+  "idio_vol_sampler": {"distribution": "constant", "value": 0.4}
 }

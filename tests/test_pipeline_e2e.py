@@ -71,7 +71,7 @@ def _design_json(tmp_path, **overrides):
         "p_values": [100, 300],
         "n_reps": 5,
         "random_seed": 2026,
-        "factor_variances": [0.04, 0.02, 0.01],
+        "factor_vols": [0.04, 0.02, 0.01],
         "beta_samplers": [{"distribution": "normal"}] * 3,
         "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         "factor_return_sampler": {"distribution": "normal"},

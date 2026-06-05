@@ -385,8 +385,8 @@ def main() -> None:
         design_spec.n_reps, design_spec.random_seed,
     )
     logger.info(
-        "σ²={}, idio_vol_sampler={}",
-        list(model_spec.factor_variances), model_spec.idio_vol_sampler,
+        "factor_vols={}, idio_vol_sampler={}",
+        list(model_spec.factor_vols), model_spec.idio_vol_sampler,
     )
 
     df = run_experiment(model_spec, design_spec, DispersionBiasExperiment())

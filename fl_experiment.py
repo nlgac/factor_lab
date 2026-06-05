@@ -87,7 +87,7 @@ def _drop_comment_keys(config: dict) -> dict:
 # Fields that define the factor model. When they appear at the top level of a
 # design JSON (the "unified single-file" shape), DesignSpec folds them into an
 # inline ``model`` so one loader handles every file shape.
-_MODEL_FIELDS = ("k_factors", "factor_variances", "beta_samplers", "idio_vol_sampler")
+_MODEL_FIELDS = ("k_factors", "factor_vols", "beta_samplers", "idio_vol_sampler")
 
 
 # ── Specs ─────────────────────────────────────────────────────────────────────
@@ -102,14 +102,17 @@ class ModelSpec:
     ``{"distribution": name, ...}`` shape consumed by
     :func:`factor_lab.distributions.create_sampler`.
 
+    ``factor_vols`` and ``idio_vol_sampler`` are both in **volatility** units —
+    they are squared into the variance matrices F and D when the model is built.
+
     Defaults reproduce the diagonal-Gram baseline: loadings β_j ~ N(0, √c_j)
-    with c = [1.0, 0.8, 0.6], factor variances σ² = [.04, .02, .01], constant
-    idio vol 1.0 (so δ² = 1 after squaring).
+    with c = [1.0, 0.8, 0.6], factor vols σ = [.16, .08, .06] (variances
+    [.0256, .0064, .0036]), constant idio vol 0.4 (so δ² = 0.16).
     """
 
     k_factors: int = 3
-    factor_variances: list[float] = field(
-        default_factory=lambda: [0.04, 0.02, 0.01]
+    factor_vols: list[float] = field(
+        default_factory=lambda: [0.16, 0.08, 0.06]
     )
     beta_samplers: Union[list[dict], dict] = field(
         default_factory=lambda: [
@@ -119,7 +122,7 @@ class ModelSpec:
         ]
     )
     idio_vol_sampler: dict = field(
-        default_factory=lambda: {"distribution": "constant", "value": 1.0}
+        default_factory=lambda: {"distribution": "constant", "value": 0.4}
     )
 
     @classmethod
@@ -254,16 +257,18 @@ class Experiment(Protocol):
 def build_model(model_spec: ModelSpec, p: int, rng: np.random.Generator):
     """Build a k-factor model from ``model_spec`` for the given p.
 
-    Loading samplers, idio-vol sampler, and factor variances all come from the
-    model spec. Draws from ``rng`` — this is the master-RNG draw in step (1) of
-    the per-cell order.
+    Loading samplers, idio-vol sampler, and factor vols all come from the model
+    spec. ``factor_vols`` are volatilities — squared into F here, just as the
+    idio-vol sampler's draws are squared into D. Draws from ``rng`` — this is the
+    master-RNG draw in step (1) of the per-cell order.
     """
     model = FactorModelBuilder(rng=rng).build(
         p=p,
         k=model_spec.k_factors,
         beta_samplers=make_samplers(model_spec.beta_samplers, rng, model_spec.k_factors),
         idio_vol_sampler=make_one_sampler(model_spec.idio_vol_sampler, rng),
-        factor_variances=list(model_spec.factor_variances),
+        # factor_vols are volatilities; F holds variances → square them.
+        factor_variances=[float(v) ** 2 for v in model_spec.factor_vols],
     )
     logger.debug("built model: k={}, p={}", model_spec.k_factors, p)
     return model

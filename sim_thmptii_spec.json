@@ -1,5 +1,5 @@
 {
-  "_comment": "Spec for sim_theorem_partii.py — reproduces the original hardcoded experiment exactly. k=3, diagonal-Gram case (G∞ = I_k). Effective spikes d_j = c_j·σ_j² = [0.040, 0.016, 0.006] satisfy Assumption 3 (strict decrease).",
+  "_comment": "Unified single-file spec for sim_theorem_partii.py (model folded inline). k=3, diagonal-Gram case (G∞ = I_k). factor_vols σ=[.16,.08,.06], idio vol 0.4 (δ²=.16). Effective spikes d_j = c_j·σ_j² = [0.0256, 0.00512, 0.00216] satisfy Assumption 3 (strict decrease).",
 
   "k_factors": 3,
   "n_values": [30, 60, 120],
@@ -7,7 +7,8 @@
   "n_reps": 300,
   "random_seed": 20260511,
 
-  "factor_variances": [0.04, 0.02, 0.01],
+  "_factor_vols_note": "factor_vols are volatilities (squared into F). σ = [0.16, 0.08, 0.06].",
+  "factor_vols": [0.16, 0.08, 0.06],
 
   "_beta_samplers_note": "Per-factor loading samplers. For the diagonal-Gram case, draw β_j ~ N(0, c_j) so ‖β_j‖²/p → c_j and off-diagonal Gram entries vanish. scale_j = √c_j with c = [1.0, 0.8, 0.6].",
   "beta_samplers": [
@@ -16,7 +17,8 @@
     {"distribution": "normal", "loc": 0.0, "scale": 0.7745966692414834}
   ],
 
-  "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
+  "_idio_note": "idio_vol_sampler value is a volatility (squared into D). 0.4 → δ² = 0.16.",
+  "idio_vol_sampler": {"distribution": "constant", "value": 0.4},
 
   "factor_return_sampler": {"distribution": "normal", "loc": 0.0, "scale": 1.0},
   "idio_return_sampler":   {"distribution": "normal", "loc": 0.0, "scale": 1.0}

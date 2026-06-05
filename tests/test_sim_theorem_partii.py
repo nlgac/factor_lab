@@ -92,7 +92,7 @@ def small_design():
 def mock_context(rng, default_model):
     k, p, n = default_model.k_factors, 50, 30
     B = rng.standard_normal((k, p))
-    F = np.diag(default_model.factor_variances)
+    F = np.diag(np.square(default_model.factor_vols))   # F holds variances
     D = np.eye(p)
     return SimulationContext(
         model=FactorModelData(B=B, F=F, D=D),
@@ -129,12 +129,13 @@ class TestSpecs:
     def test_model_defaults_reproduce_original(self, default_model):
         m = default_model
         assert m.k_factors == 3
-        assert m.factor_variances == [0.04, 0.02, 0.01]
+        # factor_vols are volatilities σ = [0.16, 0.08, 0.06] (variances σ²).
+        assert m.factor_vols == [0.16, 0.08, 0.06]
         # Beta sampler scales correspond to c = [1.0, 0.8, 0.6] (i.e. √c).
         scales = [b["scale"] for b in m.beta_samplers]
         np.testing.assert_allclose(np.array(scales) ** 2, [1.0, 0.8, 0.6], rtol=1e-10)
-        # Idio sampler is constant vol 1.0 → D's diagonal will be 1.0.
-        assert m.idio_vol_sampler == {"distribution": "constant", "value": 1.0}
+        # Idio sampler is constant vol 0.4 → D's diagonal will be 0.16.
+        assert m.idio_vol_sampler == {"distribution": "constant", "value": 0.4}
 
     def test_design_defaults_reproduce_original(self, default_design):
         d = default_design
@@ -159,7 +160,7 @@ class TestSpecs:
             "random_seed": 20260511,
             # model fields written flat at the top level:
             "k_factors": 3,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": default_model.beta_samplers,
             "idio_vol_sampler": default_model.idio_vol_sampler,
             "factor_return_sampler": {"distribution": "normal"},
@@ -173,7 +174,7 @@ class TestSpecs:
         assert design.n_values == [30, 60, 120]
         model = design.resolve_model(base_dir=tmp_path)
         assert model.k_factors == 3
-        assert model.factor_variances == [0.04, 0.02, 0.01]
+        assert model.factor_vols == [0.04, 0.02, 0.01]
 
     def test_fold_conflict_raises(self, tmp_path):
         """Mixing top-level model fields with an explicit 'model' reference errors."""
@@ -206,7 +207,7 @@ class TestSpecs:
             design = DesignSpec.from_json(ROOT / name)
             model = design.resolve_model(base_dir=ROOT)
             assert model.k_factors == 3
-            assert len(model.factor_variances) == 3
+            assert len(model.factor_vols) == 3
             assert len(model.beta_samplers) == 3
 
     def test_shipped_split_pair_loads(self):
@@ -214,7 +215,7 @@ class TestSpecs:
         design = DesignSpec.from_json(ROOT / "sim_thmptii_design.json")
         model = design.resolve_model(base_dir=ROOT)
         assert model.k_factors == 3
-        assert len(model.factor_variances) == 3
+        assert len(model.factor_vols) == 3
         assert len(model.beta_samplers) == 3
         assert design.n_values and design.p_values
 
@@ -226,7 +227,7 @@ class TestSpecs:
             "_comment": "σⱼ are volatilities; β samples drawn N(0, √cⱼ); δ² ≈ 1.",
             "k_factors": 2,
             "n_values": [30], "p_values": [100], "n_reps": 1, "random_seed": 0,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
             "factor_return_sampler": {"distribution": "normal"},
@@ -279,7 +280,7 @@ class TestSplitConfig:
         path.write_text(json.dumps({
             "_comment": "ignored",
             "k_factors": 2,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
@@ -308,7 +309,7 @@ class TestSplitConfig:
     def test_resolve_model_inline_dict(self, tmp_path):
         inline = {
             "k_factors": 5,
-            "factor_variances": [0.1] * 5,
+            "factor_vols": [0.1] * 5,
             "beta_samplers": [{"distribution": "normal"}] * 5,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }
@@ -320,7 +321,7 @@ class TestSplitConfig:
         inline = {
             "_comment": "ignored",
             "k_factors": 2,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }
@@ -330,7 +331,7 @@ class TestSplitConfig:
     def test_resolve_model_relative_path(self, tmp_path):
         (tmp_path / "model.json").write_text(json.dumps({
             "k_factors": 4,
-            "factor_variances": [0.04, 0.02, 0.01, 0.005],
+            "factor_vols": [0.04, 0.02, 0.01, 0.005],
             "beta_samplers": [{"distribution": "normal"}] * 4,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
@@ -341,7 +342,7 @@ class TestSplitConfig:
         model_path = tmp_path / "abs_model.json"
         model_path.write_text(json.dumps({
             "k_factors": 2,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
@@ -355,7 +356,7 @@ class TestSplitConfig:
         """The canonical split entry point: load a DesignSpec, resolve its model."""
         (tmp_path / "model.json").write_text(json.dumps({
             "k_factors": 2,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
@@ -378,7 +379,7 @@ class TestSplitConfig:
         reproducibility contract across the two file shapes."""
         model_fields = {
             "k_factors": 3,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": [{"distribution": "normal"}] * 3,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }
@@ -540,9 +541,10 @@ class TestBuildModel:
         assert model.D.shape == (100, 100)
 
     def test_factor_covariance(self, default_model, rng):
+        # factor_vols are volatilities; F holds their squares (variances).
         np.testing.assert_array_almost_equal(
             np.diag(sim.build_model(default_model, 200, rng).F),
-            default_model.factor_variances,
+            np.square(default_model.factor_vols),
         )
 
     def test_idio_variance_is_vol_squared(self, rng):
@@ -986,7 +988,7 @@ class TestMain:
             "p_values": [100],
             "n_reps": 1,
             "random_seed": 999,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": [
                 {"distribution": "normal", "loc": 0.0, "scale": 1.0}
             ] * 3,
@@ -1007,7 +1009,7 @@ class TestMain:
         cfg.write_text(json.dumps({
             "k_factors": 3, "n_values": [30], "p_values": [100],
             "n_reps": 1, "random_seed": 0,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": [{"distribution": "normal"}] * 3,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
             "factor_return_sampler": {"distribution": "normal"},
@@ -1028,7 +1030,7 @@ class TestMain:
         cfg.write_text(json.dumps({
             "k_factors": 3, "n_values": [30], "p_values": [100],
             "n_reps": 1, "random_seed": 0,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": [{"distribution": "normal"}] * 3,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
             "factor_return_sampler": {"distribution": "normal"},
@@ -1067,7 +1069,7 @@ class TestMain:
         """`--design design.json` follows the model reference and feeds the engine."""
         (tmp_path / "model.json").write_text(json.dumps({
             "k_factors": 3,
-            "factor_variances": [0.04, 0.02, 0.01],
+            "factor_vols": [0.04, 0.02, 0.01],
             "beta_samplers": [{"distribution": "normal"}] * 3,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
@@ -1092,13 +1094,13 @@ class TestMain:
         """`--model m.json` overrides whatever the design file points at."""
         (tmp_path / "referenced.json").write_text(json.dumps({
             "k_factors": 5,
-            "factor_variances": [0.04] * 5,
+            "factor_vols": [0.04] * 5,
             "beta_samplers": [{"distribution": "normal"}] * 5,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
         (tmp_path / "override.json").write_text(json.dumps({
             "k_factors": 2,
-            "factor_variances": [0.04, 0.02],
+            "factor_vols": [0.04, 0.02],
             "beta_samplers": [{"distribution": "normal"}] * 2,
             "idio_vol_sampler": {"distribution": "constant", "value": 1.0},
         }))
