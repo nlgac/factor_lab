@@ -177,13 +177,13 @@ class — a `DesignSpec` carries its model in the `model` field, which accepts:
 - `p_values`: $[200, 500, 1000, 2000, 5000, 10000]$ — dimension (growing)
 - `n_reps`: 300 per $(n, p)$ cell · `random_seed`: 20260511
 - `factor_vols`: $\sigma = [0.16, 0.08, 0.06]$ (volatilities; variances $\sigma_j^2 = [0.0256, 0.0064, 0.0036]$)
-- `beta_samplers`: $N(0, \sqrt{c_j})$, $c = [1.0, 0.8, 0.6]$ → diagonal Gram $G_\infty = I_k$
+- `beta_samplers`: market-like factor 1 $\beta_1 \sim N(1, 1)$, zero-mean unit factors 2,3 $\beta_j \sim N(0, 1)$ → prevalences $c = [2, 1, 1]$ (factors 2,3 zero-mean ⇒ off-diagonal Gram vanishes, $G_\infty = I_k$)
 - `idio_vol_sampler`: constant vol 0.4 → $\delta^2 = 0.16$ after squaring
 - return samplers: $N(0,1)$
 
 `factor_vols` and the idio vol are both **volatilities**, squared into the
 variance matrices $F$ and $D$ when the model is built. Effective spikes
-$d_j = c_j \sigma_j^2 = [0.0256, 0.00512, 0.00216]$ satisfy Assumption 3.
+$d_j = c_j \sigma_j^2 = [0.0512, 0.0064, 0.0036]$ satisfy Assumption 3.
 
 Shipped examples: [sim_thmptii_spec.json](../sim_thmptii_spec.json) (flat single
 file), and the [sim_thmptii_model.json](../sim_thmptii_model.json) +

@@ -131,9 +131,10 @@ class TestSpecs:
         assert m.k_factors == 3
         # factor_vols are volatilities σ = [0.16, 0.08, 0.06] (variances σ²).
         assert m.factor_vols == [0.16, 0.08, 0.06]
-        # Beta sampler scales correspond to c = [1.0, 0.8, 0.6] (i.e. √c).
-        scales = [b["scale"] for b in m.beta_samplers]
-        np.testing.assert_allclose(np.array(scales) ** 2, [1.0, 0.8, 0.6], rtol=1e-10)
+        # Market-like factor 1 β₁~N(1,1); zero-mean unit factors 2,3.
+        # Prevalences c_j = E[β_j²] = loc² + scale² = [2, 1, 1].
+        c = [b["loc"] ** 2 + b["scale"] ** 2 for b in m.beta_samplers]
+        np.testing.assert_allclose(c, [2.0, 1.0, 1.0], rtol=1e-10)
         # Idio sampler is constant vol 0.4 → D's diagonal will be 0.16.
         assert m.idio_vol_sampler == {"distribution": "constant", "value": 0.4}
 
@@ -556,9 +557,12 @@ class TestBuildModel:
         np.testing.assert_allclose(D_diag, 0.25, rtol=1e-10)
 
     def test_prevalences_converge(self, default_model, rng):
-        """At p=5000, ‖B[j,:]‖²/p → cⱼ (the squared β scales) within 5%."""
+        """At p=5000, ‖B[j,:]‖²/p → cⱼ = E[β_j²] = loc² + scale² within 5%."""
         model = sim.build_model(default_model, p=5_000, rng=rng)
-        expected_c = np.array([b["scale"] for b in default_model.beta_samplers]) ** 2
+        expected_c = np.array(
+            [b["loc"] ** 2 + b["scale"] ** 2 for b in default_model.beta_samplers]
+        )  # market factor 1 → c = [2, 1, 1]
+        np.testing.assert_allclose(expected_c, [2.0, 1.0, 1.0], rtol=1e-12)
         np.testing.assert_allclose(
             (model.B ** 2).mean(axis=1), expected_c, rtol=0.05,
         )

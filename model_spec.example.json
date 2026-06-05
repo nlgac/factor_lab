@@ -1,11 +1,11 @@
 {
-  "_comment": "Model half of the split config — defines (B, F, D). Reusable across experiments. Canonical diagonal-Gram model: loadings β_j ~ N(0, √c_j) with c=[1.0,0.8,0.6]; factor vols σ=[.16,.08,.06] (variances [.0256,.0064,.0036]); idio vol 0.4 (δ²=.16). factor_vols and idio_vol are volatilities (squared internally). Spikes d_j=c_j·σ_j²=[.0256,.00512,.00216] (Assumption 3 ✓).",
+  "_comment": "Model half of the split config — defines (B, F, D). Reusable across experiments. Canonical diagonal-Gram model: market-like factor 1 β₁~N(1,1), zero-mean unit factors 2,3 → prevalences c=[2,1,1] (G∞=I_k since factors 2,3 are zero-mean); factor vols σ=[.16,.08,.06] (variances [.0256,.0064,.0036]); idio vol 0.4 (δ²=.16). factor_vols and idio_vol are volatilities (squared internally). Spikes d_j=c_j·σ_j²=[.0512,.0064,.0036] (Assumption 3 ✓).",
   "k_factors": 3,
   "factor_vols": [0.16, 0.08, 0.06],
   "beta_samplers": [
+    {"distribution": "normal", "loc": 1.0, "scale": 1.0},
     {"distribution": "normal", "loc": 0.0, "scale": 1.0},
-    {"distribution": "normal", "loc": 0.0, "scale": 0.8944271909999159},
-    {"distribution": "normal", "loc": 0.0, "scale": 0.7745966692414834}
+    {"distribution": "normal", "loc": 0.0, "scale": 1.0}
   ],
   "idio_vol_sampler": {"distribution": "constant", "value": 0.4}
 }

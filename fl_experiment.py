@@ -105,9 +105,12 @@ class ModelSpec:
     ``factor_vols`` and ``idio_vol_sampler`` are both in **volatility** units —
     they are squared into the variance matrices F and D when the model is built.
 
-    Defaults reproduce the diagonal-Gram baseline: loadings β_j ~ N(0, √c_j)
-    with c = [1.0, 0.8, 0.6], factor vols σ = [.16, .08, .06] (variances
-    [.0256, .0064, .0036]), constant idio vol 0.4 (so δ² = 0.16).
+    Defaults reproduce the diagonal-Gram baseline: a market-like factor 1 with
+    loadings β₁ ~ N(1, 1) and zero-mean unit factors 2,3 (β_j ~ N(0, 1)), giving
+    prevalences c = E‖β_j‖²/p = [2, 1, 1] (off-diagonal Gram entries vanish since
+    factors 2,3 are zero-mean → G∞ = I_k still holds). Factor vols σ = [.16, .08,
+    .06] (variances [.0256, .0064, .0036]); constant idio vol 0.4 (so δ² = 0.16).
+    Spikes d_j = c_j σ_j² = [.0512, .0064, .0036] satisfy Assumption 3.
     """
 
     k_factors: int = 3
@@ -116,9 +119,9 @@ class ModelSpec:
     )
     beta_samplers: Union[list[dict], dict] = field(
         default_factory=lambda: [
+            {"distribution": "normal", "loc": 1.0, "scale": 1.0},
             {"distribution": "normal", "loc": 0.0, "scale": 1.0},
-            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.8))},
-            {"distribution": "normal", "loc": 0.0, "scale": float(np.sqrt(0.6))},
+            {"distribution": "normal", "loc": 0.0, "scale": 1.0},
         ]
     )
     idio_vol_sampler: dict = field(
