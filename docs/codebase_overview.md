@@ -118,6 +118,11 @@ class Experiment(Protocol):
     def record(self, n, p, merged: dict) -> list[dict]:   # flatten one rep
 ```
 
+**`BaseExperiment` + registry** — optional scaffolding around the Protocol:
+`BaseExperiment` (default `setup()`, fail-fast `cell_setup`/`record` validation at
+class-definition); `@register_experiment("name")` + `get_experiment(name)` /
+`registered_experiments()` for selecting a probe by string. See *Extending* below.
+
 **`build_model(model_spec, p, rng)`** — Stage 1: construct one `(B, F, D)` model;
 draws β / idio vols from the RNG it's given (`factor_vols` squared into $F$).
 
@@ -309,23 +314,39 @@ python -m pytest tests/ \
 
 # Extending: adding a new theorem
 
-Write a new `Experiment` and hand it to the same engine — no changes to
-`fl_experiment_setup` or `fl_experiment_runner`:
+A new question is **one `Experiment`** handed to the same engine — no change to
+`fl_experiment_setup` or `fl_experiment_runner`. The `Experiment` Protocol is the
+contract; `BaseExperiment` is an optional convenience base (default no-op
+`setup()`, plus `__init_subclass__` validation that fails fast at class-definition
+time if `cell_setup`/`record` are missing); `@register_experiment("name")` adds it
+to a registry so a CLI/config can select a theorem by name (`get_experiment(name)`).
 
 ```python
-class MyTheoremExperiment:
-    def setup(self): ...                       # optional one-time registration
+from fl_experiment_setup import BaseExperiment, register_experiment
+
+@register_experiment("my_theorem")
+class MyTheoremExperiment(BaseExperiment):
     def cell_setup(self, model, n, p):
-        return [MyLhsAnalysis(...), MyRhsAnalysis()]
+        return [MyLhsAnalysis(...), MyRhsAnalysis()]   # compose analyses
     def record(self, n, p, merged):
-        return [ {... one row per factor ...} ]
+        return [ {... rows; any schema you like ...} ]
 
 df = run_experiment(model_spec, design_spec, MyTheoremExperiment())
 ```
 
+**Composition happens at the analysis level.** An `Experiment` assembles a list
+of `Analysis` objects (`analyze(context) -> dict`); a new probe mixes existing
+ones with new ones rather than subclassing behavior.
+
+**Worked second probe:** [`sim_corollary4.py`](../sim_corollary4.py) checks
+Corollary 4 (Grassmannian subspace distance, $d_{\mathrm{Gr}}^2 \to \sum_j$ floors).
+It **reuses `Eq6RHSAnalysis`** from the dispersion probe for the prediction, adds a
+new `SubspaceDistanceAnalysis` for the observed side, and emits **one scalar row
+per replication** (not $k$ per-factor rows) — a different record schema on the same
+engine, registered as `"subspace_distance"`.
+
 Keep theorem-specific code in the probe script; the package (`factor_lab/`) and
-the seams stay general. Genuinely-general helpers can migrate into
-`factor_lab/` later if a second probe needs them — not before.
+the engine stay general.
 
 ---
 

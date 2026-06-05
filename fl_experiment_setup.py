@@ -56,6 +56,10 @@ __all__ = [
     "ModelSpec",
     "DesignSpec",
     "Experiment",
+    "BaseExperiment",
+    "register_experiment",
+    "get_experiment",
+    "registered_experiments",
     "build_model",
     "make_one_sampler",
     "make_samplers",
@@ -238,6 +242,97 @@ class Experiment(Protocol):
     def cell_setup(self, model, n: int, p: int) -> Sequence: ...
 
     def record(self, n: int, p: int, merged: dict) -> list[dict]: ...
+
+
+# ── Experiment base + registry ────────────────────────────────────────────────
+
+# Required hooks every Experiment must provide (validated at subclass definition
+# and at registration time, so a typo fails fast instead of mid-sweep).
+_EXPERIMENT_HOOKS = ("cell_setup", "record")
+
+
+class BaseExperiment:
+    """Optional convenience base for :class:`Experiment` implementations.
+
+    Inheriting is **not** required — the runner only needs the ``Experiment``
+    Protocol (structural). The base just adds ergonomics:
+
+    - a default no-op ``setup()`` (so probes that need no one-time setup can skip it);
+    - ``__init_subclass__`` validation that ``cell_setup`` and ``record`` exist,
+      raising ``TypeError`` at *class-definition* time rather than producing an
+      ``AttributeError`` partway through a sweep.
+
+    Composition still happens at the analysis level: ``cell_setup`` returns a list
+    of analyses (each ``analyze(context) -> dict``), which a new probe mixes and
+    matches — reuse existing analyses, add new ones.
+    """
+
+    #: set by :func:`register_experiment` when the class is registered by name.
+    experiment_name: "Optional[str]" = None
+
+    def setup(self) -> None:  # default no-op; override to register distances etc.
+        pass
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for hook in _EXPERIMENT_HOOKS:
+            if not callable(getattr(cls, hook, None)):
+                raise TypeError(
+                    f"{cls.__name__} must define {hook}() to be an Experiment."
+                )
+
+
+_EXPERIMENT_REGISTRY: "dict[str, type]" = {}
+
+
+def register_experiment(name: str):
+    """Class decorator: register an Experiment under ``name`` for lookup by string.
+
+    Also fail-fast-validates that the class provides the required hooks, so a
+    registry entry is always a usable Experiment. Lets a CLI / config select a
+    theorem by name (``get_experiment(name)``); harmless for the single-probe
+    case, paying off once there are several.
+
+    Example::
+
+        @register_experiment("dispersion_bias")
+        class DispersionBiasExperiment(BaseExperiment): ...
+    """
+    def deco(cls):
+        if not isinstance(cls, type):
+            raise TypeError("@register_experiment decorates a class")
+        for hook in _EXPERIMENT_HOOKS:
+            if not callable(getattr(cls, hook, None)):
+                raise TypeError(
+                    f"@register_experiment({name!r}): {cls.__name__} must "
+                    f"define {hook}()."
+                )
+        existing = _EXPERIMENT_REGISTRY.get(name)
+        if existing is not None and existing is not cls:
+            raise ValueError(
+                f"experiment name {name!r} already registered to "
+                f"{existing.__name__}."
+            )
+        _EXPERIMENT_REGISTRY[name] = cls
+        cls.experiment_name = name
+        return cls
+    return deco
+
+
+def get_experiment(name: str) -> type:
+    """Return the Experiment class registered under ``name`` (else ``KeyError``)."""
+    try:
+        return _EXPERIMENT_REGISTRY[name]
+    except KeyError:
+        raise KeyError(
+            f"no experiment registered as {name!r}; "
+            f"known: {registered_experiments()}"
+        ) from None
+
+
+def registered_experiments() -> list[str]:
+    """Names of all registered experiments, sorted."""
+    return sorted(_EXPERIMENT_REGISTRY)
 
 
 # ── Sampler resolution ────────────────────────────────────────────────────────

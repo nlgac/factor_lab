@@ -106,7 +106,7 @@ from factor_lab.analyses import compute_sine_alignment, register_manifold_distan
 #   fl_experiment_runner — the sweep (run_experiment / run_cell).
 # This script supplies the theorem-specific Experiment below.
 from fl_experiment_setup import (
-    ModelSpec, DesignSpec, build_model,
+    ModelSpec, DesignSpec, build_model, BaseExperiment, register_experiment,
     make_one_sampler as _make_one_sampler,
     make_samplers as _make_samplers,
     next_run_dir as _next_run_dir,
@@ -239,7 +239,8 @@ def _rep_records(
     ]
 
 
-class DispersionBiasExperiment:
+@register_experiment("dispersion_bias")
+class DispersionBiasExperiment(BaseExperiment):
     """The theorem-specific :class:`~fl_experiment_setup.Experiment` for Eq. (6) Part (ii).
 
     Supplies the engine's three hooks:
