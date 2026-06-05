@@ -95,7 +95,12 @@ coverage.xml
 *.md
 *.npz
 *.html
+*.npz
 *.parquet
+
+# Run / notebook output directories (regenerable)
+results/
+nb_outputs/
 
 # Django stuff:
 *.log
