@@ -888,6 +888,22 @@ class TestNestedSampling:
         df = sim.simulate(self._design(n_reps=2))
         assert "rep" in df.columns and len(df) == 1 * 3 * 2 * 3
 
+    def test_cell_setup_cached_per_rep_p_not_per_n(self):
+        """cell_setup (ARPACK population directions) is n-independent, so the
+        engine must call it once per (rep, p) — not per (rep, n, p)."""
+        class Spy(sim.DispersionBiasExperiment):
+            calls = 0
+            def cell_setup(self, model, n, p):
+                type(self).calls += 1
+                return super().cell_setup(model, n, p)
+
+        d = DesignSpec(n_values=[30, 60, 120], p_values=[100, 300], n_reps=4,
+                       random_seed=7, sampling="nested")
+        Spy.calls = 0
+        run_experiment(ModelSpec(), d, Spy(), progress=False)
+        assert Spy.calls == d.n_reps * len(d.p_values)        # 4 × 2 = 8
+        assert Spy.calls != d.n_reps * len(d.n_values) * len(d.p_values)  # not 24
+
 
 # ── fl_graphics smoke tests ───────────────────────────────────────────────────
 

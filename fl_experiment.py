@@ -382,14 +382,17 @@ def _slice_to_p(context: SimulationContext, p: int) -> SimulationContext:
     depend on p, slicing to p assets is an exact subset — the same draw, fewer
     columns — not a new sample. All slices are numpy views (no copy).
     """
-    m = context.model
-    sub_model = FactorModelData(B=m.B[:, :p], F=m.F, D=m.D[:p, :p])
     return SimulationContext(
-        model=sub_model,
+        model=_slice_model_to_p(context.model, p),
         security_returns=context.security_returns[:, :p],
         factor_returns=context.factor_returns,          # shared across p
         idio_returns=context.idio_returns[:, :p],
     )
+
+
+def _slice_model_to_p(model: FactorModelData, p: int) -> FactorModelData:
+    """Return a view of ``model`` restricted to its first ``p`` assets (B, D)."""
+    return FactorModelData(B=model.B[:, :p], F=model.F, D=model.D[:p, :p])
 
 
 def _run_nested(
@@ -415,6 +418,12 @@ def _run_nested(
     replicate the p-curve is nested and therefore correlated, so the replicate
     — not the row — is the unit of statistical independence.
 
+    ``cell_setup`` is called once per (replicate, p) and the returned analyses
+    are reused across all n. This assumes the per-cell setup is n-independent —
+    true for population-direction work like the dispersion probe (b̄ⱼ depends on
+    the model, not the realized sample size) — and avoids redundant ARPACK across
+    the n axis. It does not change any output value (cell_setup is RNG-free).
+
     Unlike the independent path this is a distinct sampling scheme, so its
     output is not expected to match independent-mode output.
     """
@@ -439,24 +448,30 @@ def _run_nested(
         tqdm(range(design_spec.n_reps), desc="replicate", unit="rep")
         if progress else range(design_spec.n_reps)
     )
+    n0 = design_spec.n_values[0]
     for r in rep_iter:
         rep_rng = np.random.default_rng(int(rep_seeds[r]))
         # (1) one superset model for this replicate — shared across all n and p.
         model_full = build_model(model_spec, p_max, rep_rng)
         logger.debug("rep={}: built superset model at p_max={}", r, p_max)
+        # (2) per-p analyses once per replicate — model-only, RNG-free, reused
+        #     across all n (population directions do not depend on n).
+        analyses_by_p = {
+            p: experiment.cell_setup(_slice_model_to_p(model_full, p), n0, p)
+            for p in p_values
+        }
         for n in design_spec.n_values:
-            # (2) one superset of returns at p_max for this (rep, n).
+            # (3) one superset of returns at p_max for this (rep, n).
             ctx_full = simulate_returns(
                 model=model_full, n=n,
                 factor_return_spec=design_spec.factor_return_sampler,
                 idio_return_spec=design_spec.idio_return_sampler,
                 k=k, rep_rng=rep_rng,
             )
-            # (3) each p is an asset subset of the same draw.
+            # (4) each p is an asset subset of the same draw.
             for p in p_values:
                 ctx_p = _slice_to_p(ctx_full, p)
-                analyses = experiment.cell_setup(ctx_p.model, n, p)
-                merged = run_analyses(ctx_p, analyses)
+                merged = run_analyses(ctx_p, analyses_by_p[p])
                 for row in experiment.record(n, p, merged):
                     row["rep"] = r
                     records.append(row)
