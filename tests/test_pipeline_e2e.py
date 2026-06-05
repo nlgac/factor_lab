@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import sim_theorem_partii as sim
-from fl_experiment import ModelSpec, DesignSpec, run_experiment
+from fl_experiment_setup import ModelSpec, DesignSpec
+from fl_experiment_runner import run_experiment
 
 
 # ── loguru capture ────────────────────────────────────────────────────────────

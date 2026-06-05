@@ -21,13 +21,14 @@ Architecture
 ------------
 This script is *only* the dispersion-bias probe. The machinery is layered:
 
-    fl_orchestration   — stateless seams: sampler resolution, return generation,
-                         analysis dispatch, run-dir allocation
-    fl_experiment      — the generic engine: ModelSpec, DesignSpec, the
-                         Experiment protocol, build_model, and run_experiment
-                         (owns the master-RNG draw order + the n×p sweep)
-    sim_theorem_partii — THIS file: the SineAlignment / Eq6RHS analyses and the
-                         DispersionBiasExperiment that wires them to the engine
+    fl_experiment_setup  — specs (ModelSpec, DesignSpec), the Experiment
+                           protocol, build_model, and the stateless seams
+                           (sampler resolution, return generation, analysis
+                           dispatch, run-dir allocation)
+    fl_experiment_runner — the sweep: run_experiment / run_cell, which own the
+                           master-RNG draw order + the n×p grid
+    sim_theorem_partii   — THIS file: the SineAlignment / Eq6RHS analyses and the
+                           DispersionBiasExperiment that wires them to the engine
 
 The three inputs to the engine are fully decoupled:
 
@@ -78,7 +79,8 @@ Usage
 
 Notebook idiom
 --------------
-    from fl_experiment import ModelSpec, DesignSpec, run_experiment
+    from fl_experiment_setup import ModelSpec, DesignSpec
+    from fl_experiment_runner import run_experiment
     from sim_theorem_partii import DispersionBiasExperiment
     df = run_experiment(ModelSpec(), DesignSpec(), DispersionBiasExperiment())
 """
@@ -98,19 +100,20 @@ from factor_lab.analysis import SimulationContext
 from factor_lab.analyses.spectral import compute_true_eigenvalues
 from factor_lab.analyses import compute_sine_alignment, register_manifold_distance
 
-# Generic engine + data specs. The engine knows nothing about dispersion bias;
-# this script supplies the theorem-specific Experiment below.
-from fl_experiment import ModelSpec, DesignSpec, build_model, run_experiment
-
-# Generic orchestration mechanics. Re-exported under their historical private
-# names so the test suite (sim._make_one_sampler, etc.) keeps resolving.
-from fl_orchestration import (
+# Engine, in two layers (both theorem-agnostic):
+#   fl_experiment_setup  — specs, the Experiment protocol, model construction,
+#                          and the stateless seams.
+#   fl_experiment_runner — the sweep (run_experiment / run_cell).
+# This script supplies the theorem-specific Experiment below.
+from fl_experiment_setup import (
+    ModelSpec, DesignSpec, build_model,
     make_one_sampler as _make_one_sampler,
     make_samplers as _make_samplers,
     next_run_dir as _next_run_dir,
     simulate_returns,
     run_analyses,
 )
+from fl_experiment_runner import run_experiment
 
 __all__ = [
     "ModelSpec",
@@ -237,7 +240,7 @@ def _rep_records(
 
 
 class DispersionBiasExperiment:
-    """The theorem-specific :class:`~fl_experiment.Experiment` for Eq. (6) Part (ii).
+    """The theorem-specific :class:`~fl_experiment_setup.Experiment` for Eq. (6) Part (ii).
 
     Supplies the engine's three hooks:
 
@@ -254,7 +257,8 @@ class DispersionBiasExperiment:
 
     Notebook idiom::
 
-        from fl_experiment import ModelSpec, DesignSpec, run_experiment
+        from fl_experiment_setup import ModelSpec, DesignSpec
+        from fl_experiment_runner import run_experiment
         from sim_theorem_partii import DispersionBiasExperiment
         df = run_experiment(ModelSpec(), DesignSpec(), DispersionBiasExperiment())
     """

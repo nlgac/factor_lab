@@ -23,13 +23,14 @@ The repository is organized in two tiers:
 ## Architecture at a glance
 
 ```
-fl_orchestration.py   stateless seams   sampler resolution · return generation ·
-                                          analysis dispatch · run-dir allocation
-fl_experiment.py      generic ENGINE     ModelSpec · DesignSpec · Experiment ·
-                                          build_model · run_experiment / run_cell
-sim_theorem_partii.py dispersion PROBE   SineAlignmentAnalysis · Eq6RHSAnalysis ·
-                                          DispersionBiasExperiment · CLI
-fl_graphics.py        plotting           three convergence figures from a DataFrame
+fl_experiment_setup.py   ENGINE · setup    ModelSpec · DesignSpec · Experiment ·
+                                            build_model · sampler resolution ·
+                                            simulate_returns · run_analyses · next_run_dir
+fl_experiment_runner.py  ENGINE · runner   run_experiment · run_cell (the n×p sweep;
+                                            owns the master-RNG draw order)
+sim_theorem_partii.py    dispersion PROBE  SineAlignmentAnalysis · Eq6RHSAnalysis ·
+                                            DispersionBiasExperiment · CLI
+fl_graphics.py           plotting          three convergence figures from a DataFrame
 ```
 
 The engine knows nothing about dispersion bias. A new theorem is a new
@@ -87,35 +88,28 @@ The central container passed between components. Represents $r = B^\top f + \var
 
 ---
 
-# The orchestration layers (repo root)
+# The engine layers (repo root)
 
-## `fl_orchestration.py` — stateless seams
+The engine is two theorem-agnostic files: a **setup** layer (the data you
+configure with, plus the building-block seams) and a **runner** layer (the sweep
+that consumes them).
 
-Dispersion-agnostic plumbing, free of any study-specific concept. Public API:
+## `fl_experiment_setup.py` — specs, protocol, construction, seams
 
-| Function | Role |
-|---|---|
-| `make_one_sampler(spec, rng)` / `make_samplers(spec, rng, k)` | dict → callable; broadcast or per-factor list |
-| `simulate_returns(model, n, factor_return_spec, idio_return_spec, k, rep_rng)` | Stages 2–4 → `SimulationContext`; draws **only** from `rep_rng` |
-| `run_analyses(context, analyses)` | run each `analyze(context)` and merge result dicts |
-| `next_run_dir(base)` | allocate sequential `results/MM-DD_run_NN/` |
-
-## `fl_experiment.py` — the generic engine
-
-Theorem-agnostic. Holds the two data specs, the `Experiment` protocol, and the
-runner.
+Theorem-agnostic. Holds the two data specs, the `Experiment` protocol,
+`build_model`, and the stateless seams.
 
 **`ModelSpec`** — the factor model: `k_factors`, `factor_vols`,
 `beta_samplers`, `idio_vol_sampler`. `factor_vols` and the idio vol are
 volatilities (squared into $F$ / $D$).
 
 **`DesignSpec`** — the sweep + return process: `n_values`, `p_values`, `n_reps`,
-`random_seed`, `factor_return_sampler`, `idio_return_sampler`, `output_path`,
-`plot_mode`, and a `model` field that carries the factor model (see
-*Configuration* below).
+`random_seed`, `factor_return_sampler`, `idio_return_sampler`, `sampling`,
+`output_path`, `plot_mode`, and a `model` field that carries the factor model
+(see *Configuration* below).
 
-**`Experiment` (Protocol)** — the only theorem-specific surface. Three hooks,
-none of which may touch the master RNG:
+**`Experiment` (Protocol)** — the only theorem-specific surface (implemented in
+the probe, not here). Three hooks, none of which may touch the master RNG:
 
 ```python
 class Experiment(Protocol):
@@ -124,13 +118,26 @@ class Experiment(Protocol):
     def record(self, n, p, merged: dict) -> list[dict]:   # flatten one rep
 ```
 
-**`build_model(model_spec, p, rng)`** — Stage 1 wrapper (draws β / idio vols from
-the master RNG).
+**`build_model(model_spec, p, rng)`** — Stage 1: construct one `(B, F, D)` model;
+draws β / idio vols from the RNG it's given (`factor_vols` squared into $F$).
+
+**Stateless seams** (the runner reuses these):
+
+| Function | Role |
+|---|---|
+| `make_one_sampler(spec, rng)` / `make_samplers(spec, rng, k)` | dict → callable; broadcast or per-factor list |
+| `simulate_returns(model, n, factor_return_spec, idio_return_spec, k, rep_rng)` | Stages 2–4 → `SimulationContext`; draws **only** from `rep_rng` |
+| `run_analyses(context, analyses)` | run each `analyze(context)` and merge result dicts |
+| `next_run_dir(base)` | allocate sequential `results/MM-DD_run_NN/` |
+
+## `fl_experiment_runner.py` — the sweep
+
+Consumes the setup layer and owns the master-RNG draw order.
 
 **`run_experiment(model_spec, design_spec, experiment, *, rng=None, progress=True)`**
-— the runner. Seeds the master RNG from `design.random_seed`, calls
-`experiment.setup()` once, then sweeps $n \times p$ via `run_cell`, returning a
-tidy DataFrame.
+— the sweep. Seeds the master RNG from `design.random_seed`, calls
+`experiment.setup()` once, then loops $n \times p$ via `run_cell` (or the nested
+runner when `design.sampling == "nested"`), returning a tidy DataFrame.
 
 **`run_cell(...)`** — drives one cell and **owns the master-RNG draw order**:
 (1) `build_model` draws first → (2) `cell_setup` (RNG-free) → (3) per-rep seeds
@@ -265,7 +272,8 @@ Output path resolution: `--out` > `design.output_path` > auto `results/MM-DD_run
 ## Notebook idiom
 
 ```python
-from fl_experiment import ModelSpec, DesignSpec, run_experiment
+from fl_experiment_setup import ModelSpec, DesignSpec
+from fl_experiment_runner import run_experiment
 from sim_theorem_partii import DispersionBiasExperiment
 
 df = run_experiment(ModelSpec(), DesignSpec(n_values=[60], p_values=[2000],
@@ -280,20 +288,21 @@ samplers against it.
 
 # Testing
 
-`tests/test_sim_theorem_partii.py` — 71 tests, 99% line coverage across
-`sim_theorem_partii.py`, `fl_experiment.py`, and `fl_orchestration.py` (only
-`sys.path` bootstrap uncovered). Coverage includes: spec loading and the
-unified-fold (incl. the conflict guard and UTF-8 regression), sampler helpers,
-`build_model` (vol→variance squaring), both Analysis classes, `_rep_records`,
-`_next_run_dir`, the orchestration seams (rep-RNG isolation, fix-model-vary-
-returns, disjoint-key merge), the byte-for-byte equality of the unified and
-split file shapes, the full `simulate`/`run_experiment` path, graphics smoke
-tests, and `main()` CLI dispatch.
+`tests/test_sim_theorem_partii.py` + `tests/test_pipeline_e2e.py` — 181 tests,
+99% line coverage across `sim_theorem_partii.py`, `fl_experiment_setup.py`, and
+`fl_experiment_runner.py` (only `sys.path` bootstrap uncovered). Coverage
+includes: spec loading and the unified-fold (incl. the conflict guard and UTF-8
+regression), sampler helpers, `build_model` (vol→variance squaring), both
+Analysis classes, `_rep_records`, `_next_run_dir`, the setup-layer seams (rep-RNG
+isolation, fix-model-vary-returns, disjoint-key merge), nested sampling, the
+byte-for-byte equality of the unified and split file shapes, the full
+`simulate`/`run_experiment` path, loguru stage logs, graphics smoke tests, and
+`main()` CLI dispatch.
 
 ```bash
-python -m pytest tests/test_sim_theorem_partii.py -v
-python -m pytest tests/test_sim_theorem_partii.py \
-    --cov=sim_theorem_partii --cov=fl_experiment --cov=fl_orchestration --cov-report=term-missing
+python -m pytest tests/ -v
+python -m pytest tests/ \
+    --cov=sim_theorem_partii --cov=fl_experiment_setup --cov=fl_experiment_runner --cov-report=term-missing
 ```
 
 ---
@@ -301,7 +310,7 @@ python -m pytest tests/test_sim_theorem_partii.py \
 # Extending: adding a new theorem
 
 Write a new `Experiment` and hand it to the same engine — no changes to
-`fl_experiment` or `fl_orchestration`:
+`fl_experiment_setup` or `fl_experiment_runner`:
 
 ```python
 class MyTheoremExperiment:

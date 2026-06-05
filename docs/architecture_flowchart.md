@@ -1,9 +1,10 @@
 # Dispersion-Bias Verification — Architecture Flowchart
 
-Three decoupled layers: stateless **seams** (`fl_orchestration`), a generic
-**engine** (`fl_experiment`), and a theorem-specific **probe**
-(`sim_theorem_partii`). The engine knows nothing about dispersion bias; a new
-theorem is a new `Experiment` with no engine change.
+Three decoupled layers: a generic engine in two files — **setup**
+(`fl_experiment_setup`: specs, the `Experiment` protocol, `build_model`, and the
+stateless seams) and **runner** (`fl_experiment_runner`: the sweep) — plus a
+theorem-specific **probe** (`sim_theorem_partii`). The engine knows nothing about
+dispersion bias; a new theorem is a new `Experiment` with no engine change.
 
 ## Control flow + master-RNG draw order
 
@@ -22,7 +23,7 @@ flowchart TD
     %% ── Engine ──────────────────────────────────────────────
     MS --> RUN
     DS --> RUN
-    PROBE --> RUN["run_experiment(model, design, experiment)<br/><b>fl_experiment.py — the engine</b>"]
+    PROBE --> RUN["run_experiment(model, design, experiment)<br/><b>fl_experiment_runner.py — the sweep</b>"]
     RUN --> SETUP["experiment.setup()  ·  register dist_sine (once)"]
     SETUP --> SEED["master RNG = default_rng(design.random_seed)"]
     SEED --> SWEEP{"for n in n_values<br/>for p in p_values"}
@@ -47,8 +48,8 @@ flowchart TD
     ROWS --> DF[("DataFrame<br/>n,p,j,sin2_j,rhs,gap,floor,rotation,rho")]
     DF --> OUT["parquet · figures · RMSE table<br/>(results/MM-DD_run_NN/)"]
 
-    %% ── Seams used (fl_orchestration) ───────────────────────
-    C1 -. uses .-> SEAM["fl_orchestration seams:<br/>make_samplers · simulate_returns<br/>run_analyses · next_run_dir"]
+    %% ── Seams used (fl_experiment_setup) ─────────────────────
+    C1 -. uses .-> SEAM["fl_experiment_setup seams:<br/>make_samplers · simulate_returns<br/>run_analyses · next_run_dir"]
     C6 -. uses .-> SEAM
     C7 -. uses .-> SEAM
     OUT -. uses .-> SEAM
@@ -72,19 +73,20 @@ analysis + record) never touch the master RNG, so swapping in a different
 
 ```mermaid
 flowchart LR
-    subgraph L1["fl_orchestration.py · seams"]
+    subgraph L1["fl_experiment_setup.py · setup"]
         direction TB
+        E1["ModelSpec · DesignSpec"]
+        E2["Experiment (Protocol)"]
+        E3["build_model (Stage 1)"]
         S1["make_samplers / make_one_sampler"]
         S2["simulate_returns (Stages 2–4)"]
         S3["run_analyses (dispatch)"]
         S4["next_run_dir (output bookkeeping)"]
     end
-    subgraph L2["fl_experiment.py · engine"]
+    subgraph L2["fl_experiment_runner.py · runner"]
         direction TB
-        E1["ModelSpec · DesignSpec"]
-        E2["Experiment (Protocol)"]
-        E3["build_model (Stage 1)"]
-        E4["run_experiment / run_cell"]
+        E4["run_experiment (the sweep)"]
+        E5["run_cell · nested sampling"]
     end
     subgraph L3["sim_theorem_partii.py · probe"]
         direction TB
@@ -94,13 +96,13 @@ flowchart LR
         P4["main() CLI · simulate() one-call driver"]
     end
     L3 -->|"run_experiment(model, design, probe)"| L2
-    L2 -->|"calls"| L1
+    L2 -->|"uses specs · build_model · seams"| L1
 
     classDef seam fill:#f3e8fd,stroke:#9b51e0,color:#111;
     classDef engine fill:#fff4e5,stroke:#f5a623,color:#111;
     classDef probe fill:#e6f4ea,stroke:#34a853,color:#111;
     class S1,S2,S3,S4 seam;
-    class E1,E2,E3,E4 engine;
+    class E1,E2,E3,E4,E5 engine;
     class P1,P2,P3,P4 probe;
 ```
 
@@ -119,7 +121,7 @@ INPUTS (decoupled)                         model_spec.json ─┐
   single file (model fields at top level) ─from_json folds─► DesignSpec
   DispersionBiasExperiment (probe) ───────────────────────────────┐      │
                                                                    ▼      ▼
-ENGINE  fl_experiment.run_experiment(model, design, experiment)
+ENGINE  fl_experiment_runner.run_experiment(model, design, experiment)
         │
         ├─ experiment.setup()                 register dist_sine (once)
         ├─ master RNG = default_rng(seed)
@@ -140,6 +142,6 @@ ENGINE  fl_experiment.run_experiment(model, design, experiment)
 OUTPUT   DataFrame[n,p,j,sin2_j,rhs,gap,floor,rotation,rho]
          └─► parquet · figures · RMSE table   (results/MM-DD_run_NN/)
 
-SEAMS (fl_orchestration, reused by the engine):
+SEAMS (fl_experiment_setup, reused by the runner):
   make_samplers · simulate_returns · run_analyses · next_run_dir
 ```

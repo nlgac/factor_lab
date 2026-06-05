@@ -3,7 +3,7 @@ fl_visualization.py
 ====================
 Dispersion-agnostic visualization harness shared across simulation studies.
 
-The same way ``fl_orchestration.run_analyses`` dispatches a list of analyses over
+The same way ``fl_experiment_setup.run_analyses`` dispatches a list of analyses over
 a context, this module dispatches a set of named figure-renderers over a results
 DataFrame. A study registers its figures once; any later script renders them with
 a single call and never re-implements the save/IO/dispatch plumbing.

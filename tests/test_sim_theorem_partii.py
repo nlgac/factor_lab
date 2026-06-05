@@ -41,7 +41,8 @@ sys.path.insert(0, str(ROOT))
 
 import sim_theorem_partii as sim
 import fl_graphics as gfx
-from fl_experiment import ModelSpec, DesignSpec, run_experiment
+from fl_experiment_setup import ModelSpec, DesignSpec
+from fl_experiment_runner import run_experiment
 from factor_lab.analysis import SimulationContext
 from factor_lab.factor_types import FactorModelData
 
@@ -411,17 +412,17 @@ class TestSplitConfig:
         pd.testing.assert_frame_equal(via_engine, via_simulate)
 
 
-# ── fl_orchestration generic seams ────────────────────────────────────────────
+# ── fl_experiment_setup generic seams ────────────────────────────────────────────
 
 class TestOrchestrationSeams:
-    """The dispersion-agnostic seams in fl_orchestration that the script and
+    """The dispersion-agnostic seams in fl_experiment_setup that the script and
     any future second script consume. Verifies the public API stays callable
     and that the stage separation (fix-model-vary-returns) actually works."""
 
     def test_simulate_returns_isolates_to_rep_rng(self, default_model, default_design):
         """simulate_returns must draw strictly from rep_rng — passing the same
         rep_rng seed must produce the same returns regardless of master state."""
-        from fl_orchestration import simulate_returns
+        from fl_experiment_setup import simulate_returns
         model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
         ctx_a = simulate_returns(
             model, n=30,
@@ -443,7 +444,7 @@ class TestOrchestrationSeams:
         """The headline use case from the spec: fix the model, vary the return
         distribution. Different distributions must give different returns even
         with the same per-rep seed."""
-        from fl_orchestration import simulate_returns
+        from fl_experiment_setup import simulate_returns
         model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
         ctx_normal = simulate_returns(
             model, n=30,
@@ -467,7 +468,7 @@ class TestOrchestrationSeams:
         """run_analyses concatenates result dicts; key collisions across analyses
         would silently drop a value. The verification's LHS/RHS keys are disjoint,
         which this test fixes as a contract."""
-        from fl_orchestration import simulate_returns, run_analyses
+        from fl_experiment_setup import simulate_returns, run_analyses
         from factor_lab.analyses.spectral import compute_true_eigenvalues
         model = sim.build_model(default_model, p=200, rng=np.random.default_rng(0))
         _, b_pop = compute_true_eigenvalues(model, default_model.k_factors)
@@ -799,8 +800,9 @@ class TestNestedSampling:
     def test_slice_to_p_is_exact_prefix(self):
         """_slice_to_p must return an exact first-p view: model + returns sliced,
         factor returns shared unchanged."""
-        from fl_experiment import build_model, _slice_to_p
-        from fl_orchestration import simulate_returns
+        from fl_experiment_setup import build_model
+        from fl_experiment_runner import _slice_to_p
+        from fl_experiment_setup import simulate_returns
         model = build_model(ModelSpec(), p=2000, rng=np.random.default_rng(0))
         ctx = simulate_returns(
             model, n=40,
@@ -840,8 +842,9 @@ class TestNestedSampling:
 
         We verify structurally by rebuilding the replicate-0 superset with the
         same per-rep seed and confirming the recorded ρ/c are consistent."""
-        from fl_experiment import build_model, _slice_to_p
-        from fl_orchestration import simulate_returns
+        from fl_experiment_setup import build_model
+        from fl_experiment_runner import _slice_to_p
+        from fl_experiment_setup import simulate_returns
         d = self._design(n_reps=1)
         # Reproduce replicate 0's superset draw order exactly.
         master = np.random.default_rng(d.random_seed)
