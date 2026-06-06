@@ -2,7 +2,7 @@
 
 *Supersedes `KT_proof_theorem3.1prime.md`, `KT_extension_to_nonorthogonal_factors.md`, and `KT_update_2026-05-04.md`. Self-contained briefing for a fresh session.*
 
-> Last updated: 2026-05-26 (session 2) | Trigger: manual | Staleness: Drifting — §3.1 (correction file verified, .tex output noted), §3.3 (tool descriptions updated), §5 (new session work), §6 (resolved correction-file uncertainty).
+> Last updated: 2026-06-05 | Trigger: \ukt | Staleness: Fresh — §3.1 (added step5excerpt.tex, noted v8 PDF), §5 (session 2026-06-05 continued added).
 
 ---
 
@@ -15,7 +15,7 @@ The project has three interlocking strands:
 1. **The proof** — Theorem 3.1′ (NG, single author, $k$-factor, diagonal $G^\infty_B$) and its unification with AK's result (general $G^\infty_B$), now in `unified_dispersion_bias_proof_051926_cleaned.md`.
 2. **The correction** — The James-Stein correction $\hat\Pi_B^{\mathrm{JS}} z = HD_\psi^{-1}H^\top z$, developed through the $k$-frame probe extension, in `dispersion_bias_correction_cleaned.md` *(note: `dispersion_bias_correction_v2_051226.md` referenced in earlier KT is not found on disk — verify which file is current)*.
 
-3. **Manuscript preparation** — LaTeX conversion, citation hygiene, SIAM J. Financial Math format. Not yet started.
+3. **Manuscript preparation** — LaTeX conversion, citation hygiene. **Now active**: `main.tex` is the working draft of the paper, developed in sessions starting 2026-06-03. The manuscript presents the model, assumptions, and Theorem with full proof (7 steps). See §3.1 and §4.4.
 
 ---
 
@@ -102,10 +102,17 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `dispersion_bias_correction_cleaned.md` | James-Stein correction document. | **Primary correction reference** |
 | `dispersion_bias_correction_v2_051226.md` | Complete §7 ($k$-frame probe extension) — the most recent version with full Frobenius deficit theorem, JSE correction, principal angle shrinkage. | **Most complete correction document** |
 | `Proof_Theorem_3.1_prime_v3.md` | Full proof of NG's Theorem 3.1′ only (~935 lines, manuscript-quality). | Still valid; superseded mathematically by the unified proof but cleaner for the NG-only result |
-| `multifactor_dispersion_prevalence_v7.pdf` | AK's paper. $k=3$, general $G^\infty_B$. Has observable bounds (Cor 2, Thm 2, Prop 1) not yet in the unified proof. | External reference; see §4.3 below |
+| `multifactor_dispersion_prevalence_v7.pdf` | AK's paper. $k=3$, general $G^\infty_B$. Has observable bounds (Cor 2, Thm 2, Prop 1) not yet in the unified proof. | External reference; see §4.3 below. Note: `multifactor_dispersion_v8.pdf` also present on disk — may be a newer version; verify. |
 | `proof_walkthrough_k3_cleaned.md` | Step-by-step illustrated walkthrough of Theorem Part (ii) with $k=3$, $p=500$, $n=60$ concrete example. Follows Appendix B.3. **Notation migration applied 2026-05-26.** | **Primary expository reference for the proof** |
 | `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7 (fully proved with Borel–Cantelli + Kolmogorov SLLN), inline k=3 callouts, Corollary 4, worked example. | **Primary accessible proof document** |
 | `latex/theorem_part_ii_3_expanded.tex` | LaTeX conversion of the above via `md_to_latex.py`. Blockquote-wrapped tables and Unicode ✓ handled correctly. | LaTeX artefact — regenerate as needed |
+| `main.tex` | Primary manuscript draft. Presents the factor model, 5 assumptions, the main theorem (floor + rotation decomposition), Lemma 1 (noise concentration), and 7-step proof. Actively revised. | **Active manuscript** |
+| `DEFINED_TERMS.tex` | Complete table of all defined terms, symbols, and named objects from `main.tex`, with locations and notes on open issues. | Created 2026-06-05 |
+| `main.tex.bak` | Backup of `main.tex` before NLG revision session on 2026-06-05. | Backup |
+| `step5excerpt.tex` | Standalone expanded exposition of Step 5 (loading-frame coordinates): symbol glossary, Group A algebraic reduction substeps 5A.1–5A.4, Group B eigenvalue scaling substeps 5B.1–5B.3, explicit input/output interface with Steps 2–4 and Step 6. | **Active — created 2026-06-05** |
+| `floor-rotation.tex` | Original version of the paper (reviewed by NLG; issues catalogued). | Predecessor to `main.tex` |
+| `floor_rotation_nlged.tex` | NLG-revised version of `floor-rotation.tex` with numbered green `\nlgcmt{}` comments explaining each change. | Reviewed draft |
+| `floor_rotation_nlged_v2.tex` | Copy of the above with typos converted to `\typo{}` markers and substantive comments renumbered 1–10. | Alternate revision |
 | `theorem_part_ii_1.md` | Theorem statement and notation from `theorem_part_ii_1.pdf`, converted to markdown with migrated notation. | Created 2026-05-26 |
 | `Notation Migration Guide.md` | Complete two-table guide: symbol renames + affected locations for all documents. | Reference |
 | `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf` into an accessible proof document. | Implemented in `theorem_part_ii_3_expanded.md` |
@@ -134,6 +141,9 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `md_to_latex.py` | Converts math-heavy Markdown to compilable LaTeX. Fixes (2026-05-26): blockquote-wrapped table rows correctly converted to `tabular` environments (not emitted as raw `\begin{quote}` text); Unicode characters (✓, —, …, ×, etc.) substituted with LaTeX equivalents. Run: `python md_to_latex.py input.md [output.tex]`. |
 | `proof_walkthrough_k3.py` | Generates all numerical outputs for the k=3 walkthrough. |
 | `proof_walkthrough_figures.py` | Generates all figures (`walkthrough_figs/fig_w0*.png`) for `proof_walkthrough_k3_cleaned.md`. |
+| `rotation_check.py` | Verifies that finite-sample eigenvector misalignment of $M_n$ is substantial at small $n$ even with diagonal $G_B$ and $\Sigma_f$. Uses `factor_lab` (FactorModelBuilder + FlexibleReturnsSimulator). Produces two tables: mean $\sin^2\angle(\hat{w}_j, e_j)$ by $n$, and single-draw floor+rotation decomposition. |
+| `rotation_check_o.py` | Ad-hoc standalone version of the above (pure numpy, no factor_lab). Includes `%right-angle` column showing misalignment as % of 90°. |
+| `unwrap_prose.py` | Utility: removes mid-paragraph line breaks from `.tex` files while preserving math environments, blank lines, and command lines. Backs up original. Run: `python3 unwrap_prose.py file.tex`. |
 
 ### 3.4 Notation
 
@@ -148,7 +158,7 @@ A notation migration plan for `proof_walkthrough_k3_cleaned.md` was developed in
 - **$P$ dropped**: replaced inline by $C^{1/2}$ (appears only twice).
 - **SNR**: $\mathrm{SNR}_j = n\lambda_j/\delta^2$ (population); $\widehat{\mathrm{SNR}}_j = n\hat\lambda_j/\delta^2$ (realized).
 - **Decoration convention**: superscript $(p)$ = varies with $p$; hat = finite-$n$ sample; no decoration = limit.
-- **$\hat{\cdot}$ retained** (not replaced by $^{(n)}$) for finite-$n$ quantities, given its standard statistical meaning and use in the theorem statement.
+- **$\hat{\cdot}$ convention overridden in `main.tex`** (2026-06-05): in the manuscript, $\hat{M}$ is renamed $M_n$, $\hat\lambda_j$ becomes $\lambda_{n,j}$, $\hat{w}_j$ becomes $w_{n,j}$, and $\widehat{\mathrm{SNR}}_j$ becomes $\mathrm{SNR}_{n,j}$. Rationale: the subscript $n$ more clearly signals that $p\to\infty$ has already been taken and $n$ is the only remaining approximation. The hat convention is retained in all documents *other than* `main.tex` until a global migration is decided.
 
 The full migration table (old symbol → new symbol, with every affected location) is in `Notation Migration Guide.md` (created session 2026-05-23).
 
@@ -208,6 +218,27 @@ These are the key missing piece for making the results statistically operational
 ---
 
 ## 5. Completed Work (Chronological)
+
+**Session 2026-06-05 (continued — Step 5 expanded exposition)**:
+- Created `step5excerpt.tex`: standalone expanded exposition of Step 5 (loading-frame coordinates). Contains: complete symbol glossary for all Step 5 symbols; Group A (algebraic reduction, substeps 5A.1 Coordinate substitution / 5A.2 Gram premultiplication / 5A.3 Gram inversion / 5A.4 Eigenvalue rescaling); Group B (eigenvalue scaling note, substeps 5B.1 AB/BA dimension reduction / 5B.2 Growth rate identification / 5B.3 Limit passage); explicit "Output for Step 6" closing block with the two inner-product limits assembled.
+- Key fixes applied during review: replaced circular invertibility parenthetical in 5A.3 with the correct $\lambda_{\min}(B^\top B/p)\to\lambda_{\min}(G_B)>0$ argument; removed redundant similarity-relation proof of $\Sigma_fG_B \sim M$ (already established in 5B); added sign-convention note ($a_j\to\pm a_j^\infty$, sign fixed by $a_j^\top G_B^{1/2}w_j\ge 0$) to Kato invocation; replaced `$B_{\mathrm{here}}$` clash with $P$/$Q$ naming in AB/BA applications; fixed convergence argument in 5B.3 to invoke eigenvalue continuity explicitly.
+- Added `\subsubsection*` headings for Group A and Group B.
+- Expanded introductory Purpose paragraph to list the three concrete deliverables from Steps 2–4 (SVD identity, eigenvalue limit, eigenvector limit) and preview the two limits Step 5 produces.
+
+**Session 2026-06-03 to 2026-06-05 (manuscript development)**:
+- Reviewed `floor-rotation.tex` and produced `floor_rotation_nlged.tex` (NLG revision with numbered green comments) and `floor_rotation_nlged_v2.tex` (typo markers separated from substantive comments, counter renumbered 1–10).
+- Created and debugged `rotation_check.py` (uses factor_lab) and `rotation_check_o.py` (standalone numpy). Both verify: at $n=5$, factor 2 has mean $\sin^2\approx 0.55$; at $n=50$ still $\approx 0.13$ — substantial rotation with fully diagonal $G_B$ and $\Sigma_f$. Non-diagonal Gram is NOT required.
+- Developed `main.tex` from scratch as the primary manuscript: model (§Problem Formulation), five assumptions, Theorem (floor + rotation), Lemma 1 (noise concentration), 7-step proof. Multiple revision passes.
+- Notation decisions for `main.tex`: $\hat{M}\to M_n$, $\hat\lambda_j\to\lambda_{n,j}$, $\hat{w}_j\to w_{n,j}$, $\widehat{\mathrm{SNR}}_j\to\mathrm{SNR}_{n,j}$ (subscript $n$ = $p\to\infty$ already taken, $n$ is only remaining approximation).
+- Created `DEFINED_TERMS.tex`: complete table of all symbols and named terms in `main.tex` with locations and open-issue flags.
+- Key mathematical clarifications (for manuscript exposition):
+  - Almost sure vs. convergence in probability: a.s. controls the entire sample path; needed for pointwise assembly in Step 7.
+  - $\lambda_{n,j}$ is NOT the $j$th factor variance in general; it is the $j$th eigenvalue of $M_n = G_B^{1/2}(FF^\top/n)G_B^{1/2}$, blending sample factor covariance with loading structure. It equals the factor variance only when $G_B = I_k$.
+  - $\lambda_{n,j}\to\lambda_j$ a.s. as $n\to\infty$ by SLLN + Weyl's inequality.
+  - Kato eigenprojection continuity reference: Kato (1966), Davis-Kahan (1970 SIAM J. Numer. Anal. 7(1):1–46), Yu-Wang-Samworth (2015, Biometrika 102(2):315–323).
+- Approved revision plan for `main.tex` (9 items): notation rename (1a–1e), definition placement (2a–2d). Items 3–6 (remove duplicate Step 5, Kato reference, etc.) pending.
+- Created `unwrap_prose.py`: LaTeX line-break removal utility with `--dry-run` and backup.
+- Updated skills: `output-discipline` (Rule 4: offer Python script for mechanical bulk edits), `hil-practice` (Rule 5: debugging spiral — write task_brief.md and stop after 3 failed attempts).
 
 **Session 2026-05-26 (session 2 — tooling fixes)**:
 - Fixed `reformat_math_extra.py`: blockquote table rows (`> | ... |`) were not having pipe characters protected inside inline math because the parser checked `line.startswith('|')` after stripping `> `; fixed by stripping `'> \t'` before the check. Also added `\emph{} → \text{}` replacement inside math spans.
@@ -273,6 +304,16 @@ These are the key missing piece for making the results statistically operational
 
 **5. Manuscript preparation**: LaTeX conversion of `unified_dispersion_bias_proof_051926_cleaned.md`, length check against SIAM J. Financial Math style (target 6–8 pages per the earlier brief), citation hygiene (Davis–Kahan via Bhatia or Stewart–Sun; GPS2022 explicit citation for Lemma A.1).
 
+**6a. Complete `main.tex` cleanup (approved but not yet applied)**:
+- Remove duplicate Step 5 block (red `{\color{red}...}` block, lines ~586–658) and its malformed `\begin{lemma*}` without `\end{lemma*}`.
+- Remove red draft-lemmas in Steps 2, 3, 4 (or formalize as proper numbered lemmas before Theorem 1).
+- Resolve remaining blue AK comments (notation, Kato reference, $\lambda_{n,j}$ description).
+- Correct SNR gloss: replace "the $j$th factor variance $\lambda_{n,j}$" with accurate description (see §7).
+- Add Kato et al. references with pinpoint cites (Kato 1966 Ch. I §5, Davis-Kahan 1970, Yu-Wang-Samworth 2015).
+- Apply `unwrap_prose.py` to remove mid-paragraph line breaks from `main.tex`.
+
+**6b. Notation migration decision**: $M_n$ notation is now used in `main.tex`. Decide whether to backport to `unified_dispersion_bias_proof_051926_cleaned.md` and other documents, or maintain separate conventions. If backporting, update `Notation Migration Guide.md` first.
+
 **6. Observable estimation for the $k$-frame correction.** Section §7 of the correction document estimates the Frobenius deficit but does not give a CLT or confidence interval for $\|\Pi_B W\|_F^2$. The AK observable bounds (Task 1 above) would fill this gap.
 
 ---
@@ -293,6 +334,8 @@ These are the key missing piece for making the results statistically operational
 
 **JSE correction is factor-specific.** The operator $D_\psi^{-1} = \mathrm{diag}(1/\hat\psi_1,\ldots,1/\hat\psi_k)$ inflates each factor-$j$ coordinate differently. Weaker factors ($\hat\psi_j$ closer to 0) receive larger inflation. This is a feature: the correction is proportionally stronger where the bias is worst.
 
+**$\lambda_{n,j}$ is NOT the $j$th factor variance.** $\lambda_{n,j}$ is the $j$th eigenvalue of $M_n = G_B^{1/2}(FF^\top/n)G_B^{1/2}$. By AB/BA, this equals the $j$th eigenvalue of $(FF^\top/n)G_B$ — a blend of sample factor covariance and loading Gram. Only when $G_B = I_k$ does $\lambda_{n,j}$ reduce to the $j$th eigenvalue of $FF^\top/n$ (the sample factor variance). The SNR ratio $n\lambda_{n,j}/\delta^2$ should be described as the $j$th signal eigenvalue scaled by sample size, relative to average noise — not as a factor variance ratio. Population analog: $\lambda_j$ is the $j$th eigenvalue of $M = G_B^{1/2}\Sigma_f G_B^{1/2}$, similarly a blend. Convergence: $\lambda_{n,j}\to\lambda_j$ a.s. as $n\to\infty$ (SLLN gives $FF^\top/n\to\Sigma_f$ a.s., then Weyl).
+
 **Principal angle shrinkage is a new phenomenon at $k_W > 1$.** The scalar bias ($k_W = 1$) says only that $|H^\top z|^2 < |\Pi_B z|^2$. For a frame ($k_W > 1$), the singular values of $H^\top \tilde{W}$ are all strictly shrunk: $\sigma_l(H^\top \tilde{W}) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$. The JSE correction restores them: $\sigma_l(D_\psi^{-1}H^\top \tilde{W}) \to \sigma_l(\Gamma_\infty)$.
 
 ---
@@ -302,6 +345,7 @@ These are the key missing piece for making the results statistically operational
 To come up to speed, read in this order:
 
 1. **This file** (`docs/KT.md`) — project overview.
+1b. `main.tex` — the current manuscript draft. Quickest way to see the current theorem statement and proof structure.
 2. `unified_dispersion_bias_proof_051926_cleaned.md` §1–4 — theorem statement and examples.
 3. `dispersion_bias_correction_cleaned.md` §1–2, §7 — correction and k-frame extension *(verify filename — see §3.1)*.
 4. `unified_dispersion_bias_proof_051926_cleaned.md` §10–12 — corollaries and Grassmannian discussion.
