@@ -77,7 +77,7 @@ def _drop_comment_keys(config: dict) -> dict:
 # Fields that define the factor model. When they appear at the top level of a
 # design JSON (the "unified single-file" shape), DesignSpec folds them into an
 # inline ``model`` so one loader handles every file shape.
-_MODEL_FIELDS = ("k_factors", "factor_vols", "beta_samplers", "idio_vol_sampler")
+_MODEL_FIELDS = ("k_factors", "factor_vols", "beta_samplers", "idio_vol_sampler", "units")
 
 
 # ── Specs ─────────────────────────────────────────────────────────────────────
@@ -92,8 +92,12 @@ class ModelSpec:
     ``{"distribution": name, ...}`` shape consumed by
     :func:`factor_lab.distributions.create_sampler`.
 
-    ``factor_vols`` and ``idio_vol_sampler`` are both in **volatility** units —
-    they are squared into the variance matrices F and D when the model is built.
+    ``factor_vols`` and ``idio_vol_sampler`` are both in **volatility** units by
+    default — they are squared into the variance matrices F and D when the model
+    is built. Set ``units="variance"`` to instead pass *variances*: the values in
+    ``factor_vols`` and the ``idio_vol_sampler`` draws are then treated as
+    variances (square-rooted at the build boundary, so they land in F / D
+    unchanged). ``units="vol"`` (the default) preserves the original behavior.
 
     Defaults reproduce the diagonal-Gram baseline: a market-like factor 1 with
     loadings β₁ ~ N(1, 1) and zero-mean unit factors 2,3 (β_j ~ N(0, 1)), giving
@@ -117,6 +121,10 @@ class ModelSpec:
     idio_vol_sampler: dict = field(
         default_factory=lambda: {"distribution": "constant", "value": 0.4}
     )
+    # How to interpret factor_vols / idio_vol_sampler values: "vol" (default,
+    # squared into F/D) or "variance" (passed straight into F/D — sqrt'd at the
+    # build boundary so the downstream squaring round-trips).
+    units: str = "vol"
 
     @classmethod
     def from_json(cls, filepath: Union[str, Path]) -> "ModelSpec":
@@ -366,19 +374,44 @@ def build_model(model_spec: ModelSpec, p: int, rng: np.random.Generator):
     """Build a k-factor model from ``model_spec`` for the given p.
 
     Loading samplers, idio-vol sampler, and factor vols all come from the model
-    spec. ``factor_vols`` are volatilities — squared into F here, just as the
-    idio-vol sampler's draws are squared into D. Draws from ``rng`` — this is the
-    master-RNG draw in step (1) of the runner's per-cell order.
+    spec. With ``units="vol"`` (default) ``factor_vols`` are volatilities, squared
+    into F, just as the idio-vol sampler's draws are squared into D. With
+    ``units="variance"`` the same values are *variances*: a sqrt at this boundary
+    converts them to vols, so the downstream squaring lands them in F / D
+    unchanged. Draws from ``rng`` — this is the master-RNG draw in step (1) of the
+    runner's per-cell order.
     """
+    if model_spec.units not in ("vol", "variance"):
+        raise ValueError(
+            f"units must be 'vol' or 'variance', got {model_spec.units!r}"
+        )
+    as_variance = model_spec.units == "variance"
+
+    # Factor side. F holds variances either way: with "vol" inputs, square them;
+    # with "variance" inputs, pass them straight through (sqrt then square = id).
+    if as_variance:
+        if any(float(v) < 0 for v in model_spec.factor_vols):
+            raise ValueError("factor variances must be non-negative")
+        factor_variances = [float(v) for v in model_spec.factor_vols]
+    else:
+        factor_variances = [float(v) ** 2 for v in model_spec.factor_vols]
+
+    # Idio side. The builder squares the sampler's draws into D. With "variance"
+    # inputs the draws are variances, so sqrt them first (round-tripping to the
+    # intended variance); clip at 0 to keep the sqrt real.
+    idio_sampler = make_one_sampler(model_spec.idio_vol_sampler, rng)
+    if as_variance:
+        _draw_variance = idio_sampler
+        idio_sampler = lambda n: np.sqrt(np.maximum(_draw_variance(n), 0.0))
+
     model = FactorModelBuilder(rng=rng).build(
         p=p,
         k=model_spec.k_factors,
         beta_samplers=make_samplers(model_spec.beta_samplers, rng, model_spec.k_factors),
-        idio_vol_sampler=make_one_sampler(model_spec.idio_vol_sampler, rng),
-        # factor_vols are volatilities; F holds variances → square them.
-        factor_variances=[float(v) ** 2 for v in model_spec.factor_vols],
+        idio_vol_sampler=idio_sampler,
+        factor_variances=factor_variances,
     )
-    logger.debug("built model: k={}, p={}", model_spec.k_factors, p)
+    logger.debug("built model: k={}, p={} (units={})", model_spec.k_factors, p, model_spec.units)
     return model
 
 

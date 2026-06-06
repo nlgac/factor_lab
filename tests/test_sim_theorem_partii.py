@@ -568,6 +568,37 @@ class TestBuildModel:
             (model.B ** 2).mean(axis=1), expected_c, rtol=0.05,
         )
 
+    # ── units="variance" fallback ─────────────────────────────────────────────
+
+    def test_units_default_is_vol(self):
+        assert ModelSpec().units == "vol"
+
+    def test_units_variance_factor_matches_vol_squared(self, rng):
+        """factor F is identical whether you pass vols or the equivalent variances."""
+        vols = [0.16, 0.08, 0.06]
+        m_vol = ModelSpec(factor_vols=vols)
+        m_var = ModelSpec(factor_vols=[v ** 2 for v in vols], units="variance")
+        Fv = np.diag(sim.build_model(m_vol, 50, np.random.default_rng(0)).F)
+        Fr = np.diag(sim.build_model(m_var, 50, np.random.default_rng(0)).F)
+        np.testing.assert_allclose(Fv, Fr, rtol=1e-12)
+        np.testing.assert_allclose(Fr, [v ** 2 for v in vols], rtol=1e-12)
+
+    def test_units_variance_idio_roundtrips(self, rng):
+        """units='variance' + constant idio variance v → D's diagonal is exactly v."""
+        m = ModelSpec(units="variance",
+                      idio_vol_sampler={"distribution": "constant", "value": 0.16})
+        D_diag = np.diag(sim.build_model(m, p=200, rng=rng).D)
+        np.testing.assert_allclose(D_diag, 0.16, rtol=1e-10)
+
+    def test_bad_units_raises(self, rng):
+        with pytest.raises(ValueError, match="units must be 'vol' or 'variance'"):
+            sim.build_model(ModelSpec(units="vols"), 10, rng)
+
+    def test_negative_variance_raises(self, rng):
+        with pytest.raises(ValueError, match="non-negative"):
+            sim.build_model(ModelSpec(factor_vols=[-0.01, 0.0064, 0.0036],
+                                      units="variance"), 10, rng)
+
 
 # ── SineAlignmentAnalysis ─────────────────────────────────────────────────────
 

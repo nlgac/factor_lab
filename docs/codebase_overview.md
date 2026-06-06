@@ -100,8 +100,10 @@ Theorem-agnostic. Holds the two data specs, the `Experiment` protocol,
 `build_model`, and the stateless seams.
 
 **`ModelSpec`** — the factor model: `k_factors`, `factor_vols`,
-`beta_samplers`, `idio_vol_sampler`. `factor_vols` and the idio vol are
-volatilities (squared into $F$ / $D$).
+`beta_samplers`, `idio_vol_sampler`, `units`. `factor_vols` and the idio vol are
+volatilities (squared into $F$ / $D$). Set **`units="variance"`** to pass
+variances instead — they're sqrt'd at the `build_model` boundary so they land in
+$F$ / $D$ unchanged; `units="vol"` (default) is the original behavior.
 
 **`DesignSpec`** — the sweep + return process: `n_values`, `p_values`, `n_reps`,
 `random_seed`, `factor_return_sampler`, `idio_return_sampler`, `sampling`,
