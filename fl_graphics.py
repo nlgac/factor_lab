@@ -171,6 +171,20 @@ def plot_components(
     g.set_axis_labels("Ambient dimension (p)", "Value")
     g.set_titles(row_template="{row_name}", col_template="Factor j={col_name}")
 
+    # Render the legend entries as mathtext ($...$); matplotlib's built-in
+    # mathtext needs no TeX install. Relabel the existing legend artists so
+    # seaborn's hue→color mapping stays intact.
+    TERM_LABELS = {
+        "floor":    r"$\delta^2 / (n\rho_j + \delta^2)$  (floor)",
+        "sin2_j":   r"$\sin^2\angle(h_j, \bar b_j)$  (observed)",
+        "rotation": r"$1 - \hat w_{jj}^2$  (rotation)",
+    }
+    handles, labels = [], []
+    if g.legend is not None:
+        labels = [TERM_LABELS.get(t.get_text(), t.get_text()) for t in g.legend.texts]
+        handles = [h for h in g.legend.legend_handles if h is not None]
+        g.legend.remove()  # drop seaborn's default outside legend
+
     y_top = df_melt[df_melt["row_group"] == "Floor / Observed"]["value"].max()
     for ax in g.axes[0, :]:
         ax.set_ylim(top=y_top * (1 + top_margin))
@@ -178,12 +192,23 @@ def plot_components(
     for ax in g.axes[1, :]:
         ax.axhline(0, color="gray", linewidth=0.8, linestyle=":")
 
-    g.fig.suptitle(
+    # Reserve interior margins (bottom for the legend, top for the suptitle)
+    # rather than letting a tight bbox widen the canvas — the figure keeps its
+    # native width and the legend sits in a horizontal band *under* the panels,
+    # within their horizontal bounds. Saved here rather than via _save_fig,
+    # whose no-arg tight_layout + bbox_inches="tight" would undo the reservation.
+    g.figure.tight_layout(rect=(0, 0.08, 1, 0.93))
+    if handles:
+        g.figure.legend(handles, labels, title="term", fontsize=8, ncol=len(handles),
+                        loc="lower center", bbox_to_anchor=(0.5, 0.0))
+    g.figure.suptitle(
         f"Floor and rotation components of Equation (20), n={n_show}\n"
         "Both terms are p-stable; the formula becomes exact as p → ∞",
-        y=1.05,
+        y=0.985,
     )
-    _save_fig(g.fig, out_path)
+    g.figure.savefig(out_path, dpi=150)
+    plt.close(g.figure)
+    logger.info("Saved {}", Path(out_path).name)
 
 
 # ── Registry wiring ───────────────────────────────────────────────────────────
