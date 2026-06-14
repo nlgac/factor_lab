@@ -913,10 +913,80 @@ class TestNestedSampling:
         with pytest.raises(ValueError, match="Unknown sampling mode"):
             run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
 
-    def test_nest_time_not_implemented(self):
-        d = self._design(nest_time=True)
-        with pytest.raises(NotImplementedError, match="nest_time"):
-            run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+    def test_nest_time_requires_nested_sampling(self):
+        """nest_time only piggybacks on the nested superset draw, so pairing it
+        with independent sampling fails loudly at construction."""
+        with pytest.raises(ValueError, match="nest_time=True requires sampling='nested'"):
+            DesignSpec(n_values=[30, 60], p_values=[100], n_reps=1, nest_time=True)
+
+    def test_slice_to_np_is_exact_prefix(self):
+        """_slice_to_np returns an exact first-n-by-first-p view; factor returns
+        sliced to the first n periods (rows), shared across p (no column cut)."""
+        from fl_experiment_setup import build_model, simulate_returns
+        from fl_experiment_runner import _slice_to_np
+        model = build_model(ModelSpec(), p=2000, rng=np.random.default_rng(0))
+        ctx = simulate_returns(
+            model, n=40,
+            factor_return_spec={"distribution": "normal"},
+            idio_return_spec={"distribution": "normal"},
+            k=3, rep_rng=np.random.default_rng(1),
+        )
+        sub = _slice_to_np(ctx, 25, 500)
+        assert sub.p == 500 and sub.model.p == 500 and sub.T == 25
+        np.testing.assert_array_equal(sub.security_returns, ctx.security_returns[:25, :500])
+        np.testing.assert_array_equal(sub.idio_returns, ctx.idio_returns[:25, :500])
+        np.testing.assert_array_equal(sub.factor_returns, ctx.factor_returns[:25, :])
+        np.testing.assert_array_equal(sub.model.B, model.B[:, :500])
+
+    def test_nest_time_run_schema_and_rep_column(self):
+        d = self._design(n_values=[30, 60], nest_time=True)
+        df = run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+        # n × p × reps × k = 2 × 3 × 4 × 3 = 72
+        assert len(df) == 72
+        assert "rep" in df.columns
+        assert sorted(df["n"].unique()) == [30, 60]
+        base_cols = {"n", "p", "j", "sin2_j", "rhs", "gap", "floor", "rotation", "rho"}
+        assert base_cols.issubset(df.columns)
+
+    def test_nest_time_reproducible_under_same_seed(self):
+        d = self._design(n_values=[30, 60], nest_time=True)
+        df1 = run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+        df2 = run_experiment(ModelSpec(), d, sim.DispersionBiasExperiment(), progress=False)
+        pd.testing.assert_frame_equal(df1, df2)
+
+    def test_nest_time_periods_are_prefix_across_n(self):
+        """With nest_time, the smaller n is the first-n-periods prefix of the
+        single n_max returns draw: slicing n_max to n equals slicing to n directly."""
+        from fl_experiment_setup import build_model, simulate_returns
+        from fl_experiment_runner import _slice_to_np
+        d = self._design(n_values=[30, 60], n_reps=1, nest_time=True)
+        # Reproduce replicate 0's superset draw order exactly.
+        master = np.random.default_rng(d.random_seed)
+        rep_seed = int(master.integers(0, 2 ** 31, size=1)[0])
+        rep_rng = np.random.default_rng(rep_seed)
+        model_full = build_model(ModelSpec(), p=max(d.p_values), rng=rep_rng)
+        ctx = simulate_returns(
+            model_full, n=max(d.n_values),
+            factor_return_spec=d.factor_return_sampler,
+            idio_return_spec=d.idio_return_sampler,
+            k=3, rep_rng=rep_rng,
+        )
+        s30 = _slice_to_np(ctx, 30, 100)
+        s60 = _slice_to_np(ctx, 60, 100)
+        np.testing.assert_array_equal(s30.security_returns, s60.security_returns[:30, :])
+        np.testing.assert_array_equal(s30.factor_returns, s60.factor_returns[:30, :])
+
+    def test_nest_time_differs_from_per_n_redraw(self):
+        """nest_time changes the draw order, so its numbers differ from the
+        default per-n-redraw nested run (same seed, same grid)."""
+        d_time = self._design(n_values=[30, 60], n_reps=3, nest_time=True)
+        d_redraw = self._design(n_values=[30, 60], n_reps=3)  # nest_time=False
+        df_time = run_experiment(ModelSpec(), d_time,
+                                 sim.DispersionBiasExperiment(), progress=False)
+        df_redraw = run_experiment(ModelSpec(), d_redraw,
+                                   sim.DispersionBiasExperiment(), progress=False)
+        assert not np.allclose(df_time["sin2_j"].to_numpy(),
+                               df_redraw["sin2_j"].to_numpy())
 
     def test_nonprefix_subsample_not_implemented(self):
         d = self._design(subsample="random")

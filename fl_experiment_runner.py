@@ -30,6 +30,15 @@ Sampling topology (``DesignSpec.sampling``)
   Output rows carry a ``rep`` column; the replicate, not the row, is the unit of
   statistical independence. The ``Experiment`` is unchanged across both modes —
   only how each cell's (model, returns) is produced differs.
+
+Time nesting (``DesignSpec.nest_time``, nested mode only)
+---------------------------------------------------------
+By default the nested path redraws the factor/idio returns for each n. Setting
+``nest_time=True`` nests the n axis as well: per replicate the returns are drawn
+once at ``n_max = max(n_values)`` and each n is the first-n-periods prefix of
+that single draw (the time analogue of the p subset), giving a monotone-in-n
+curve. It changes the master-RNG draw order, so its numbers differ from the
+per-n-redraw default — the same way nested differs from independent.
 """
 
 from __future__ import annotations
@@ -194,6 +203,22 @@ def _slice_model_to_p(model: FactorModelData, p: int) -> FactorModelData:
     return FactorModelData(B=model.B[:, :p], F=model.F, D=model.D[:p, :p])
 
 
+def _slice_to_np(context: SimulationContext, n: int, p: int) -> SimulationContext:
+    """Return a view of ``context`` restricted to its first ``n`` periods and ``p`` assets.
+
+    Periods are rows (axis 0) of the realized return arrays; assets are columns
+    (axis 1) and B's columns. Used by time-nested sampling: the returns are drawn
+    once at (n_max, p_max) and each (n, p) cell is the matching prefix block — the
+    same draw, fewer rows and columns — not a new sample. All slices are views.
+    """
+    return SimulationContext(
+        model=_slice_model_to_p(context.model, p),
+        security_returns=context.security_returns[:n, :p],
+        factor_returns=context.factor_returns[:n, :],
+        idio_returns=context.idio_returns[:n, :p],
+    )
+
+
 def _run_nested(
     model_spec: ModelSpec,
     design_spec: DesignSpec,
@@ -211,11 +236,16 @@ def _run_nested(
         3. for each p (any order): slice the superset to its first p assets and
            run the Experiment on the slice.
 
-    The model's assets (β, D) are shared across all n and p within a replicate;
-    only the factor/idio returns are redrawn per n (n is *not* nested — see
-    ``nest_time``). Each output row is tagged with its ``rep`` index: within a
-    replicate the p-curve is nested and therefore correlated, so the replicate
-    — not the row — is the unit of statistical independence.
+    The model's assets (β, D) are shared across all n and p within a replicate.
+    By default the factor/idio returns are redrawn per n (the n axis is *not*
+    nested). With ``design_spec.nest_time=True`` the returns are instead drawn
+    once per replicate at ``n_max = max(n_values)`` and every n becomes the
+    first-n-periods prefix of that single draw, so the n axis is nested too (the
+    time analogue of the p nesting) — giving a monotone-in-n curve. Each output
+    row is tagged with its ``rep`` index: within a replicate the nested axes are
+    correlated, so the replicate — not the row — is the unit of statistical
+    independence. Enabling ``nest_time`` changes the master-RNG draw order, so its
+    output is not expected to match the per-n-redraw output.
 
     ``cell_setup`` is called once per (replicate, p) and the returned analyses
     are reused across all n. This assumes the per-cell setup is n-independent —
@@ -231,14 +261,12 @@ def _run_nested(
             f"subsample={design_spec.subsample!r} not implemented; only 'prefix' "
             "(first p assets) is currently supported."
         )
-    if design_spec.nest_time:
-        raise NotImplementedError(
-            "nest_time=True (nesting the n/time axis) is not yet implemented; "
-            "leave it False."
-        )
 
     p_values = list(design_spec.p_values)
     p_max = max(p_values)
+    n_values = list(design_spec.n_values)
+    n_max = max(n_values)
+    nest_time = design_spec.nest_time
     k = model_spec.k_factors
     rep_seeds = rng_master.integers(0, 2 ** 31, size=design_spec.n_reps)
 
@@ -247,7 +275,7 @@ def _run_nested(
         tqdm(range(design_spec.n_reps), desc="replicate", unit="rep")
         if progress else range(design_spec.n_reps)
     )
-    n0 = design_spec.n_values[0]
+    n0 = n_values[0]
     for r in rep_iter:
         rep_rng = np.random.default_rng(int(rep_seeds[r]))
         # (1) one superset model for this replicate — shared across all n and p.
@@ -259,20 +287,38 @@ def _run_nested(
             p: experiment.cell_setup(_slice_model_to_p(model_full, p), n0, p)
             for p in p_values
         }
-        for n in design_spec.n_values:
-            # (3) one superset of returns at p_max for this (rep, n).
+
+        if nest_time:
+            # (3) one returns superset at (n_max, p_max) for this replicate; every
+            #     (n, p) cell is the matching first-n-by-first-p prefix block.
             ctx_full = simulate_returns(
-                model=model_full, n=n,
+                model=model_full, n=n_max,
                 factor_return_spec=design_spec.factor_return_sampler,
                 idio_return_spec=design_spec.idio_return_sampler,
                 k=k, rep_rng=rep_rng,
             )
-            # (4) each p is an asset subset of the same draw.
-            for p in p_values:
-                ctx_p = _slice_to_p(ctx_full, p)
-                merged = run_analyses(ctx_p, analyses_by_p[p])
-                for row in experiment.record(n, p, merged):
-                    row["rep"] = r
-                    records.append(row)
+            for n in n_values:
+                for p in p_values:
+                    ctx_np = _slice_to_np(ctx_full, n, p)
+                    merged = run_analyses(ctx_np, analyses_by_p[p])
+                    for row in experiment.record(n, p, merged):
+                        row["rep"] = r
+                        records.append(row)
+        else:
+            for n in n_values:
+                # (3) one superset of returns at p_max for this (rep, n).
+                ctx_full = simulate_returns(
+                    model=model_full, n=n,
+                    factor_return_spec=design_spec.factor_return_sampler,
+                    idio_return_spec=design_spec.idio_return_sampler,
+                    k=k, rep_rng=rep_rng,
+                )
+                # (4) each p is an asset subset of the same draw.
+                for p in p_values:
+                    ctx_p = _slice_to_p(ctx_full, p)
+                    merged = run_analyses(ctx_p, analyses_by_p[p])
+                    for row in experiment.record(n, p, merged):
+                        row["rep"] = r
+                        records.append(row)
 
     return pd.DataFrame(records)

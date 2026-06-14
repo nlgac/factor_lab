@@ -180,9 +180,21 @@ class DesignSpec:
     # Asset-subsample rule when sampling == "nested". "prefix" takes the first p
     # assets (consecutive from the start). Other rules (random/block) reserved.
     subsample: str = "prefix"
-    # Option to also nest the time (n) axis. Not yet enabled — left as a flag so
-    # the design surface is forward-stable; setting True raises until implemented.
+    # Also nest the time (n) axis (requires sampling == "nested"). When True, each
+    # replicate draws ONE returns superset at n_max = max(n_values) and every n is
+    # the first-n-periods prefix of it, so n₁ ⊂ n₂ ⊂ … ⊂ n_max are the SAME draw —
+    # a clean monotone-in-n curve, the time analogue of the p nesting. With False
+    # (the default) returns are redrawn independently for each n.
     nest_time: bool = False
+
+    def __post_init__(self) -> None:
+        # nest_time piggybacks on the nested sampler's per-replicate superset draw,
+        # so it is only meaningful there. Fail loud rather than silently ignore it.
+        if self.nest_time and self.sampling != "nested":
+            raise ValueError(
+                "nest_time=True requires sampling='nested' (it nests the n axis "
+                f"on top of the p nesting); got sampling={self.sampling!r}."
+            )
 
     @classmethod
     def from_json(cls, filepath: Union[str, Path]) -> "DesignSpec":
