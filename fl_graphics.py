@@ -74,6 +74,9 @@ __all__ = [
     "plot_corollary4_gap",
     "plot_all_corollary4",
     "COROLLARY4_FIGURES",
+    # Eq.(17) decomposition (9-panel)
+    "nine_panel",
+    "nine_panel_decomposition",
     "main",
 ]
 
@@ -519,6 +522,148 @@ def plot_all_corollary4(df: pd.DataFrame, out_dir: Path) -> None:
     """Render both Corollary 4 figures into out_dir."""
     render_figures(df, out_dir, names=COROLLARY4_FIGURES)
 
+
+
+# ── Eq.(17) decomposition: 9-panel figure (sin² | gap | out-of-subspace share) ──
+
+_NP_COLORS = ["tab:blue", "tab:orange", "tab:green"]
+_NP_NAVY, _NP_GRAY = "#1f3864", "#555555"
+_NP_SIN2_TICKS = ([0, 0.25, 0.5, 0.75, 1.0], ["0", "0.25", "0.50", "0.75", "1.0"])
+_NP_LBL_MEAS = r"measured $\angle(h, \bar b)$"
+_NP_LBL_OOS = r"out-of-subspace: $\delta^2/(n\lambda_{n,j}+\delta^2)$"
+_NP_LBL_INSUB = "in-subspace"
+
+
+def _np_summarize(df: pd.DataFrame, key: str) -> pd.DataFrame:
+    """Per (key, factor j): component means + SEMs of measured/theory and the paired gap."""
+    g = df.assign(
+        s2_meas=df["sin2_j"], s2_theory=df["rhs"], s2_oos=df["floor"],
+        gap=df["sin2_j"] - df["rhs"],
+    )
+    return g.groupby([key, "j"]).agg(
+        s2_meas=("s2_meas", "mean"), s2_meas_se=("s2_meas", "sem"),
+        s2_theory=("s2_theory", "mean"), s2_theory_se=("s2_theory", "sem"),
+        s2_oos=("s2_oos", "mean"),
+        gap=("gap", "mean"), gap_se=("gap", "sem"),
+    ).reset_index()
+
+
+def _np_caption(reps: int) -> str:
+    return (
+        "Top — sin²∠(h, b̄) = out-of-subspace + in-subspace (additive); black line = measured; "
+        f"caps = 95% CI (R = {reps}, SE = sd/√R).   "
+        "Middle — gap = mean(measured − theory) sin² (paired): 0 ⇒ theory matches, "
+        ">0 ⇒ measured exceeds prediction.   "
+        "Bottom — out-of-subspace share = oos/(oos+in-sub) of the predicted total."
+    )
+
+
+def nine_panel(avg, key, order, cats, xlabel, suptitle, reps=None):
+    """Render the 3×3 Eq.(17) decomposition figure from a pre-summarized frame.
+
+    Rows: sin² (out-of-subspace + in-subspace stack, measured line) | gap | out-of-subspace
+    share. Columns: factors 1–3. ``avg`` is an :func:`_np_summarize` frame keyed by ``key``
+    ('p' or 'n'); ``order`` the key values in plot order; ``cats`` their tick labels; ``reps``
+    drives the 95% CI caption (None hides it). Returns ``(fig, axes)``.
+    """
+    fig, axes = plt.subplots(3, 3, figsize=(13.3, 9.6), sharex="col", sharey="row",
+                             gridspec_kw={"height_ratios": [1, 0.7, 0.7]})
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.17, hspace=0.13, wspace=0.08)
+    cap = dict(fmt="none", ecolor="black", elinewidth=0.8, capsize=2, zorder=5)
+    for j in (1, 2, 3):
+        a = avg[avg["j"] == j].set_index(key).loc[order]
+        meas, oos, theory = (a["s2_meas"].to_numpy(), a["s2_oos"].to_numpy(),
+                             a["s2_theory"].to_numpy())
+        x = np.arange(len(cats))
+        ax = axes[0, j - 1]
+        ax.bar(x, oos, 0.7, color="#4878a8", label=_NP_LBL_OOS)
+        ax.bar(x, theory - oos, 0.7, bottom=oos, color="#f28e2b", label=_NP_LBL_INSUB)
+        ax.plot(x, meas, "o-", color="black", label=_NP_LBL_MEAS, zorder=5)
+        ax.errorbar(x, meas, yerr=1.96 * a["s2_meas_se"].to_numpy(), **cap)
+        ax.errorbar(x, theory, yerr=1.96 * a["s2_theory_se"].to_numpy(), **cap)
+        ax.set_xticks(x, cats, fontsize=8)
+        ax.set_title(f"factor {j}", color=_NP_NAVY)
+        axg = axes[1, j - 1]
+        axg.axhline(0, color="0.6", lw=0.8, ls="--")
+        axg.errorbar(x, a["gap"].to_numpy(), yerr=1.96 * a["gap_se"].to_numpy(),
+                     fmt="o-", color=_NP_COLORS[j - 1], ms=4, lw=1.2, capsize=2)
+        axg.set_xticks(x, cats, fontsize=8)
+        axs = axes[2, j - 1]
+        axs.bar(x, oos / theory, 0.7, color=_NP_COLORS[j - 1], alpha=0.55,
+                label="out-of-subspace share")
+        axs.set_xticks(x, cats, fontsize=8)
+        axs.set_xlabel(xlabel)
+    axes[0, 0].set_ylim(0, 1)
+    axes[0, 0].set_yticks(*_NP_SIN2_TICKS)
+    axes[0, 0].set_ylabel(r"average $\sin^2$")
+    axes[1, 0].set_ylabel("gap = mean(meas − theory)\n[sin², paired]")
+    axes[2, 0].set_ylabel("out-of-subspace share")
+    axes[0, 0].legend(fontsize=8, loc="upper right")
+    for ax in axes.flat:
+        ax.set_axisbelow(True)
+        ax.grid(True, color="0.85", lw=0.5)
+        ax.label_outer()
+    fig.suptitle(suptitle, color=_NP_NAVY, y=0.985)
+    if reps is not None:
+        fig.text(0.5, 0.025, _np_caption(reps), ha="center", va="top",
+                 fontsize=8, color=_NP_GRAY, wrap=True)
+    return fig, axes
+
+
+def _validate_decomp_df(df):
+    """Raise ``ValueError`` if ``df`` is not a plottable DispersionBiasExperiment sweep."""
+    required = {"n", "p", "j", "sin2_j", "rhs", "floor"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            "nine_panel_decomposition: result frame is missing required column(s) "
+            f"{sorted(missing)} — expected a DispersionBiasExperiment sweep with columns "
+            f"{sorted(required)}.")
+    factors = {int(j) for j in df["j"].unique()}
+    if factors != {1, 2, 3}:
+        raise ValueError(
+            "nine_panel_decomposition: this figure is built for 3 factors (j = 1, 2, 3); "
+            f"got j = {sorted(factors)}.")
+    n_uniq, p_uniq = df["n"].nunique(), df["p"].nunique()
+    if not ((p_uniq > 1 and n_uniq == 1) or (n_uniq > 1 and p_uniq == 1)):
+        raise ValueError(
+            "nine_panel_decomposition: needs exactly one swept axis — several p at a single n "
+            f"(growing-p) or several n at a single p (growing-n); got {p_uniq} distinct p and "
+            f"{n_uniq} distinct n.")
+
+
+def nine_panel_decomposition(df, *, key=None, suptitle=None, reps=None, out_path=None):
+    """Plot the 9-panel Eq.(17) decomposition from an experiment result frame.
+
+    **Pure plotter — it does not run anything.** ``df`` must be the per-rep output of a
+    ``DispersionBiasExperiment`` sweep (columns ``n, p, j, sin2_j, rhs, floor``), with factors
+    ``j = 1, 2, 3`` and exactly one swept axis (several ``p`` at a single ``n``, or several ``n``
+    at a single ``p``). The swept axis, x labels, title and replicate count (for the CI caption)
+    are inferred from ``df``; override with ``key`` / ``suptitle`` / ``reps``. Raises
+    ``ValueError`` if ``df`` is incompatible. Saves to ``out_path`` if given. Returns
+    ``(fig, axes)``::
+
+        from fl_experiment_runner import run_experiment
+        from sim_theorem_partii import DispersionBiasExperiment
+        df = run_experiment(model, design, DispersionBiasExperiment())
+        fig, _ = nine_panel_decomposition(df)
+    """
+    _validate_decomp_df(df)
+    if key is None:
+        key = "p" if df["p"].nunique() > 1 else "n"
+    order = sorted(df[key].unique())
+    cats = [f"{v:,}" for v in order] if key == "p" else [str(v) for v in order]
+    xlabel = "p (assets)" if key == "p" else "n (periods)"
+    if suptitle is None:
+        suptitle = (f"Growing p, fixed n = {int(df['n'].iloc[0])}" if key == "p"
+                    else f"Fixed p = {int(df['p'].iloc[0]):,}, growing n")
+    if reps is None:
+        reps = (int(df["rep"].nunique()) if "rep" in df.columns
+                else int(df.groupby(["n", "p", "j"]).size().iloc[0]))
+    fig, axes = nine_panel(_np_summarize(df, key), key, order, cats, xlabel, suptitle, reps=reps)
+    if out_path is not None:
+        fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    return fig, axes
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
