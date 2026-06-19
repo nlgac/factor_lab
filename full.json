@@ -1,7 +1,0 @@
-{
-    "_comment": "Full spec — ~5 min, publication run. Stack on top of defaults.json.",
-    "max_num_sec": 10000,
-    "nums_sec": [100, 500, 1000, 3000, 5000, 10000],
-    "num_sim": 100,
-    "num_targets": 20
-}

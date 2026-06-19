@@ -1,7 +1,0 @@
-{
-    "_comment": "Micro spec — ~1 s, for unit tests. Stack on top of defaults.json.",
-    "max_num_sec": 100,
-    "nums_sec": [30, 60, 100],
-    "num_sim": 3,
-    "num_targets": 3
-}

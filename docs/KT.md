@@ -2,7 +2,7 @@
 
 *Supersedes `KT_proof_theorem3.1prime.md`, `KT_extension_to_nonorthogonal_factors.md`, and `KT_update_2026-05-04.md`. Self-contained briefing for a fresh session.*
 
-> Last updated: 2026-06-05 | Trigger: \ukt | Staleness: Fresh — §3.1 (added step5excerpt.tex, noted v8 PDF), §5 (session 2026-06-05 continued added).
+> Last updated: 2026-06-18 | Trigger: \ukt | Staleness: Drifting — §3.1 (proof_summary_5ideas.tex substantially changed: line count, color scheme, figure), §5 (session 2026-06-18 added).
 
 ---
 
@@ -15,7 +15,7 @@ The project has three interlocking strands:
 1. **The proof** — Theorem 3.1′ (NG, single author, $k$-factor, diagonal $G^\infty_B$) and its unification with AK's result (general $G^\infty_B$), now in `unified_dispersion_bias_proof_051926_cleaned.md`.
 2. **The correction** — The James-Stein correction $\hat\Pi_B^{\mathrm{JS}} z = HD_\psi^{-1}H^\top z$, developed through the $k$-frame probe extension, in `dispersion_bias_correction_cleaned.md` *(note: `dispersion_bias_correction_v2_051226.md` referenced in earlier KT is not found on disk — verify which file is current)*.
 
-3. **Manuscript preparation** — LaTeX conversion, citation hygiene. **Now active**: `main.tex` is the working draft of the paper, developed in sessions starting 2026-06-03. The manuscript presents the model, assumptions, and Theorem with full proof (7 steps). See §3.1 and §4.4.
+3. **Manuscript preparation** — LaTeX conversion, citation hygiene. **Now active**: `paper/main-9.tex` (1357 lines) is the working formal manuscript, titled "Quantifying Principal Component Concentration Bias." `paper/proof_summary_5ideas.tex` (349 lines) is a companion pedagogical document ("5 ideas" summary with Chebyshev appendix). See §3.1.
 
 ---
 
@@ -106,16 +106,22 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `proof_walkthrough_k3_cleaned.md` | Step-by-step illustrated walkthrough of Theorem Part (ii) with $k=3$, $p=500$, $n=60$ concrete example. Follows Appendix B.3. **Notation migration applied 2026-05-26.** | **Primary expository reference for the proof** |
 | `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7 (fully proved with Borel–Cantelli + Kolmogorov SLLN), inline k=3 callouts, Corollary 4, worked example. | **Primary accessible proof document** |
 | `latex/theorem_part_ii_3_expanded.tex` | LaTeX conversion of the above via `md_to_latex.py`. Blockquote-wrapped tables and Unicode ✓ handled correctly. | LaTeX artefact — regenerate as needed |
-| `main.tex` | Primary manuscript draft. Presents the factor model, 5 assumptions, the main theorem (floor + rotation decomposition), Lemma 1 (noise concentration), and 7-step proof. Actively revised. | **Active manuscript** |
-| `DEFINED_TERMS.tex` | Complete table of all defined terms, symbols, and named objects from `main.tex`, with locations and notes on open issues. | Created 2026-06-05 |
-| `main.tex.bak` | Backup of `main.tex` before NLG revision session on 2026-06-05. | Backup |
-| `step5excerpt.tex` | Standalone expanded exposition of Step 5 (loading-frame coordinates): symbol glossary, Group A algebraic reduction substeps 5A.1–5A.4, Group B eigenvalue scaling substeps 5B.1–5B.3, explicit input/output interface with Steps 2–4 and Step 6. | **Active — created 2026-06-05** |
-| `floor-rotation.tex` | Original version of the paper (reviewed by NLG; issues catalogued). | Predecessor to `main.tex` |
-| `floor_rotation_nlged.tex` | NLG-revised version of `floor-rotation.tex` with numbered green `\nlgcmt{}` comments explaining each change. | Reviewed draft |
-| `floor_rotation_nlged_v2.tex` | Copy of the above with typos converted to `\typo{}` markers and substantive comments renumbered 1–10. | Alternate revision |
-| `theorem_part_ii_1.md` | Theorem statement and notation from `theorem_part_ii_1.pdf`, converted to markdown with migrated notation. | Created 2026-05-26 |
+| `main-9.tex` | Primary formal manuscript, 1357 lines. Titled "Quantifying Principal Component Concentration Bias." Presents model, 5 assumptions, Theorem (floor + rotation), Lemma 1 (noise, a.s. via 4th moments + Borel-Cantelli), Lemma on dual Gram convergence, 4-step proof architecture: angular decomp → duality (exact at every p) → limiting inputs → assembly. Uses notation $W_n^{(p)}$, $\theta_{n,j}^{(p)}$, $\kappa_{n,j}^2 = \lambda_{n,j}/(\lambda_{n,j}+\delta^2/n)$. | **Active formal manuscript** |
+| `proof_summary_5ideas.tex` | ~480-line pedagogical companion, produces 12-page PDF. "5 ideas" summary: (1) SVD duality, (2) algebraic inversion, (3) spiked spectrum, (4) isometry, (5) nested projections + Pythagorean assembly + Chebyshev appendix. **Three-color observability scheme** throughout: `\obs{}` blue = directly from Y; `\est{}` green = estimable from spectrum of $W_n^{(p)}$; black = unobserved. Applied to Table 1 (signal matrices) and Appendix longtable. `\obs{n}` applied to standalone $n$ as multiplier in theorem equations. All `\includegraphics` use `../figures/` paths (TeXmaker symlink fix). `proof_summary_5ideas - Copy.tex` is backup of pre-edit state. **Note**: Chebyshev appendix proves in-probability convergence only; main-9's Lemma 1 uses 4th moments + Borel-Cantelli for a.s. — gap is open (see §6 item 7). | **Active pedagogical companion — last revised 2026-06-18** |
+| `memo_wn_and_snr.tex` | Technical memo on $W_n^{(p)}$ (the $n\times n$ dual Gram) and the SNR quantity $\kappa_{n,j}^2$. Supporting reference for main-9. | Created ≤2026-06-17 |
+| `condensed_proof_skeleton.tex` | Short condensed proof skeleton of the dispersion-bias theorem. | Supporting reference |
+| `duality_graph.tex` | TikZ diagram illustrating the $p\times p \leftrightarrow n\times n$ SVD duality (Gram reduction). | Figure |
+| `gemini_theorem_proof_20260611_cleaned.tex` | Gemini-generated proof attempt, cleaned. | External/comparison draft |
+| `gemini_theorem_proof_20260611_expanded_cleaned.tex` | Expanded cleaned version of the above. | External/comparison draft |
+| `fiber_bundle_geometry.tex` | Exposition of the fiber bundle interpretation of the factor model proof geometry. | Exploratory — created ≤2026-06-17 |
+| `statmech_dictionary.tex` | "Variance as Energy" dictionary: stat-mech analogy mapping factor model objects to statistical mechanics objects. | Exploratory — created ≤2026-06-17 |
+| `DEFINED_TERMS.tex` | Complete table of all defined terms, symbols, and named objects (originally from `main.tex`). | Created 2026-06-05 |
+| `step5excerpt.tex` | Standalone expanded exposition of Step 5 (loading-frame coordinates): symbol glossary, Group A substeps 5A.1–5A.4, Group B substeps 5B.1–5B.3, explicit input/output interface. | Created 2026-06-05 |
+| `floor-rotation.tex` | Original AK paper draft (reviewed by NLG; issues catalogued). | Predecessor to main-9.tex |
+| `floor_rotation_nlged.tex` | NLG-revised version with numbered green `\nlgcmt{}` comments. | Reviewed draft |
+| `floor_rotation_nlged_v2.tex` | Copy with typos as `\typo{}` markers and substantive comments renumbered 1–10. | Alternate revision |
 | `Notation Migration Guide.md` | Complete two-table guide: symbol renames + affected locations for all documents. | Reference |
-| `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf` into an accessible proof document. | Implemented in `theorem_part_ii_3_expanded.md` |
+| `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf`. Implemented in `theorem_part_ii_3_expanded.md`. | Implemented |
 
 ### 3.2 Supporting / Historical
 
@@ -141,6 +147,7 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `md_to_latex.py` | Converts math-heavy Markdown to compilable LaTeX. Fixes (2026-05-26): blockquote-wrapped table rows correctly converted to `tabular` environments (not emitted as raw `\begin{quote}` text); Unicode characters (✓, —, …, ×, etc.) substituted with LaTeX equivalents. Run: `python md_to_latex.py input.md [output.tex]`. |
 | `proof_walkthrough_k3.py` | Generates all numerical outputs for the k=3 walkthrough. |
 | `proof_walkthrough_figures.py` | Generates all figures (`walkthrough_figs/fig_w0*.png`) for `proof_walkthrough_k3_cleaned.md`. |
+| `proof/make_fig_isometry.py` | Generates `figures/fig_isometry_pythagorean_split.pdf`. Panel 1 includes the $G_B^{(p)}$-unit ellipse $\{x:x^\top G_B^{(p)}x=1\}$ (pink, #e7298a), parameterized as `G_inv_sqrt @ unit_circle`. Output: 47454 bytes. Run directly as `python3 scripts/proof/make_fig_isometry.py` from project root (exec()-via-bash fails due to `__file__` scope). |
 | `rotation_check.py` | Verifies that finite-sample eigenvector misalignment of $M_n$ is substantial at small $n$ even with diagonal $G_B$ and $\Sigma_f$. Uses `factor_lab` (FactorModelBuilder + FlexibleReturnsSimulator). Produces two tables: mean $\sin^2\angle(\hat{w}_j, e_j)$ by $n$, and single-draw floor+rotation decomposition. |
 | `rotation_check_o.py` | Ad-hoc standalone version of the above (pure numpy, no factor_lab). Includes `%right-angle` column showing misalignment as % of 90°. |
 | `unwrap_prose.py` | Utility: removes mid-paragraph line breaks from `.tex` files while preserving math environments, blank lines, and command lines. Backs up original. Run: `python3 unwrap_prose.py file.tex`. |
@@ -218,6 +225,19 @@ These are the key missing piece for making the results statistically operational
 ---
 
 ## 5. Completed Work (Chronological)
+
+**Session 2026-06-18 (color scheme, figure fix, Davis-Kahan analysis)**:
+- Applied three-color observability scheme to `proof_summary_5ideas.tex`: `\obs{}` (blue = directly from $Y$), `\est{}` (green = estimable from spectrum of $W_n^{(p)}$), black (unobserved population objects). Applied to Table 1 (signal matrices, eigenvalues, eigenvectors) and the full Appendix longtable. Caption of Table 1 updated to include color key.
+- Fixed TeXmaker silent compilation failure: all three `\includegraphics` paths changed from bare filenames (Linux symlinks pointing to `paper/`) to `../figures/` paths where real PDFs live. Error code 0x80070780 = NTFS cannot follow Linux symlinks.
+- Added $G_B^{(p)}$-unit ellipse to Panel 1 of `fig_isometry_pythagorean_split.pdf` — caption had referenced it but figure no longer showed it. Edited `scripts/proof/make_fig_isometry.py`: computed `G_inv_sqrt = Q @ diag(1/sqrt(eigvals)) @ Q.T`, parameterized ellipse as `G_inv_sqrt @ unit_circle`, plotted in pink (#e7298a). Regenerated figure: 47454 bytes. Previous figure had been overwritten by a blank 6K version (tight_layout + set_aspect("equal") interaction; fixed by running inline rather than via exec()).
+- Applied `\obs{n}` to standalone $n$ as a multiplier/divisor in all main theorem equations (noise floor, kappa formula, sibling display, equation (d)). $n$ is directly observable (column dimension of $Y$) and was incorrectly black.
+- Mathematical discussion: Davis-Kahan bound $\sin^2\angle(w_{n,j},w_j) \leq \|M_n-M\|^2/\mathrm{gap}_j^2$. Denominator $\mathrm{gap}_j = \min_{l\neq j}|\lambda_j - \lambda_{n,l}|$ is approximately green (proxied by observed eigenvalue separation). Numerator $\|M_n-M\|$ is black even as a product norm: recovering it requires $\lambda_j$ (population eigenvalues of $M$), which are only accessible as $n\to\infty$, not $p\to\infty$ with $n$ fixed. Observable scaling: $\|M_n-M\| \lesssim \lambda_{n,1}\cdot\sqrt{k/n}$ (up to a constant), but the $O_P$ notation is imprecise in this model — $F$ is fixed, so $\|M_n-M\|$ is a deterministic constant, not a random variable in the $p\to\infty$ sense.
+- `proof_summary_5ideas.tex` now compiles to 12 pages, 427018 bytes.
+
+**Session 2026-06-17 (Chebyshev appendix, main-9 review, Kolm-Ritter comparison)**:
+- Wrote full Chebyshev proof that $\frac{1}{p}Z^\top\Pi_B Z \xrightarrow{p} 0$: splits into off-diagonal (Chebyshev, bound $C^2/p^2$ using $\|U^\top\Delta_z U\|_F^2 \leq [\mathrm{tr}(\Pi_B\Delta_z)]^2$ and $\mathrm{tr}(\Pi_B\Delta_z)\to C = \mathrm{tr}(G_B^{-1}G_{B,\delta}) < \infty$) and diagonal (Markov, mean $= C/p \to 0$). No CLT, no 4th moments required. Inserted as appendix into `proof_summary_5ideas.tex` (bash-mount-desync workaround: head/tail splice).
+- Reviewed `main-9.tex` in full and compared with `proof_summary_5ideas.tex`. Key finding: main-9 has 4-step proof architecture (angular decomp → duality exact at every p → limiting inputs a.s. → assembly), versus 5ideas' narrative "5 ideas" format. main-9 contains Lemma 1 (a.s. convergence via 4th moments + Borel-Cantelli), Cor cor:noiseless (exact equality in noiseless case), Lemma lem:dual (Gram reduction), Lemma lem:econverge (eigenpair convergence). 5ideas' Chebyshev appendix proves only in-probability convergence — gap vs. main-9's a.s. result (see §6 item 7).
+- Read and summarized `refrences/Kolm-Ritter-2026.txt` ("Hidden Factors in Portfolio Risk Models", Kolm & Ritter 2026, 8143 lines). Key contrast: KR uses proportional regime ($N,T\to\infty$, $\gamma=N/T$ fixed, BBP/Marchenko-Pastur); main-9 uses fixed-$n$ regime ($n$ fixed, $p\to\infty$, elementary LLN). KR's main contribution is Monte Carlo calibration of finite-sample BBP thresholds. KR gives scalar Paul (2007) alignment $a^2 = (1-\gamma/\theta^2)/(1+\gamma/\theta)$; main-9 gives the Pythagorean two-term decomposition (floor + rotation) which KR lacks. Note: folder is spelled `refrences/` (typo) not `references/`.
 
 **Session 2026-06-05 (continued — Step 5 expanded exposition)**:
 - Created `step5excerpt.tex`: standalone expanded exposition of Step 5 (loading-frame coordinates). Contains: complete symbol glossary for all Step 5 symbols; Group A (algebraic reduction, substeps 5A.1 Coordinate substitution / 5A.2 Gram premultiplication / 5A.3 Gram inversion / 5A.4 Eigenvalue rescaling); Group B (eigenvalue scaling note, substeps 5B.1 AB/BA dimension reduction / 5B.2 Growth rate identification / 5B.3 Limit passage); explicit "Output for Step 6" closing block with the two inner-product limits assembled.
@@ -314,6 +334,8 @@ These are the key missing piece for making the results statistically operational
 
 **6b. Notation migration decision**: $M_n$ notation is now used in `main.tex`. Decide whether to backport to `unified_dispersion_bias_proof_051926_cleaned.md` and other documents, or maintain separate conventions. If backporting, update `Notation Migration Guide.md` first.
 
+**7. Fix a.s./in-probability gap in `proof_summary_5ideas.tex` Chebyshev appendix.** The appendix currently proves only in-probability convergence for each entry of $\frac{1}{p}Z^\top\Pi_B Z$. main-9's Lemma 1 achieves a.s. convergence using 4th moments + Borel-Cantelli ($\sum_p P(|X_{ij}| \geq \varepsilon) \leq C^2/(\varepsilon^2) \sum_p 1/p^2 < \infty$). Fix requires: (a) add assumption $\sup_i \mathbb{E}[Z_{ai}^4] \leq \kappa_4 < \infty$; (b) upgrade off-diagonal bound to show $O(1/p^2)$ summability; (c) invoke Borel-Cantelli. Medium effort.
+
 **6. Observable estimation for the $k$-frame correction.** Section §7 of the correction document estimates the Frobenius deficit but does not give a CLT or confidence interval for $\|\Pi_B W\|_F^2$. The AK observable bounds (Task 1 above) would fill this gap.
 
 ---
@@ -336,6 +358,8 @@ These are the key missing piece for making the results statistically operational
 
 **$\lambda_{n,j}$ is NOT the $j$th factor variance.** $\lambda_{n,j}$ is the $j$th eigenvalue of $M_n = G_B^{1/2}(FF^\top/n)G_B^{1/2}$. By AB/BA, this equals the $j$th eigenvalue of $(FF^\top/n)G_B$ — a blend of sample factor covariance and loading Gram. Only when $G_B = I_k$ does $\lambda_{n,j}$ reduce to the $j$th eigenvalue of $FF^\top/n$ (the sample factor variance). The SNR ratio $n\lambda_{n,j}/\delta^2$ should be described as the $j$th signal eigenvalue scaled by sample size, relative to average noise — not as a factor variance ratio. Population analog: $\lambda_j$ is the $j$th eigenvalue of $M = G_B^{1/2}\Sigma_f G_B^{1/2}$, similarly a blend. Convergence: $\lambda_{n,j}\to\lambda_j$ a.s. as $n\to\infty$ (SLLN gives $FF^\top/n\to\Sigma_f$ a.s., then Weyl).
 
+**$F$ is fixed; $\|M_n-M\|$ is deterministic, not random.** In this model $p\to\infty$ with $n,k$ fixed and $F\in\mathbb{R}^{k\times n}$ fixed (one realization). So $\|G_B^{1/2}(FF^\top/n-\Sigma_f)G_B^{1/2}\|$ is a deterministic (but unobserved) constant — it is NOT a random variable in the $p\to\infty$ probability space. Writing $O_P(\cdot)$ for it is imprecise; the $O_P$ applies only if $F$ is treated as random (i.e., averaging over hypothetical draws of $F$). The Davis-Kahan bound denominator ($\mathrm{gap}_j$) is approximately green; the numerator ($\|M_n-M\|$) is black for fixed $n$. The term $\sin^2\angle(w_{n,j},w_j)$ goes to 0 as $n\to\infty$ (SLLN on $FF^\top/n\to\Sigma_f$, then Weyl + eigenvector continuity), at rate $O(1/\sqrt{n})$ under standard moment conditions on $F$.
+
 **Principal angle shrinkage is a new phenomenon at $k_W > 1$.** The scalar bias ($k_W = 1$) says only that $|H^\top z|^2 < |\Pi_B z|^2$. For a frame ($k_W > 1$), the singular values of $H^\top \tilde{W}$ are all strictly shrunk: $\sigma_l(H^\top \tilde{W}) \to \sigma_l(\Psi_\infty\Gamma_\infty) \le \psi_{\infty,1}\sigma_l(\Gamma_\infty)$. The JSE correction restores them: $\sigma_l(D_\psi^{-1}H^\top \tilde{W}) \to \sigma_l(\Gamma_\infty)$.
 
 ---
@@ -345,7 +369,8 @@ These are the key missing piece for making the results statistically operational
 To come up to speed, read in this order:
 
 1. **This file** (`docs/KT.md`) — project overview.
-1b. `main.tex` — the current manuscript draft. Quickest way to see the current theorem statement and proof structure.
+1b. `paper/proof_summary_5ideas.tex` — fastest orientation: 5-idea narrative summary + Chebyshev appendix. Read the PDF (12 pages). Color scheme: blue = observable, green = estimable, black = unobserved.
+1c. `paper/main-9.tex` — formal manuscript. 4-step proof architecture, all lemmas, exact notation.
 2. `unified_dispersion_bias_proof_051926_cleaned.md` §1–4 — theorem statement and examples.
 3. `dispersion_bias_correction_cleaned.md` §1–2, §7 — correction and k-frame extension *(verify filename — see §3.1)*.
 4. `unified_dispersion_bias_proof_051926_cleaned.md` §10–12 — corollaries and Grassmannian discussion.

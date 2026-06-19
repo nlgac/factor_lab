@@ -1,7 +1,0 @@
-{
-    "_comment": "Toy spec — ~11 s, for interactive development. Stack on top of defaults.json.",
-    "max_num_sec": 500,
-    "nums_sec": [50, 100, 250, 500],
-    "num_sim": 10,
-    "num_targets": 5
-}
