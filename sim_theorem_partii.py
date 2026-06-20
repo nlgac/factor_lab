@@ -136,8 +136,8 @@ def _register_sine_distance() -> None:
     """Register the diagnostic ``dist_sine`` manifold distance, once per process.
 
     Idempotent: a guard checks the registry first so repeated runs (and the test
-    suite) do not double-register. The centering difference vs. the uncentered Y
-    used in the LHS means this value is diagnostic only.
+    suite) do not double-register. This distance is a direction-comparison
+    diagnostic only; the verified LHS quantity is ``sin2_j``.
     """
     from factor_lab.analyses.manifold import _EXTRA_DISTANCES
     if 'dist_sine' not in _EXTRA_DISTANCES:
@@ -155,7 +155,10 @@ class SineAlignmentAnalysis:
     Observed LHS of Equation (6): sin²∠(hⱼ, b̄ⱼ) for each factor j.
 
     hⱼ:  j-th top left singular vector of Y (estimated loading direction,
-          computed via the n×n Gram trick — uncentered, matching the theorem).
+          computed via the n×n Gram trick). With ``center=True`` (default) Y is
+          row-demeaned first — each asset's time-series mean removed — so h is the
+          MLE covariance eigenvector. ``center=False`` recovers the uncentered
+          second-moment form (Y^T Y on the raw Y).
     b̄ⱼ: j-th population loading direction (unit eigenvector of Σ₀ = BΣ_F B^T/p),
           injected at construction so ARPACK runs once per (n, p) cell.
 
@@ -166,13 +169,17 @@ class SineAlignmentAnalysis:
         # {"sin2_j": array shape (K,), "dist_sine": float}
     """
 
-    def __init__(self, b_pop: np.ndarray):
+    def __init__(self, b_pop: np.ndarray, center: bool = True):
         self.b_pop = b_pop   # (k, p), rows are population loading directions b̄ⱼ
+        self.center = center
 
     def analyze(self, context: SimulationContext) -> dict:
         k = context.k
-        Y = context.security_returns.T   # (p, n)
-        # Top-k left SVs of Y via the n×n Gram Y^T Y (uncentered).
+        Y = context.security_returns.T   # (p, n): rows assets, cols periods
+        if self.center:
+            # Row-demean: subtract each asset's mean over the n periods (MLE cov).
+            Y = Y - Y.mean(axis=1, keepdims=True)
+        # Top-k left SVs of Y via the n×n Gram Y^T Y.
         # Cost O(p·n²) vs O(p²·n) for the full SVD.
         G = Y.T @ Y
         vals, vecs = np.linalg.eigh(G)
@@ -189,7 +196,12 @@ class Eq6RHSAnalysis:
     Predicted RHS of Equation (6), Part (ii): floor + weight × rotation for each j.
 
     Uses factor returns F from the context and empirical prevalences cⱼ = ‖B[j,:]‖²/p
-    from the model loadings. Computes D̂ = C^{1/2}(F^T F/n)C^{1/2}.
+    from the model loadings. Computes D̂ = C^{1/2}(F_c F_c^T/n)C^{1/2}, where F_c is
+    F row-demeaned over time when ``center=True`` (default) — the realized-factor
+    analogue of centering Y in the LHS, keeping the paired LHS/RHS consistent.
+    ``center=False`` uses the raw F (uncentered second moment), matching a
+    ``SineAlignmentAnalysis(center=False)`` LHS. Normalization stays 1/n (the MLE;
+    the lost degree of freedom is a minor large-n bias we accept).
 
     δ² is taken from ``context.model.D`` as the mean of its diagonal (D already
     holds variances — the idio_vol_sampler outputs vols which FactorModelBuilder
@@ -201,9 +213,15 @@ class Eq6RHSAnalysis:
         # keys: "rhs", "floor", "rotation", "rhos", "delta2"
     """
 
+    def __init__(self, center: bool = True):
+        self.center = center
+
     def analyze(self, context: SimulationContext) -> dict:
         k, n = context.k, context.T
         F = context.factor_returns.T                     # (k, n)
+        if self.center:
+            # Row-demean F over time — the realized-factor analogue of centering Y.
+            F = F - F.mean(axis=1, keepdims=True)
         c_half = np.sqrt((context.model.B ** 2).mean(axis=1))   # √cⱼ
         D_hat = (c_half[:, None] * (F @ F.T / n)) * c_half[None, :]
         vals, vecs = np.linalg.eigh(D_hat)
@@ -264,13 +282,19 @@ class DispersionBiasExperiment(BaseExperiment):
         df = run_experiment(ModelSpec(), DesignSpec(), DispersionBiasExperiment())
     """
 
+    def __init__(self, center: bool = True):
+        # center=True (default): row-demean Y and F (the MLE covariance estimator);
+        # center=False: the uncentered second-moment form.
+        self.center = center
+
     def setup(self) -> None:
         _register_sine_distance()
 
     def cell_setup(self, model, n: int, p: int):
         # Population directions once per cell; ARPACK stays out of the rep loop.
         _, b_pop = compute_true_eigenvalues(model, model.k)
-        return [SineAlignmentAnalysis(b_pop), Eq6RHSAnalysis()]
+        return [SineAlignmentAnalysis(b_pop, center=self.center),
+                Eq6RHSAnalysis(center=self.center)]
 
     def record(self, n: int, p: int, merged: dict) -> list[dict]:
         # LHS/RHS result keys are disjoint, so the merged dict serves as both.

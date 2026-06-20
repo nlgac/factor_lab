@@ -632,7 +632,9 @@ class TestSineAlignmentAnalysis:
             factor_returns=np.zeros((n, k)),
             idio_returns=np.zeros((n, p)),
         )
-        result = sim.SineAlignmentAnalysis(b_pop).analyze(ctx)
+        # Perfect recovery is a property of the uncentered second-moment form:
+        # Y here is not row-mean-zero, so test center=False.
+        result = sim.SineAlignmentAnalysis(b_pop, center=False).analyze(ctx)
         np.testing.assert_allclose(result["sin2_j"], 0.0, atol=1e-12)
 
 
@@ -689,7 +691,9 @@ class TestEq6RHSAnalysis:
         assert result["delta2"] == pytest.approx(0.25, abs=1e-12)
 
     def test_diagonal_F_rotation_is_zero(self):
-        result = sim.Eq6RHSAnalysis().analyze(self._diagonal_context())
+        # The diagonal-F construction makes the *uncentered* F F^T/n diagonal;
+        # centering would mix it, so test the uncentered path here.
+        result = sim.Eq6RHSAnalysis(center=False).analyze(self._diagonal_context())
         np.testing.assert_allclose(result["rotation"], 0.0,             atol=1e-12)
         np.testing.assert_allclose(result["rhs"],      result["floor"], atol=1e-12)
 

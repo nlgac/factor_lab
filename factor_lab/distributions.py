@@ -47,9 +47,18 @@ _SAMPLERS = {
         n
     ),
     
-    'student_t': lambda rng, p: lambda n: rng.standard_t(
-        p['df'],  # Required
-        n
+    # Standardized to UNIT VARIANCE by default ('standardize': True): raw
+    # standard_t(df) has variance df/(df-2), so we divide by sqrt(df/(df-2))
+    # (df>2) to make `scale` a true standard deviation. This keeps idio/factor
+    # vols meaning what they say — e.g. a constant idio vol delta gives realized
+    # specific variance delta^2 regardless of df, so the theorem's
+    # delta^2 = mean(diag(D)) holds for heavy tails too. Pass 'standardize': False
+    # for the raw standard_t (variance df/(df-2)); df<=2 (infinite variance) is
+    # always left unscaled since no finite standardization exists.
+    'student_t': lambda rng, p: lambda n: p.get('loc', 0.0) + p.get('scale', 1.0) * (
+        rng.standard_t(p['df'], n)
+        / (np.sqrt(p['df'] / (p['df'] - 2.0))
+           if p.get('standardize', True) and p['df'] > 2.0 else 1.0)
     ),
     
     'uniform': lambda rng, p: lambda n: rng.uniform(
@@ -98,7 +107,9 @@ def create_sampler(
     name : str
         Distribution name. Available:
         - 'normal': Normal distribution (loc, scale)
-        - 'student_t': Student's t distribution (df)
+        - 'student_t': Student's t distribution (df, loc, scale, standardize).
+          standardize=True (default) rescales to unit variance so `scale` is a
+          true std; standardize=False gives raw standard_t (variance df/(df-2)).
         - 'uniform': Uniform distribution (low, high)
         - 'beta': Beta distribution (a, b)
         - 'exponential': Exponential distribution (scale)
