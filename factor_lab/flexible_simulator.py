@@ -39,6 +39,7 @@ Usage
 
 from typing import Union, List, Optional, Dict
 import numpy as np
+from loguru import logger
 
 from .factor_types import FactorModelData
 from .distributions import resolve_samplers, Sampler
@@ -288,7 +289,19 @@ class ReturnsSimulator:
         # r = f @ B + ε
         # (n_periods, k) @ (k, p) + (n_periods, p) = (n_periods, p)
         security_returns = factor_returns @ model.B + idio_returns
-        
+
+        # Dump the realized sample variance of each returns block — lets a run
+        # confirm the samplers delivered the intended spread (e.g. that a
+        # standardized Student-t idio draw really has unit variance before the
+        # sqrt(D) scaling). DEBUG so it stays quiet at INFO but is capturable.
+        logger.debug(
+            "returns variance (n={}, p={}): factor={} | idio(mean)={:.4g} | security(mean)={:.4g}",
+            n_periods, p,
+            np.array2string(factor_returns.var(axis=0), precision=4),
+            float(idio_returns.var(axis=0).mean()),
+            float(security_returns.var(axis=0).mean()),
+        )
+
         return {
             'security_returns': security_returns,
             'factor_returns': factor_returns,
