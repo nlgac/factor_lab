@@ -38,19 +38,59 @@ import numpy as np
 # Universal sampler interface
 Sampler = Callable[[int], np.ndarray]
 
+
+def _student_t_builder(rng: np.random.Generator, p: dict) -> Sampler:
+    """Build a Student-t sampler, standardized to unit variance by default.
+
+    The raw ``rng.standard_t(df)`` has variance ``df / (df - 2)`` (df > 2), so a
+    nominal scale/vol would NOT equal the realized standard deviation. To keep
+    vols meaning what they say, ``standardize=True`` (the default) overwrites the
+    scale with ``1 / sqrt(df / (df - 2))`` so the distributional variance is
+    exactly 1; ``df`` is taken from the user spec and preserved. The shape (and
+    hence the heavy tails) is unchanged — only the spread is normalized.
+
+    Parameters (read from ``p``)
+        df          : degrees of freedom (required).
+        loc         : mean shift (default 0.0); does not affect the variance.
+        scale       : spread multiplier (default 1.0). Honored only when
+                      ``standardize`` is False (the "regular loc/scale" form,
+                      variance ``scale**2 * df / (df - 2)``).
+        standardize : default True -> unit variance (requires df > 2; raises
+                      otherwise, since infinite variance cannot be normalized).
+                      False -> raw ``loc + scale * standard_t(df)``.
+    """
+    df = p['df']  # Required
+    loc = p.get('loc', 0.0)
+
+    if p.get('standardize', True):
+        if df <= 2:
+            raise ValueError(
+                f"student_t standardize=True needs df > 2 for a finite variance "
+                f"to normalize; got df={df}. Pass standardize=False for the raw "
+                f"(heavy-variance) draw."
+            )
+        raw_var = df / (df - 2.0)          # Var(standard_t(df))
+        scale = 1.0 / np.sqrt(raw_var)     # overwrite scale -> unit variance
+        # The distributional variance must be exactly 1 (guards the math above).
+        assert np.isclose(scale ** 2 * raw_var, 1.0), (
+            f"standardized student_t variance {scale ** 2 * raw_var} != 1"
+        )
+    else:
+        scale = p.get('scale', 1.0)
+
+    return lambda n: loc + scale * rng.standard_t(df, n)
+
+
 # Dispatch table for built-in distributions
 # Maps distribution name to builder function
 _SAMPLERS = {
     'normal': lambda rng, p: lambda n: rng.normal(
-        p.get('loc', 0), 
-        p.get('scale', 1), 
+        p.get('loc', 0),
+        p.get('scale', 1),
         n
     ),
-    
-    'student_t': lambda rng, p: lambda n: rng.standard_t(
-        p['df'],  # Required
-        n
-    ),
+
+    'student_t': _student_t_builder,
     
     'uniform': lambda rng, p: lambda n: rng.uniform(
         p['low'],   # Required
@@ -98,7 +138,10 @@ def create_sampler(
     name : str
         Distribution name. Available:
         - 'normal': Normal distribution (loc, scale)
-        - 'student_t': Student's t distribution (df)
+        - 'student_t': Student's t distribution (df, loc, scale, standardize).
+          standardize=True (default) normalizes to unit variance so a downstream
+          vol is a true std; standardize=False gives the raw loc + scale*t form
+          (variance scale**2 * df/(df-2)). df>2 required when standardizing.
         - 'uniform': Uniform distribution (low, high)
         - 'beta': Beta distribution (a, b)
         - 'exponential': Exponential distribution (scale)
