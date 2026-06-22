@@ -93,6 +93,7 @@ coverage.xml
 *.txt
 *.png
 *.md
+!README.md
 *.npz
 *.html
 *.npz
