@@ -34,6 +34,7 @@ Mixture model:
 
 from typing import Callable
 import numpy as np
+from loguru import logger
 
 # Universal sampler interface
 Sampler = Callable[[int], np.ndarray]
@@ -69,12 +70,16 @@ def _student_t_builder(rng: np.random.Generator, p: dict) -> Sampler:
                 f"to normalize; got df={df}. Pass standardize=False for the raw "
                 f"(heavy-variance) draw."
             )
-        raw_var = df / (df - 2.0)          # Var(standard_t(df))
-        scale = 1.0 / np.sqrt(raw_var)     # overwrite scale -> unit variance
-        # The distributional variance must be exactly 1 (guards the math above).
-        assert np.isclose(scale ** 2 * raw_var, 1.0), (
-            f"standardized student_t variance {scale ** 2 * raw_var} != 1"
-        )
+        # Standardization fixes the spread, so a caller-supplied scale is meaningless
+        # here — it is overwritten below. Warn rather than silently discard it.
+        if 'scale' in p:
+            logger.warning(
+                "student_t standardize=True ignores the provided scale={} "
+                "(variance is normalized to 1); pass standardize=False to honor scale.",
+                p['scale'],
+            )
+        # scale = 1/sqrt(df/(df-2)) makes Var(scale * standard_t(df)) == 1 exactly.
+        scale = 1.0 / np.sqrt(df / (df - 2.0))
     else:
         scale = p.get('scale', 1.0)
 
