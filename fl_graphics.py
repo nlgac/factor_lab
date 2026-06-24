@@ -543,45 +543,72 @@ def _np_summarize(df: pd.DataFrame, key: str) -> pd.DataFrame:
     return g.groupby([key, "j"]).agg(
         s2_meas=("s2_meas", "mean"), s2_meas_se=("s2_meas", "sem"),
         s2_theory=("s2_theory", "mean"), s2_theory_se=("s2_theory", "sem"),
-        s2_oos=("s2_oos", "mean"),
+        s2_oos=("s2_oos", "mean"), s2_oos_se=("s2_oos", "sem"),
         gap=("gap", "mean"), gap_se=("gap", "sem"),
     ).reset_index()
 
 
-def _np_caption(reps: int) -> str:
+def _np_caption(reps: int, topline_ci: bool = False) -> str:
+    ribbon = "shaded ribbons = 95% CI of the floor/total toplines, " if topline_ci else ""
     return (
-        "Top — sin²∠(h, b̄) = out-of-subspace + in-subspace (additive); black line = measured; "
-        f"caps = 95% CI (R = {reps}, SE = sd/√R).   "
+        "Top — sin²∠(h, b̄) = out-of-subspace + in-subspace (additive shaded bands); black line = measured; "
+        f"{ribbon}caps = 95% CI of measured (R = {reps}, SE = sd/√R).   "
         "Middle — gap = mean(measured − theory) sin² (paired): 0 ⇒ theory matches, "
         ">0 ⇒ measured exceeds prediction.   "
         "Bottom — out-of-subspace share = oos/(oos+in-sub) of the predicted total."
     )
 
 
-def nine_panel(avg, key, order, cats, xlabel, suptitle, reps=None):
+_NP_CAP = dict(fmt="none", ecolor="black", elinewidth=0.8, capsize=2, zorder=6)
+
+
+def _np_top_panel(ax, a, x, cats, *, topline_ci=False):
+    """Draw one factor's top-row sin² decomposition onto ``ax`` (shared by the 9-panel figure and
+    the standalone top-row view, so they stay visually identical).
+
+    ``a`` is the per-factor slice of an :func:`_np_summarize` frame, indexed by the swept key in
+    plot order; ``x`` the integer positions; ``cats`` their tick labels. Draws the light
+    out-of-subspace / in-subspace shaded bands with floor & predicted-total toplines, the measured
+    sin² (black dots + 95% CI caps), and — when ``topline_ci`` — translucent 95% CI ribbons on the
+    toplines.
+    """
+    meas, oos, theory = (a["s2_meas"].to_numpy(), a["s2_oos"].to_numpy(),
+                         a["s2_theory"].to_numpy())
+    ax.fill_between(x, 0, oos, color="#4878a8", alpha=0.45, label=_NP_LBL_OOS)
+    ax.fill_between(x, oos, theory, color="#f28e2b", alpha=0.45, label=_NP_LBL_INSUB)
+    if topline_ci:
+        oos_ci = 1.96 * a["s2_oos_se"].to_numpy()
+        theory_ci = 1.96 * a["s2_theory_se"].to_numpy()
+        ax.fill_between(x, oos - oos_ci, oos + oos_ci, color="#2c4a6e", alpha=0.25, lw=0, zorder=3)
+        ax.fill_between(x, theory - theory_ci, theory + theory_ci, color="#b5651d", alpha=0.25,
+                        lw=0, zorder=3)
+    ax.plot(x, oos, "-", color="#2c4a6e", lw=1.2)     # floor topline
+    ax.plot(x, theory, "-", color="#b5651d", lw=1.2)  # predicted-total topline
+    ax.plot(x, meas, "o-", color="black", label=_NP_LBL_MEAS, zorder=5)
+    ax.errorbar(x, meas, yerr=1.96 * a["s2_meas_se"].to_numpy(), **_NP_CAP)
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xticks(x, cats, fontsize=8)
+
+
+def nine_panel(avg, key, order, cats, xlabel, suptitle, reps=None, topline_ci=False):
     """Render the 3×3 Eq.(17) decomposition figure from a pre-summarized frame.
 
-    Rows: sin² (out-of-subspace + in-subspace stack, measured line) | gap | out-of-subspace
+    Rows: sin² (out-of-subspace + in-subspace shaded bands, measured line) | gap | out-of-subspace
     share. Columns: factors 1–3. ``avg`` is an :func:`_np_summarize` frame keyed by ``key``
     ('p' or 'n'); ``order`` the key values in plot order; ``cats`` their tick labels; ``reps``
-    drives the 95% CI caption (None hides it). Returns ``(fig, axes)``.
+    drives the 95% CI caption (None hides it). ``topline_ci`` overlays translucent 95% CI ribbons
+    on the out-of-subspace floor and predicted-total toplines (off by default). Returns
+    ``(fig, axes)``.
     """
     fig, axes = plt.subplots(3, 3, figsize=(13.3, 9.6), sharex="col", sharey="row",
                              gridspec_kw={"height_ratios": [1, 0.7, 0.7]})
     fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.17, hspace=0.13, wspace=0.08)
-    cap = dict(fmt="none", ecolor="black", elinewidth=0.8, capsize=2, zorder=5)
     for j in (1, 2, 3):
         a = avg[avg["j"] == j].set_index(key).loc[order]
-        meas, oos, theory = (a["s2_meas"].to_numpy(), a["s2_oos"].to_numpy(),
-                             a["s2_theory"].to_numpy())
+        oos, theory = a["s2_oos"].to_numpy(), a["s2_theory"].to_numpy()
         x = np.arange(len(cats))
         ax = axes[0, j - 1]
-        ax.bar(x, oos, 0.7, color="#4878a8", label=_NP_LBL_OOS)
-        ax.bar(x, theory - oos, 0.7, bottom=oos, color="#f28e2b", label=_NP_LBL_INSUB)
-        ax.plot(x, meas, "o-", color="black", label=_NP_LBL_MEAS, zorder=5)
-        ax.errorbar(x, meas, yerr=1.96 * a["s2_meas_se"].to_numpy(), **cap)
-        ax.errorbar(x, theory, yerr=1.96 * a["s2_theory_se"].to_numpy(), **cap)
-        ax.set_xticks(x, cats, fontsize=8)
+        _np_top_panel(ax, a, x, cats, topline_ci=topline_ci)
         ax.set_title(f"factor {j}", color=_NP_NAVY)
         axg = axes[1, j - 1]
         axg.axhline(0, color="0.6", lw=0.8, ls="--")
@@ -605,7 +632,7 @@ def nine_panel(avg, key, order, cats, xlabel, suptitle, reps=None):
         ax.label_outer()
     fig.suptitle(suptitle, color=_NP_NAVY, y=0.985)
     if reps is not None:
-        fig.text(0.5, 0.025, _np_caption(reps), ha="center", va="top",
+        fig.text(0.5, 0.025, _np_caption(reps, topline_ci), ha="center", va="top",
                  fontsize=8, color=_NP_GRAY, wrap=True)
     return fig, axes
 
@@ -632,14 +659,16 @@ def _validate_decomp_df(df):
             f"{n_uniq} distinct n.")
 
 
-def nine_panel_decomposition(df, *, key=None, suptitle=None, reps=None, out_path=None):
+def nine_panel_decomposition(df, *, key=None, suptitle=None, reps=None, out_path=None,
+                             topline_ci=False):
     """Plot the 9-panel Eq.(17) decomposition from an experiment result frame.
 
     **Pure plotter — it does not run anything.** ``df`` must be the per-rep output of a
     ``DispersionBiasExperiment`` sweep (columns ``n, p, j, sin2_j, rhs, floor``), with factors
     ``j = 1, 2, 3`` and exactly one swept axis (several ``p`` at a single ``n``, or several ``n``
     at a single ``p``). The swept axis, x labels, title and replicate count (for the CI caption)
-    are inferred from ``df``; override with ``key`` / ``suptitle`` / ``reps``. Raises
+    are inferred from ``df``; override with ``key`` / ``suptitle`` / ``reps``. ``topline_ci``
+    overlays translucent 95% CI ribbons on the floor/total toplines (off by default). Raises
     ``ValueError`` if ``df`` is incompatible. Saves to ``out_path`` if given. Returns
     ``(fig, axes)``::
 
@@ -660,7 +689,45 @@ def nine_panel_decomposition(df, *, key=None, suptitle=None, reps=None, out_path
     if reps is None:
         reps = (int(df["rep"].nunique()) if "rep" in df.columns
                 else int(df.groupby(["n", "p", "j"]).size().iloc[0]))
-    fig, axes = nine_panel(_np_summarize(df, key), key, order, cats, xlabel, suptitle, reps=reps)
+    fig, axes = nine_panel(_np_summarize(df, key), key, order, cats, xlabel, suptitle, reps=reps,
+                           topline_ci=topline_ci)
+    if out_path is not None:
+        fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    return fig, axes
+
+
+def top_row_decomposition(df, *, key=None, suptitle=None, topline_ci=False, out_path=None):
+    """Standalone 1×3 version of the 9-panel **top row** — one sin² band panel per factor.
+
+    Same data contract and styling as :func:`nine_panel_decomposition` (it shares
+    :func:`_np_top_panel`), just the top row on its own for slides/zoom-ins. The swept axis is
+    inferred from ``df`` (override with ``key``); ``topline_ci`` overlays the floor/total 95% CI
+    ribbons (off by default). Saves to ``out_path`` if given; returns ``(fig, axes)``.
+    """
+    _validate_decomp_df(df)
+    if key is None:
+        key = "p" if df["p"].nunique() > 1 else "n"
+    order = sorted(df[key].unique())
+    cats = [f"{v:,}" for v in order] if key == "p" else [str(v) for v in order]
+    xlabel = "p (assets)" if key == "p" else "n (periods)"
+    avg = _np_summarize(df, key)
+    fig, axes = plt.subplots(1, 3, figsize=(13.3, 4.4), sharey=True)
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.84, bottom=0.16, wspace=0.08)
+    x = np.arange(len(cats))
+    for j in (1, 2, 3):
+        a = avg[avg["j"] == j].set_index(key).loc[order]
+        ax = axes[j - 1]
+        _np_top_panel(ax, a, x, cats, topline_ci=topline_ci)
+        ax.set_title(f"factor {j}", color=_NP_NAVY)
+        ax.set_xlabel(xlabel)
+        ax.set_axisbelow(True)
+        ax.grid(True, color="0.85", lw=0.5)
+    axes[0].set_ylim(0, 1)
+    axes[0].set_yticks(*_NP_SIN2_TICKS)
+    axes[0].set_ylabel(r"average $\sin^2$")
+    axes[0].legend(fontsize=8, loc="upper right")
+    if suptitle:
+        fig.suptitle(suptitle, color=_NP_NAVY, y=0.97)
     if out_path is not None:
         fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     return fig, axes

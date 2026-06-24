@@ -40,7 +40,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import sim_theorem_partii as sim
-import fl_graphics as gfx
+import fl_graphics as gfx                       # imports matplotlib + forces the Agg backend
+import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
 from fl_experiment_setup import ModelSpec, DesignSpec
 from fl_experiment_runner import run_experiment
 from factor_lab.analysis import SimulationContext
@@ -118,6 +120,46 @@ def results_df():
                     "floor":  0.2,
                     "rotation": 0.1,
                     "rho":    1.5,
+                })
+    return pd.DataFrame(records)
+
+
+@pytest.fixture
+def growing_p_df():
+    """Per-rep decomposition frame with a single swept axis: several p at fixed n=63, j=1,2,3.
+
+    Conformant for _validate_decomp_df / nine_panel_decomposition / top_row_decomposition
+    (columns n, p, j, sin2_j, rhs, floor); a handful of reps per cell so SEMs are well-defined.
+    """
+    rng = np.random.default_rng(2026)
+    records = []
+    for p in [100, 500, 2000]:
+        for j in (1, 2, 3):
+            floor = 0.05 * j
+            for _ in range(8):
+                records.append({
+                    "n": 63, "p": p, "j": j,
+                    "sin2_j": floor + 0.3 / np.sqrt(p) + rng.normal(0, 0.01),
+                    "rhs":    floor + 0.02,
+                    "floor":  floor,
+                })
+    return pd.DataFrame(records)
+
+
+@pytest.fixture
+def growing_n_df():
+    """Per-rep decomposition frame with a single swept axis: several n at fixed p=3000, j=1,2,3."""
+    rng = np.random.default_rng(7)
+    records = []
+    for n in [30, 63, 120]:
+        for j in (1, 2, 3):
+            floor = 0.05 * j * (63 / n)
+            for _ in range(8):
+                records.append({
+                    "n": n, "p": 3000, "j": j,
+                    "sin2_j": floor + 0.2 / np.sqrt(n) + rng.normal(0, 0.01),
+                    "rhs":    floor + 0.02,
+                    "floor":  floor,
                 })
     return pd.DataFrame(records)
 
@@ -1048,6 +1090,133 @@ class TestGraphics:
         """plot_all with n_show=None should infer 60 (median of [30, 60, 120])."""
         gfx.plot_all(results_df, tmp_path)
         assert (tmp_path / "fig_theorem1_components_v2.png").exists()
+
+
+# ── Eq.(17) band decomposition (nine_panel / top_row / shared helpers) ─────────
+
+def _poly_count(ax):
+    """Number of fill_between bands on ``ax`` (each is a PolyCollection; errorbar bars are
+    LineCollections and so are excluded)."""
+    return sum(isinstance(c, PolyCollection) for c in ax.collections)
+
+
+def _fig_text(fig):
+    return " ".join(t.get_text() for t in fig.texts)
+
+
+class TestDecompositionGraphics:
+    """The shaded-band sin² decomposition: _np_summarize, _validate_decomp_df, the shared
+    _np_top_panel helper, and the nine_panel_decomposition / top_row_decomposition entry points
+    (including the off-by-default topline_ci ribbons)."""
+
+    # ── _np_summarize ─────────────────────────────────────────────────────────
+    def test_summarize_one_row_per_key_and_factor(self, growing_p_df):
+        avg = gfx._np_summarize(growing_p_df, "p")
+        assert len(avg) == 3 * 3                       # 3 p × 3 factors
+        assert set(avg["j"]) == {1, 2, 3}
+
+    def test_summarize_exposes_means_and_sems(self, growing_p_df):
+        """The floor/total CI ribbons need s2_oos_se and s2_theory_se — pin every column."""
+        avg = gfx._np_summarize(growing_p_df, "p")
+        for col in ("s2_meas", "s2_meas_se", "s2_theory", "s2_theory_se",
+                    "s2_oos", "s2_oos_se", "gap", "gap_se"):
+            assert col in avg.columns
+
+    def test_summarize_gap_is_meas_minus_theory(self, growing_p_df):
+        avg = gfx._np_summarize(growing_p_df, "p")
+        np.testing.assert_allclose(avg["gap"], avg["s2_meas"] - avg["s2_theory"], atol=1e-12)
+
+    # ── _validate_decomp_df ────────────────────────────────────────────────────
+    def test_validate_accepts_single_axis(self, growing_p_df, growing_n_df):
+        gfx._validate_decomp_df(growing_p_df)          # growing-p: no raise
+        gfx._validate_decomp_df(growing_n_df)          # growing-n: no raise
+
+    def test_validate_missing_column_raises(self, growing_p_df):
+        with pytest.raises(ValueError, match="missing required column"):
+            gfx._validate_decomp_df(growing_p_df.drop(columns=["floor"]))
+
+    def test_validate_wrong_factor_count_raises(self, growing_p_df):
+        with pytest.raises(ValueError, match="3 factors"):
+            gfx._validate_decomp_df(growing_p_df[growing_p_df["j"] != 3])
+
+    def test_validate_two_swept_axes_raises(self, growing_p_df):
+        two_axis = growing_p_df.copy()
+        two_axis.loc[two_axis.index[: len(two_axis) // 2], "n"] = 30   # multiple n AND p
+        with pytest.raises(ValueError, match="exactly one swept axis"):
+            gfx._validate_decomp_df(two_axis)
+
+    # ── nine_panel_decomposition ───────────────────────────────────────────────
+    def test_nine_panel_returns_3x3_and_writes_png(self, growing_p_df, tmp_path):
+        out = tmp_path / "nine.png"
+        fig, axes = gfx.nine_panel_decomposition(growing_p_df, out_path=str(out))
+        assert axes.shape == (3, 3)
+        assert out.exists() and out.stat().st_size > 0
+        plt.close(fig)
+
+    def test_nine_panel_infers_swept_axis_label(self, growing_p_df, growing_n_df):
+        figp, axp = gfx.nine_panel_decomposition(growing_p_df)
+        assert axp[2, 0].get_xlabel() == "p (assets)"
+        plt.close(figp)
+        fign, axn = gfx.nine_panel_decomposition(growing_n_df)
+        assert axn[2, 0].get_xlabel() == "n (periods)"
+        plt.close(fign)
+
+    def test_nine_panel_topline_ci_adds_two_ribbons(self, growing_p_df):
+        fig0, ax0 = gfx.nine_panel_decomposition(growing_p_df, topline_ci=False)
+        fig1, ax1 = gfx.nine_panel_decomposition(growing_p_df, topline_ci=True)
+        assert _poly_count(ax0[0, 0]) == 2             # oos + in-subspace bands only
+        assert _poly_count(ax1[0, 0]) == 4             # + floor/total CI ribbons
+        plt.close(fig0); plt.close(fig1)
+
+    def test_nine_panel_caption_mentions_ribbons_only_with_ci(self, growing_p_df):
+        fig0, _ = gfx.nine_panel_decomposition(growing_p_df, topline_ci=False)
+        fig1, _ = gfx.nine_panel_decomposition(growing_p_df, topline_ci=True)
+        assert "ribbon" not in _fig_text(fig0)
+        assert "ribbon" in _fig_text(fig1)
+        plt.close(fig0); plt.close(fig1)
+
+    def test_nine_panel_suptitle_override(self, growing_p_df):
+        fig, _ = gfx.nine_panel_decomposition(growing_p_df, suptitle="custom title")
+        assert "custom title" in _fig_text(fig)
+        plt.close(fig)
+
+    # ── top_row_decomposition (standalone 1×3, shared helper) ───────────────────
+    def test_top_row_returns_three_panels_and_writes_png(self, growing_p_df, tmp_path):
+        out = tmp_path / "toprow.png"
+        fig, axes = gfx.top_row_decomposition(growing_p_df, out_path=str(out))
+        assert axes.shape == (3,)
+        assert out.exists() and out.stat().st_size > 0
+        plt.close(fig)
+
+    def test_top_row_topline_ci_adds_two_ribbons(self, growing_p_df):
+        fig0, ax0 = gfx.top_row_decomposition(growing_p_df, topline_ci=False)
+        fig1, ax1 = gfx.top_row_decomposition(growing_p_df, topline_ci=True)
+        assert _poly_count(ax0[0]) == 2
+        assert _poly_count(ax1[0]) == 4
+        plt.close(fig0); plt.close(fig1)
+
+    def test_top_row_validates_input(self, growing_p_df):
+        with pytest.raises(ValueError, match="3 factors"):
+            gfx.top_row_decomposition(growing_p_df[growing_p_df["j"] != 2])
+
+    def test_top_row_matches_nine_panel_top_row(self, growing_p_df):
+        """Both views go through _np_top_panel, so the first factor panel is drawn identically."""
+        fig9, ax9 = gfx.nine_panel_decomposition(growing_p_df)
+        figt, axt = gfx.top_row_decomposition(growing_p_df)
+        assert _poly_count(ax9[0, 0]) == _poly_count(axt[0])
+        plt.close(fig9); plt.close(figt)
+
+    # ── _np_top_panel (shared drawing helper) ───────────────────────────────────
+    def test_np_top_panel_draws_bands_and_measured_line(self, growing_p_df):
+        avg = gfx._np_summarize(growing_p_df, "p")
+        order = sorted(growing_p_df["p"].unique())
+        a = avg[avg["j"] == 1].set_index("p").loc[order]
+        x = np.arange(len(order))
+        fig, ax = plt.subplots()
+        gfx._np_top_panel(ax, a, x, [str(v) for v in order])
+        assert _poly_count(ax) == 2                    # two stacked bands, no ribbons by default
+        assert any(line.get_color() == "black" for line in ax.lines)   # measured sin² line
+        plt.close(fig)
 
 
 # ── main() CLI dispatch ───────────────────────────────────────────────────────
