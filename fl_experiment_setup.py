@@ -100,11 +100,12 @@ class ModelSpec:
     unchanged). ``units="vol"`` (the default) preserves the original behavior.
 
     Defaults reproduce the diagonal-Gram baseline: a market-like factor 1 with
-    loadings β₁ ~ N(1, 1) and zero-mean unit factors 2,3 (β_j ~ N(0, 1)), giving
-    prevalences c = E‖β_j‖²/p = [2, 1, 1] (off-diagonal Gram entries vanish since
-    factors 2,3 are zero-mean → G∞ = I_k still holds). Factor vols σ = [.16, .08,
-    .06] (variances [.0256, .0064, .0036]); constant idio vol 0.4 (so δ² = 0.16).
-    Spikes d_j = c_j σ_j² = [.0512, .0064, .0036] satisfy Assumption 3.
+    loadings β₁ ~ N(1, sd 0.5) and zero-mean unit factors 2,3 (β_j ~ N(0, 1)),
+    giving prevalences c = E‖β_j‖²/p = mean² + sd² = [1.25, 1, 1] (off-diagonal
+    Gram entries vanish since factors 2,3 are zero-mean → G∞ = I_k still holds).
+    Factor vols σ = [.16, .08, .06] (variances [.0256, .0064, .0036]); constant
+    idio vol 0.4 (so δ² = 0.16). Spikes d_j = c_j σ_j² = [.032, .0064, .0036]
+    satisfy Assumption 3.
     """
 
     k_factors: int = 3
@@ -113,7 +114,7 @@ class ModelSpec:
     )
     beta_samplers: Union[list[dict], dict] = field(
         default_factory=lambda: [
-            {"distribution": "normal", "loc": 1.0, "scale": 1.0},
+            {"distribution": "normal", "loc": 1.0, "scale": 0.5},   # market-like factor 1 (c_1 = 1.25)
             {"distribution": "normal", "loc": 0.0, "scale": 1.0},
             {"distribution": "normal", "loc": 0.0, "scale": 1.0},
         ]
