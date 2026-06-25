@@ -1218,6 +1218,47 @@ class TestDecompositionGraphics:
         assert any(line.get_color() == "black" for line in ax.lines)   # measured sin² line
         plt.close(fig)
 
+    # ── six_panel_decomposition (band top row + per-rep gap boxplots) ───────────
+    def test_six_panel_returns_2x3_and_writes_png(self, growing_p_df, tmp_path):
+        out = tmp_path / "six.png"
+        fig, axes = gfx.six_panel_decomposition(growing_p_df, out_path=str(out))
+        assert axes.shape == (2, 3)
+        assert out.exists() and out.stat().st_size > 0
+        plt.close(fig)
+
+    def test_six_panel_top_row_reuses_band_panel(self, growing_p_df):
+        """Row 0 is the shared band panel (2 bands by default, 4 with topline_ci)."""
+        fig0, ax0 = gfx.six_panel_decomposition(growing_p_df, topline_ci=False)
+        fig1, ax1 = gfx.six_panel_decomposition(growing_p_df, topline_ci=True)
+        assert _poly_count(ax0[0, 0]) == 2
+        assert _poly_count(ax1[0, 0]) == 4
+        plt.close(fig0); plt.close(fig1)
+
+    def test_six_panel_boxplot_row_has_one_box_per_swept_value(self, growing_p_df):
+        """Row 1 draws a per-rep gap boxplot at each swept value (3 p's -> 3 boxes per factor)."""
+        n_p = growing_p_df["p"].nunique()
+        fig, axes = gfx.six_panel_decomposition(growing_p_df)
+        # each boxplot 'box' is a Line2D (patch_artist still records boxes via ax.patches)
+        from matplotlib.patches import PathPatch
+        boxes = [p for p in axes[1, 0].patches if isinstance(p, PathPatch)]
+        assert len(boxes) == n_p
+        # the zero reference line is present in the gap row
+        assert any(abs(line.get_ydata()[0]) < 1e-12 for line in axes[1, 0].lines
+                   if len(line.get_ydata()))
+        plt.close(fig)
+
+    def test_six_panel_infers_swept_axis_label(self, growing_p_df, growing_n_df):
+        figp, axp = gfx.six_panel_decomposition(growing_p_df)
+        assert axp[1, 0].get_xlabel() == "p (assets)"
+        plt.close(figp)
+        fign, axn = gfx.six_panel_decomposition(growing_n_df)
+        assert axn[1, 0].get_xlabel() == "n (periods)"
+        plt.close(fign)
+
+    def test_six_panel_validates_input(self, growing_p_df):
+        with pytest.raises(ValueError, match="3 factors"):
+            gfx.six_panel_decomposition(growing_p_df[growing_p_df["j"] != 2])
+
 
 # ── main() CLI dispatch ───────────────────────────────────────────────────────
 

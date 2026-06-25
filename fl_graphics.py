@@ -590,6 +590,22 @@ def _np_top_panel(ax, a, x, cats, *, topline_ci=False):
     ax.set_xticks(x, cats, fontsize=8)
 
 
+def _np_gap_box_panel(ax, gaps, x, cats, color):
+    """Draw one factor's per-rep gap (measured − theory) distribution as a boxplot at each swept
+    value, instead of the mean±CI line. ``gaps`` is a list (one entry per swept value, in plot
+    order) of per-replicate gap arrays; ``x`` the integer positions; ``cats`` the tick labels.
+    """
+    ax.axhline(0, color="0.6", lw=0.8, ls="--", zorder=1)   # theory-matches reference
+    ax.boxplot(
+        gaps, positions=x, widths=0.55, patch_artist=True, showfliers=False, zorder=3,
+        medianprops=dict(color="black", lw=1.1),
+        boxprops=dict(facecolor=color, alpha=0.55, edgecolor=color),
+        whiskerprops=dict(color=color), capprops=dict(color=color),
+    )
+    ax.set_xlim(x[0] - 0.5, x[-1] + 0.5)
+    ax.set_xticks(x, cats, fontsize=8)
+
+
 def nine_panel(avg, key, order, cats, xlabel, suptitle, reps=None, topline_ci=False):
     """Render the 3×3 Eq.(17) decomposition figure from a pre-summarized frame.
 
@@ -728,6 +744,65 @@ def top_row_decomposition(df, *, key=None, suptitle=None, topline_ci=False, out_
     axes[0].legend(fontsize=8, loc="upper right")
     if suptitle:
         fig.suptitle(suptitle, color=_NP_NAVY, y=0.97)
+    if out_path is not None:
+        fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
+    return fig, axes
+
+
+def six_panel_decomposition(df, *, key=None, suptitle=None, reps=None, out_path=None,
+                            topline_ci=False):
+    """Plot a 2×3 decomposition: the band sin² top row + a per-rep gap **boxplot** row.
+
+    Same data contract as :func:`nine_panel_decomposition` (per-rep DispersionBiasExperiment
+    sweep; one swept axis). Row 0 is the shared band panel (:func:`_np_top_panel`). Row 1 shows
+    the distribution of the per-replicate gap ``sin²_j − rhs`` at each swept value as a boxplot —
+    the spread across trajectories, rather than the mean±CI of the 9-panel middle row. The third
+    (out-of-subspace share) row is intentionally omitted for now. ``topline_ci`` overlays the
+    floor/total 95% CI ribbons on the top row (off by default). Saves to ``out_path`` if given;
+    returns ``(fig, axes)``.
+    """
+    _validate_decomp_df(df)
+    if key is None:
+        key = "p" if df["p"].nunique() > 1 else "n"
+    order = sorted(df[key].unique())
+    cats = [f"{v:,}" for v in order] if key == "p" else [str(v) for v in order]
+    xlabel = "p (assets)" if key == "p" else "n (periods)"
+    if suptitle is None:
+        suptitle = (f"Growing p, fixed n = {int(df['n'].iloc[0])}" if key == "p"
+                    else f"Fixed p = {int(df['p'].iloc[0]):,}, growing n")
+    if reps is None:
+        reps = (int(df["rep"].nunique()) if "rep" in df.columns
+                else int(df.groupby(["n", "p", "j"]).size().iloc[0]))
+    avg = _np_summarize(df, key)
+    gap_all = df.assign(gap=df["sin2_j"] - df["rhs"])
+    x = np.arange(len(cats))
+
+    fig, axes = plt.subplots(2, 3, figsize=(13.3, 7.0), sharex="col", sharey="row",
+                             gridspec_kw={"height_ratios": [1, 0.8]})
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.89, bottom=0.18, hspace=0.13, wspace=0.08)
+    for j in (1, 2, 3):
+        a = avg[avg["j"] == j].set_index(key).loc[order]
+        _np_top_panel(axes[0, j - 1], a, x, cats, topline_ci=topline_ci)
+        axes[0, j - 1].set_title(f"factor {j}", color=_NP_NAVY)
+        gaps = [gap_all[(gap_all["j"] == j) & (gap_all[key] == v)]["gap"].to_numpy() for v in order]
+        _np_gap_box_panel(axes[1, j - 1], gaps, x, cats, _NP_COLORS[j - 1])
+        axes[1, j - 1].set_xlabel(xlabel)
+    axes[0, 0].set_ylim(0, 1)
+    axes[0, 0].set_yticks(*_NP_SIN2_TICKS)
+    axes[0, 0].set_ylabel(r"average $\sin^2$")
+    axes[1, 0].set_ylabel("gap = meas − theory\n[sin², per rep]")
+    axes[0, 0].legend(fontsize=8, loc="upper right")
+    for ax in axes.flat:
+        ax.set_axisbelow(True)
+        ax.grid(True, color="0.85", lw=0.5)
+        ax.label_outer()
+    fig.suptitle(suptitle, color=_NP_NAVY, y=0.97)
+    if reps is not None:
+        cap = ("Top — sin²∠(h, b̄) = out-of-subspace + in-subspace (additive shaded bands); "
+               "black line = measured" + (", shaded ribbons = floor/total 95% CI" if topline_ci else "")
+               + ".   Bottom — per-rep gap (measured − theory) distribution per swept value: "
+               f"box = IQR, whiskers 1.5·IQR, line = median; 0 ⇒ theory matches (R = {reps}).")
+        fig.text(0.5, 0.04, cap, ha="center", va="top", fontsize=8, color=_NP_GRAY, wrap=True)
     if out_path is not None:
         fig.savefig(str(out_path), dpi=150, bbox_inches="tight")
     return fig, axes
