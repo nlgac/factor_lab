@@ -1,9 +1,9 @@
 {
-  "_comment": "Model half of the split config for sim_theorem_partii.py. Diagonal-Gram baseline (G∞ = I_k): market-like factor 1 β₁~N(1,1), zero-mean unit factors 2,3 → prevalences c = [2, 1, 1]; factor vols σ = [.16, .08, .06]; idio vol constant 0.4 → δ² = 0.16. factor_vols and idio_vol are volatilities (squared internally). Pairs with sim_thmptii_design.json (or any design spec referencing it).",
+  "_comment": "Model half of the split config for sim_theorem_partii.py. Diagonal-Gram baseline (G∞ = I_k): market-like factor 1 β₁~N(1, sd 0.5), zero-mean unit factors 2,3 → prevalences c = [1.25, 1, 1]; factor vols σ = [.16, .08, .06]; idio vol constant 0.4 → δ² = 0.16. factor_vols and idio_vol are volatilities (squared internally). Pairs with sim_thmptii_design.json (or any design spec referencing it).",
   "k_factors": 3,
   "factor_vols": [0.16, 0.08, 0.06],
   "beta_samplers": [
-    {"distribution": "normal", "loc": 1.0, "scale": 1.0},
+    {"distribution": "normal", "loc": 1.0, "scale": 0.5},
     {"distribution": "normal", "loc": 0.0, "scale": 1.0},
     {"distribution": "normal", "loc": 0.0, "scale": 1.0}
   ],

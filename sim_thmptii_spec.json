@@ -1,5 +1,5 @@
 {
-  "_comment": "Unified single-file spec for sim_theorem_partii.py (model folded inline). k=3, diagonal-Gram case (G∞ = I_k). Market-like factor 1 β₁~N(1,1), zero-mean unit factors 2,3 → c=[2,1,1]. factor_vols σ=[.16,.08,.06], idio vol 0.4 (δ²=.16). Effective spikes d_j = c_j·σ_j² = [0.0512, 0.0064, 0.0036] satisfy Assumption 3 (strict decrease).",
+  "_comment": "Unified single-file spec for sim_theorem_partii.py (model folded inline). k=3, diagonal-Gram case (G∞ = I_k). Market-like factor 1 β₁~N(1, sd 0.5), zero-mean unit factors 2,3 → c=[1.25,1,1]. factor_vols σ=[.16,.08,.06], idio vol 0.4 (δ²=.16). Effective spikes d_j = c_j·σ_j² = [0.032, 0.0064, 0.0036] satisfy Assumption 3 (strict decrease).",
 
   "k_factors": 3,
   "n_values": [30, 60, 120],
@@ -10,9 +10,9 @@
   "_factor_vols_note": "factor_vols are volatilities (squared into F). σ = [0.16, 0.08, 0.06].",
   "factor_vols": [0.16, 0.08, 0.06],
 
-  "_beta_samplers_note": "Per-factor loading samplers. Market-like factor 1 β₁~N(1,1) (c₁=E[β₁²]=2); zero-mean unit factors 2,3 β_j~N(0,1) (c=1). Factors 2,3 zero-mean → off-diagonal Gram entries vanish, so G∞ stays diagonal. Prevalences c = [2, 1, 1].",
+  "_beta_samplers_note": "Per-factor loading samplers. Market-like factor 1 β₁~N(1, sd 0.5) (c₁=E[β₁²]=1²+0.5²=1.25); zero-mean unit factors 2,3 β_j~N(0,1) (c=1). Factors 2,3 zero-mean → off-diagonal Gram entries vanish, so G∞ stays diagonal. Prevalences c = [1.25, 1, 1].",
   "beta_samplers": [
-    {"distribution": "normal", "loc": 1.0, "scale": 1.0},
+    {"distribution": "normal", "loc": 1.0, "scale": 0.5},
     {"distribution": "normal", "loc": 0.0, "scale": 1.0},
     {"distribution": "normal", "loc": 0.0, "scale": 1.0}
   ],
