@@ -121,6 +121,7 @@ __all__ = [
     "DispersionBiasExperiment",
     "SineAlignmentAnalysis",
     "Eq6RHSAnalysis",
+    "sin2_angle_to_axis",
     "build_model",
     "simulate",
     "print_summary",
@@ -191,6 +192,37 @@ class SineAlignmentAnalysis:
         return {"sin2_j": sin2, "dist_sine": dist}
 
 
+def sin2_angle_to_axis(vectors: np.ndarray) -> np.ndarray:
+    """sin²∠(vⱼ, eⱼ) for each column vⱼ against the matching standard basis axis eⱼ.
+
+    Since eⱼ is the j-th canonical basis vector, cos∠(vⱼ, eⱼ) is just vⱼ's j-th
+    component over its norm, so this reduces to ``1 − (diag / ‖col‖)²``. The squared
+    diagonal removes sign ambiguity (eigenvectors are defined up to ±1), and columns
+    are normalized first so non-unit input is handled.
+
+    This is the "rotation" term of the Part (ii) RHS (module docstring): how far the
+    j-th signal-Gram eigenvector νⱼ^(n) tilts off the axis eⱼ. Abstracted here as a
+    standalone utility so it can be reused wherever a per-column off-axis angle is
+    needed (any eigenvector/loadings matrix aligned so column j pairs with axis j).
+
+    Parameters
+    ----------
+    vectors : (m, k) array
+        Columns are the vectors vⱼ (e.g. the eigenvector matrix ``W`` from ``eigh``,
+        already ordered so column j pairs with axis eⱼ). ``diagonal`` uses the first
+        ``min(m, k)`` columns.
+
+    Returns
+    -------
+    (min(m, k),) array
+        sin²∠(vⱼ, eⱼ) in [0, 1] — 0 when vⱼ is aligned with eⱼ, 1 when orthogonal.
+    """
+    V = np.asarray(vectors, dtype=float)
+    norms = np.linalg.norm(V, axis=0)[: min(V.shape)]
+    cos2 = (np.diagonal(V) / np.where(norms > 0.0, norms, 1.0)) ** 2
+    return 1.0 - cos2
+
+
 class Eq6RHSAnalysis:
     """
     Predicted RHS of Equation (6), Part (ii): floor + weight × rotation for each j.
@@ -231,8 +263,8 @@ class Eq6RHSAnalysis:
         delta2 = float(np.diag(context.model.D).mean())
         floor = delta2 / (n * rhos + delta2)
         weight = n * rhos / (n * rhos + delta2)
-        # sin²∠(ŵⱼ, eⱼ) = 1 − (ŵⱼ)ⱼ²; squaring the diagonal removes sign ambiguity.
-        rotation = 1.0 - np.diag(W) ** 2
+        # sin²∠(ŵⱼ, eⱼ) — the RHS rotation term (see sin2_angle_to_axis).
+        rotation = sin2_angle_to_axis(W)
         return {"rhs": floor + weight * rotation, "floor": floor,
                 "rotation": rotation, "rhos": rhos, "delta2": delta2}
 
