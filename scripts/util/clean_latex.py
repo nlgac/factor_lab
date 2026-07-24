@@ -19,16 +19,26 @@ AUX_EXTENSIONS = {
 }
 
 
+def _is_aux(f: Path) -> bool:
+    """Return True if f is an accessible LaTeX auxiliary file."""
+    try:
+        return f.is_file() and (
+            f.suffix in AUX_EXTENSIONS
+            or "".join(f.suffixes[-2:]) in AUX_EXTENSIONS
+        )
+    except OSError:
+        return False
+
+
 def find_aux_files(directory: Path) -> list[Path]:
-    return [
-        f for f in directory.iterdir()
-        if f.is_file() and "".join(f.suffixes[-2:]) in AUX_EXTENSIONS
-        or f.is_file() and f.suffix in AUX_EXTENSIONS
-    ]
+    return [f for f in directory.iterdir() if _is_aux(f)]
 
 
 def main() -> None:
     args = sys.argv[1:]
+    if "--help" in args or "-h" in args:
+        print(__doc__)
+        return
     auto_confirm = "--yes" in args
     args = [a for a in args if a != "--yes"]
     directory = Path(args[0]) if args else Path(".")
