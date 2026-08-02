@@ -58,8 +58,9 @@ __all__ = [
     "rep_dists", "summarize",
     "draw_box_dist", "draw_violin_dist", "draw_band", "draw_mean_ci",
     "draw_band_stack", "draw_quantile_band", "draw_ref_overlay",
+    "draw_disk_kde", "draw_disk_frame",
     "BoxDist", "ViolinDist", "Band", "MeanCI", "BandStack", "QuantileBand",
-    "RefOverlay", "Row", "grid", "save",
+    "RefOverlay", "DiskDensity", "Row", "grid", "save",
 ]
 
 
@@ -72,6 +73,7 @@ class Theme:
     composed figures sit next to legacy ones without a visible seam."""
 
     factor_colors: tuple = ("tab:blue", "tab:orange", "tab:green")
+    factor_cmaps: tuple = ("Blues", "Oranges", "Greens")   # sequential twins of factor_colors
     navy: str = "#1f3864"            # titles
     gray: str = "#555555"            # captions
     oos_fill: str = "#4878a8"        # out-of-subspace band
@@ -89,6 +91,9 @@ class Theme:
 
     def factor_color(self, idx: int) -> str:
         return self.factor_colors[idx % len(self.factor_colors)]
+
+    def factor_cmap(self, idx: int) -> str:
+        return self.factor_cmaps[idx % len(self.factor_cmaps)]
 
 
 THEME = Theme()
@@ -270,6 +275,54 @@ def draw_ref_overlay(ax, ax_spec: SweepAxis, q1, med, q3, *, color=None,
     ax.plot(x, med, "o", color=color, ms=3.5, zorder=9)
 
 
+def draw_disk_frame(ax, *, radius=1.0, pad=0.15, cross=True, labels=None) -> None:
+    """Unit-disk frame for direction-projection panels: boundary circle,
+    optional axis cross, equal aspect, spines/ticks off.
+
+    ``labels`` — optional (x_label, y_label) drawn at the positive axis ends.
+    """
+    t = np.linspace(0, 2 * np.pi, 200)
+    ax.plot(radius * np.cos(t), radius * np.sin(t), color="#B4B2A9", lw=1.3, zorder=2)
+    a = radius * (1 + pad)
+    if cross:
+        ax.plot([-a, a], [0, 0], color="0.55", ls=":", lw=1.0, zorder=1)
+        ax.plot([0, 0], [-a, a], color="0.55", ls=":", lw=1.0, zorder=1)
+    if labels is not None:
+        ax.text(a, 0.03 * radius, labels[0], color="0.3", fontsize=9,
+                ha="right", va="bottom")
+        ax.text(0.03 * radius, a, labels[1], color="0.3", fontsize=9,
+                ha="left", va="top")
+    ax.set_xlim(-a, a)
+    ax.set_ylim(-a, a)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def draw_disk_kde(ax, xy, cmap, *, gridsize=220, bw_method=None, alpha=0.85,
+                  floor_frac=0.02, radius=1.0):
+    """Smooth KDE heatmap of 2-D points confined to the disk of ``radius``.
+
+    Adapted from the standalone ``radial_graphs/disk_heatmap.py`` prototype.
+    ``xy`` is (N, 2) — e.g. per-replicate projections of unit vectors onto a
+    2-D reference plane, which live in the unit disk by construction. The KDE
+    is evaluated on our own grid and masked outside the disk (library 2-D
+    density plots assume rectangular support and paint meaningless mass at
+    r > 1); cells below ``floor_frac`` of the layer's own max are masked too,
+    so overlaid layers read as islands of color rather than full-disk washes.
+    Returns the QuadMesh (for a colorbar).
+    """
+    from scipy.stats import gaussian_kde
+
+    xy = np.asarray(xy, dtype=float)
+    kde = gaussian_kde(xy.T, bw_method=bw_method)
+    g = np.linspace(-radius, radius, gridsize)
+    X, Y = np.meshgrid(g, g)
+    dens = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
+    mask = (X ** 2 + Y ** 2 > radius ** 2) | (dens < floor_frac * dens.max())
+    dens = np.ma.array(dens, mask=mask)
+    return ax.pcolormesh(X, Y, dens, cmap=cmap, shading="auto", alpha=alpha, zorder=3)
+
+
 # ── Marks: column-bound wrappers the composer can drive ───────────────────────
 #
 # A mark exposes:
@@ -434,6 +487,60 @@ class RefOverlay:
                        label=f"{lbl} median"),
             Patch(facecolor=c, alpha=0.18, label=f"{lbl} Q1–Q3"),
         ]
+
+
+class DiskDensity:
+    """KDE density of per-replicate 2-D direction projections on the unit disk.
+
+    ``xcol`` / ``ycol`` — columns holding the projection coordinates (points
+    must satisfy x² + y² ≤ 1, e.g. coordinates of a unit vector in a 2-D
+    reference plane). ``at`` — optional ``{column: value}`` filter applied to
+    the factor slice, so a stack of Rows can walk the sweep
+    (``Row(DiskDensity(..., at={"n": 20}), ylabel="n = 20")``, …).
+
+    Unlike the sweep marks this one ignores the categorical x-axis entirely:
+    it draws the disk frame (equal aspect, axes off) and the density cloud in
+    the factor column's sequential colormap. Compose disk rows with other
+    disk rows — mixing them with swept-axis rows in one ``grid`` would share
+    x limits between a disk and a categorical axis.
+
+    ``ref_point`` — optional (x, y, label) marker (e.g. the population
+    direction); ``scatter`` — draw up to that many raw points over the cloud.
+    """
+
+    caption = ("disk = KDE of per-replicate direction projections "
+               "(boundary = unit norm; low-density cells masked)")
+
+    def __init__(self, xcol: str, ycol: str, *, at: dict | None = None,
+                 cmap: str | None = None, labels=None, ref_point=None,
+                 scatter: int = 0, bw_method=None, floor_frac: float = 0.02,
+                 alpha: float = 0.85, seed: int = 0):
+        self.xcol, self.ycol, self.at = xcol, ycol, at
+        self.cmap, self.labels, self.ref_point = cmap, labels, ref_point
+        self.scatter, self.bw_method = scatter, bw_method
+        self.floor_frac, self.alpha, self.seed = floor_frac, alpha, seed
+
+    def draw(self, ax, ax_spec, sub, j_idx, theme):
+        if self.at:
+            for c, v in self.at.items():
+                sub = sub[sub[c] == v]
+        xy = sub[[self.xcol, self.ycol]].to_numpy()
+        draw_disk_frame(ax, labels=self.labels)
+        if len(xy) >= 3:
+            draw_disk_kde(ax, xy, self.cmap or theme.factor_cmap(j_idx),
+                          bw_method=self.bw_method, floor_frac=self.floor_frac,
+                          alpha=self.alpha)
+        if self.scatter and len(xy):
+            take = min(self.scatter, len(xy))
+            idx = np.random.default_rng(self.seed).choice(len(xy), take, replace=False)
+            ax.scatter(xy[idx, 0], xy[idx, 1], s=4, color="0.2", alpha=0.35, zorder=4)
+        if self.ref_point is not None:
+            x, y, lbl = self.ref_point
+            ax.scatter([x], [y], color="#E24B4A", edgecolor="#A32D2D", s=70, zorder=5)
+            ax.text(x + 0.05, y + 0.07, lbl, color="#791F1F", fontsize=9)
+
+    def legend_handles(self, theme):
+        return []
 
 
 # ── Composition ───────────────────────────────────────────────────────────────
