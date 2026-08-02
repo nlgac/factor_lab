@@ -613,7 +613,13 @@ def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
             axes[ri, 0].set_ylim(*row.ylim)
         if row.yticks is not None:
             axes[ri, 0].set_yticks(*row.yticks)
-        axes[ri, 0].set_ylabel(row.ylabel)
+        if axes[ri, 0].axison:
+            axes[ri, 0].set_ylabel(row.ylabel)
+        elif row.ylabel:
+            # Axis-off rows (e.g. DiskDensity) swallow set_ylabel — draw the row
+            # label as rotated text just left of the panel instead.
+            axes[ri, 0].text(-0.06, 0.5, row.ylabel, transform=axes[ri, 0].transAxes,
+                             rotation=90, ha="right", va="center", color=theme.navy)
     for ax in axes.flat:
         ax.set_axisbelow(True)
         ax.grid(True, color=theme.grid_color, lw=0.5)
