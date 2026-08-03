@@ -72,8 +72,12 @@ class Theme:
     """Style constants. The default matches the existing fl_graphics look, so
     composed figures sit next to legacy ones without a visible seam."""
 
-    factor_colors: tuple = ("tab:blue", "tab:orange", "tab:green")
-    factor_cmaps: tuple = ("Blues", "Oranges", "Greens")   # sequential twins of factor_colors
+    # Indexed by factor identity (j − 1), so factor 4 is red in every figure it
+    # appears in, regardless of which columns or overlays a figure shows.
+    factor_colors: tuple = ("tab:blue", "tab:orange", "tab:green",
+                            "tab:red", "tab:purple", "tab:brown")
+    factor_cmaps: tuple = ("Blues", "Oranges", "Greens",
+                           "Reds", "Purples", "YlOrBr")   # sequential twins of factor_colors
     navy: str = "#1f3864"            # titles
     gray: str = "#555555"            # captions
     oos_fill: str = "#4878a8"        # out-of-subspace band
@@ -504,21 +508,35 @@ class DiskDensity:
     disk rows — mixing them with swept-axis rows in one ``grid`` would share
     x limits between a disk and a categorical axis.
 
+    ``factor`` — pin the mark to one factor (overlay use: several ``DiskDensity``
+    marks with different ``factor=`` in one Row share a panel, each cloud in its
+    own factor's colormap — coloring follows factor *identity*, not layout).
+    ``mean_arrow`` — draw an arrow from the disk center to the cloud's mean
+    (the circular resultant: length 1 = perfectly concentrated on the boundary,
+    0 = no net in-plane direction), annotated with its length.
     ``ref_point`` — optional (x, y, label) marker (e.g. the population
     direction); ``scatter`` — draw up to that many raw points over the cloud.
     """
 
-    caption = ("disk = KDE of per-replicate direction projections "
-               "(boundary = unit norm; low-density cells masked)")
-
     def __init__(self, xcol: str, ycol: str, *, at: dict | None = None,
-                 cmap: str | None = None, labels=None, ref_point=None,
-                 scatter: int = 0, bw_method=None, floor_frac: float = 0.02,
-                 alpha: float = 0.85, seed: int = 0):
+                 factor: int | None = None, mean_arrow: bool = False,
+                 cmap: str | None = None, label: str | None = None, labels=None,
+                 ref_point=None, scatter: int = 0, bw_method=None,
+                 floor_frac: float = 0.02, alpha: float = 0.85, seed: int = 0):
         self.xcol, self.ycol, self.at = xcol, ycol, at
+        self.factor, self.mean_arrow, self.label = factor, mean_arrow, label
         self.cmap, self.labels, self.ref_point = cmap, labels, ref_point
         self.scatter, self.bw_method = scatter, bw_method
         self.floor_frac, self.alpha, self.seed = floor_frac, alpha, seed
+
+    @property
+    def caption(self):
+        base = ("disk = KDE of per-replicate direction projections "
+                "(boundary = unit norm; low-density cells masked)")
+        if self.mean_arrow:
+            base += ("; arrow = mean of the projected directions, annotated with "
+                     "its length (1 = concentrated, 0 = no net direction)")
+        return base
 
     def draw(self, ax, ax_spec, sub, j_idx, theme):
         if self.at:
@@ -534,13 +552,28 @@ class DiskDensity:
             take = min(self.scatter, len(xy))
             idx = np.random.default_rng(self.seed).choice(len(xy), take, replace=False)
             ax.scatter(xy[idx, 0], xy[idx, 1], s=4, color="0.2", alpha=0.35, zorder=4)
+        if self.mean_arrow and len(xy):
+            mx, my = float(xy[:, 0].mean()), float(xy[:, 1].mean())
+            length = float(np.hypot(mx, my))
+            col = theme.factor_color(j_idx)
+            ax.annotate("", xy=(mx, my), xytext=(0, 0), zorder=6,
+                        arrowprops=dict(arrowstyle="-|>", color=col, lw=1.8,
+                                        shrinkA=0, shrinkB=0))
+            # Label just past the arrowhead (offset outward; fallback offset at 0).
+            ux, uy = (mx / length, my / length) if length > 1e-9 else (0.7, 0.7)
+            ax.text(mx + 0.09 * ux, my + 0.09 * uy, f"{length:.2f}", color=col,
+                    fontsize=8, ha="center", va="center", zorder=6)
         if self.ref_point is not None:
             x, y, lbl = self.ref_point
             ax.scatter([x], [y], color="#E24B4A", edgecolor="#A32D2D", s=70, zorder=5)
             ax.text(x + 0.05, y + 0.07, lbl, color="#791F1F", fontsize=9)
 
     def legend_handles(self, theme):
-        return []
+        if self.label is None:
+            return []
+        idx = (self.factor - 1) if self.factor else 0
+        col = plt.get_cmap(self.cmap or theme.factor_cmap(idx))(0.65)
+        return [Patch(facecolor=col, alpha=self.alpha, label=self.label)]
 
 
 # ── Composition ───────────────────────────────────────────────────────────────
@@ -567,10 +600,17 @@ class Row:
 
 def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
          out_path=None, formats=("png",), dpi=150, sharey="row", factors=None,
-         figsize=None, legend_row: int | None = 0, theme: Theme = THEME):
+         col_titles=None, figsize=None, legend_row: int | None = 0,
+         theme: Theme = THEME):
     """Compose ``rows`` of marks × factor columns into a finished figure.
 
     - columns are the factors (``df["j"]`` values, sorted) with navy titles;
+      ``col_titles`` overrides the default "factor j" labels (e.g. plane names
+      when the columns aren't factor slices);
+    - colors key off factor *identity* (j − 1), so a figure showing factors
+      [2, 3] keeps their canonical colors; a mark with a ``factor`` attribute
+      pins itself to that factor's slice and color regardless of its column
+      (overlay use);
     - x is the categorical swept axis for ``key`` ('p' or 'n');
     - ``sharey``: "row" (default), True (one scale everywhere), or False;
     - the bottom caption is assembled from each mark's fragment + R;
@@ -603,9 +643,14 @@ def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
         for ri, row in enumerate(rows):
             ax = axes[ri, ci]
             for mark in row.mark_list():
-                mark.draw(ax, ax_spec, sub, ci, theme)
+                jm = getattr(mark, "factor", None)
+                if jm is None:
+                    mark.draw(ax, ax_spec, sub, int(j) - 1, theme)
+                else:                      # pinned mark: its own slice + color
+                    mark.draw(ax, ax_spec, df[df["j"] == jm], int(jm) - 1, theme)
             if ri == 0:
-                ax.set_title(f"factor {j}", color=theme.navy)
+                title = col_titles[ci] if col_titles else f"factor {j}"
+                ax.set_title(title, color=theme.navy)
             if ri == nrows - 1:
                 ax.set_xlabel(ax_spec.xlabel)
     for ri, row in enumerate(rows):
