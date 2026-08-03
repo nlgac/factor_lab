@@ -585,17 +585,34 @@ class Row:
     label, and optional per-row geometry/limits.
 
     ``marks`` may be a single mark or a sequence (drawn in order — e.g. a
-    ``Band`` under a ``MeanCI``, or a ``BoxDist`` plus a ``RefOverlay``).
+    ``Band`` under a ``MeanCI``, or a ``BoxDist`` plus a ``RefOverlay``); the
+    same marks are drawn into every column. When each column needs *different*
+    marks (e.g. one coordinate-plane disk per column), pass ``cells`` instead:
+    a list with one mark-list per column, matched to the grid's columns in
+    order. Exactly one of ``marks`` / ``cells`` should be given.
     """
 
-    marks: object
+    marks: object = None
     ylabel: str = ""
     height: float = 0.8
     ylim: tuple | None = None
     yticks: tuple | None = None
+    cells: list | None = None
 
     def mark_list(self):
         return list(self.marks) if isinstance(self.marks, (list, tuple)) else [self.marks]
+
+    def marks_for_col(self, ci: int):
+        if self.cells is not None:
+            m = self.cells[ci]
+            return list(m) if isinstance(m, (list, tuple)) else [m]
+        return self.mark_list()
+
+    def all_marks(self):
+        if self.cells is not None:
+            return [m for cell in self.cells
+                    for m in (cell if isinstance(cell, (list, tuple)) else [cell])]
+        return self.mark_list()
 
 
 def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
@@ -642,7 +659,7 @@ def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
         sub = df[df["j"] == j]
         for ri, row in enumerate(rows):
             ax = axes[ri, ci]
-            for mark in row.mark_list():
+            for mark in row.marks_for_col(ci):
                 jm = getattr(mark, "factor", None)
                 if jm is None:
                     mark.draw(ax, ax_spec, sub, int(j) - 1, theme)
@@ -672,17 +689,21 @@ def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
 
     if legend_row is not None:
         handles = []
-        for mark in rows[legend_row].mark_list():
+        for mark in rows[legend_row].all_marks():
             handles.extend(mark.legend_handles(theme))
-        if handles:
-            axes[legend_row, 0].legend(handles=handles, fontsize=7.5, loc="upper right")
+        uniq = {}
+        for h in handles:                      # dedupe by label (cells rows repeat marks)
+            uniq.setdefault(h.get_label(), h)
+        if uniq:
+            axes[legend_row, 0].legend(handles=list(uniq.values()), fontsize=7.5,
+                                       loc="upper right")
 
     if suptitle:
         fig.suptitle(suptitle, color=theme.navy, y=1 - 0.18 / height_in)
 
     fragments, seen = [], set()
     for row in rows:
-        for mark in row.mark_list():
+        for mark in row.all_marks():
             frag = getattr(mark, "caption", "")
             if frag and frag not in seen:
                 seen.add(frag)
