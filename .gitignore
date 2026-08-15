@@ -94,6 +94,7 @@ coverage.xml
 *.png
 *.md
 !README.md
+!examples_repo_spec.md
 *.npz
 *.html
 *.npz

@@ -50,6 +50,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
@@ -78,6 +79,10 @@ class Theme:
                             "tab:red", "tab:purple", "tab:brown")
     factor_cmaps: tuple = ("Blues", "Oranges", "Greens",
                            "Reds", "Purples", "YlOrBr")   # sequential twins of factor_colors
+    # Also indexed by factor identity. Empty string = no hatch (the default
+    # everywhere); set e.g. ("", "//", "xx") in a mono/grayscale theme so factor
+    # identity survives without color.
+    factor_hatches: tuple = ("",) * 6
     navy: str = "#1f3864"            # titles
     gray: str = "#555555"            # captions
     oos_fill: str = "#4878a8"        # out-of-subspace band
@@ -98,6 +103,9 @@ class Theme:
 
     def factor_cmap(self, idx: int) -> str:
         return self.factor_cmaps[idx % len(self.factor_cmaps)]
+
+    def factor_hatch(self, idx: int) -> str:
+        return self.factor_hatches[idx % len(self.factor_hatches)]
 
 
 THEME = Theme()
@@ -165,14 +173,23 @@ def draw_zero_line(ax, theme: Theme = THEME) -> None:
 
 
 def draw_box_dist(ax, ax_spec: SweepAxis, dists, color, *, width=0.55,
-                  theme: Theme = THEME) -> None:
+                  hatch="", theme: Theme = THEME) -> None:
     """Per-replicate boxplots at each swept value: IQR box, 1.5·IQR whiskers,
-    black median, fliers hidden."""
+    black median, fliers hidden. ``hatch`` fills the boxes with a pattern
+    (drawn in the edge color) on top of the translucent face. Hatched boxes
+    bake the translucency into the facecolor instead of patch alpha — patch
+    alpha also fades the hatch strokes, which the PDF backend renders as
+    near-invisible."""
+    if hatch:
+        boxprops = dict(facecolor=mcolors.to_rgba(color, 0.55),
+                        edgecolor=color, hatch=hatch)
+    else:
+        boxprops = dict(facecolor=color, alpha=0.55, edgecolor=color)
     ax.boxplot(
         dists, positions=ax_spec.x, widths=width, patch_artist=True,
         showfliers=False, zorder=3,
         medianprops=dict(color="black", lw=1.1),
-        boxprops=dict(facecolor=color, alpha=0.55, edgecolor=color),
+        boxprops=boxprops,
         whiskerprops=dict(color=color), capprops=dict(color=color),
     )
     ax.set_xlim(ax_spec.x[0] - 0.5, ax_spec.x[-1] + 0.5)
@@ -347,7 +364,8 @@ class BoxDist:
         if self.zero_line:
             draw_zero_line(ax, theme)
         draw_box_dist(ax, ax_spec, rep_dists(sub, ax_spec, self.col),
-                      theme.factor_color(j_idx), width=self.width, theme=theme)
+                      theme.factor_color(j_idx), width=self.width,
+                      hatch=theme.factor_hatch(j_idx), theme=theme)
 
     def legend_handles(self, theme):
         return []
@@ -375,13 +393,17 @@ class ViolinDist:
 
 
 class Band:
-    """Single theory band from 0 up to mean(``col``)."""
+    """Single band from 0 up to mean(``col``) — a theory limit by default; pass
+    ``caption`` to describe a band of something else (e.g. an observable estimate)."""
 
     caption = "shaded band = theory limit (mean over replicates)"
 
     def __init__(self, col: str, *, label: str | None = None,
-                 fill: str | None = None, line: str | None = None):
+                 fill: str | None = None, line: str | None = None,
+                 caption: str | None = None):
         self.col, self.label, self.fill, self.line = col, label, fill, line
+        if caption is not None:
+            self.caption = caption
 
     def draw(self, ax, ax_spec, sub, j_idx, theme):
         a = summarize(sub, ax_spec, self.col)
@@ -396,12 +418,16 @@ class Band:
 
 
 class MeanCI:
-    """Measured mean of ``col`` with 95% CI caps (black dots + line)."""
+    """Measured mean of ``col`` with 95% CI caps (black dots + line by default;
+    pass ``caption`` alongside a non-black ``color`` so the footer stays honest)."""
 
     caption = "black dots = mean with 95% CI caps"
 
-    def __init__(self, col: str, *, label: str | None = None, color: str = "black"):
+    def __init__(self, col: str, *, label: str | None = None, color: str = "black",
+                 caption: str | None = None):
         self.col, self.label, self.color = col, label, color
+        if caption is not None:
+            self.caption = caption
 
     def draw(self, ax, ax_spec, sub, j_idx, theme):
         a = summarize(sub, ax_spec, self.col)
@@ -520,22 +546,31 @@ class DiskDensity:
 
     def __init__(self, xcol: str, ycol: str, *, at: dict | None = None,
                  factor: int | None = None, mean_arrow: bool = False,
+                 median_arrow: bool = False, kde: bool = True,
                  cmap: str | None = None, label: str | None = None, labels=None,
                  ref_point=None, scatter: int = 0, bw_method=None,
                  floor_frac: float = 0.02, alpha: float = 0.85, seed: int = 0):
         self.xcol, self.ycol, self.at = xcol, ycol, at
         self.factor, self.mean_arrow, self.label = factor, mean_arrow, label
+        self.median_arrow = median_arrow
+        self.kde = kde                      # False -> raw dots only (with scatter=N)
         self.cmap, self.labels, self.ref_point = cmap, labels, ref_point
         self.scatter, self.bw_method = scatter, bw_method
         self.floor_frac, self.alpha, self.seed = floor_frac, alpha, seed
 
     @property
     def caption(self):
-        base = ("disk = KDE of per-replicate direction projections "
-                "(boundary = unit norm; low-density cells masked)")
+        if not self.kde:
+            base = ("disk = per-replicate projections as dots "
+                    "(boundary = unit norm)")
+        else:
+            base = ("disk = KDE of per-replicate direction projections "
+                    "(boundary = unit norm; low-density cells masked)")
         if self.mean_arrow:
             base += ("; arrow = mean of the projected directions, annotated with "
                      "its length (1 = concentrated, 0 = no net direction)")
+        if self.median_arrow:
+            base += "; dashed arrow = coordinate-wise median"
         return base
 
     def draw(self, ax, ax_spec, sub, j_idx, theme):
@@ -544,14 +579,22 @@ class DiskDensity:
                 sub = sub[sub[c] == v]
         xy = sub[[self.xcol, self.ycol]].to_numpy()
         draw_disk_frame(ax, labels=self.labels)
-        if len(xy) >= 3:
+        if self.kde and len(xy) >= 3:
             draw_disk_kde(ax, xy, self.cmap or theme.factor_cmap(j_idx),
                           bw_method=self.bw_method, floor_frac=self.floor_frac,
                           alpha=self.alpha)
         if self.scatter and len(xy):
             take = min(self.scatter, len(xy))
             idx = np.random.default_rng(self.seed).choice(len(xy), take, replace=False)
-            ax.scatter(xy[idx, 0], xy[idx, 1], s=4, color="0.2", alpha=0.35, zorder=4)
+            dot_color = "0.2" if self.kde else theme.factor_color(j_idx)
+            ax.scatter(xy[idx, 0], xy[idx, 1], s=5, color=dot_color,
+                       alpha=0.35 if self.kde else 0.25, lw=0, zorder=4)
+        if self.median_arrow and len(xy):
+            qx, qy = float(np.median(xy[:, 0])), float(np.median(xy[:, 1]))
+            col = theme.factor_color(j_idx)
+            ax.annotate("", xy=(qx, qy), xytext=(0, 0), zorder=5,
+                        arrowprops=dict(arrowstyle="-|>", color=col, lw=1.3,
+                                        linestyle="--", shrinkA=0, shrinkB=0))
         if self.mean_arrow and len(xy):
             mx, my = float(xy[:, 0].mean()), float(xy[:, 1].mean())
             length = float(np.hypot(mx, my))
@@ -561,8 +604,10 @@ class DiskDensity:
                                         shrinkA=0, shrinkB=0))
             # Label just past the arrowhead (offset outward; fallback offset at 0).
             ux, uy = (mx / length, my / length) if length > 1e-9 else (0.7, 0.7)
+            import matplotlib.patheffects as _pe
             ax.text(mx + 0.09 * ux, my + 0.09 * uy, f"{length:.2f}", color=col,
-                    fontsize=8, ha="center", va="center", zorder=6)
+                    fontsize=8, ha="center", va="center", zorder=8,
+                    path_effects=[_pe.withStroke(linewidth=1.6, foreground="black")])
         if self.ref_point is not None:
             x, y, lbl = self.ref_point
             ax.scatter([x], [y], color="#E24B4A", edgecolor="#A32D2D", s=70, zorder=5)
@@ -616,9 +661,9 @@ class Row:
 
 
 def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
-         out_path=None, formats=("png",), dpi=150, sharey="row", factors=None,
-         col_titles=None, figsize=None, legend_row: int | None = 0,
-         theme: Theme = THEME):
+         caption: bool = True, out_path=None, formats=("png",), dpi=150,
+         sharey="row", factors=None, col_titles=None, figsize=None,
+         legend_row: int | None = 0, theme: Theme = THEME):
     """Compose ``rows`` of marks × factor columns into a finished figure.
 
     - columns are the factors (``df["j"]`` values, sorted) with navy titles;
@@ -701,19 +746,20 @@ def grid(df: pd.DataFrame, key: str, rows, *, suptitle=None, caption_extra=None,
     if suptitle:
         fig.suptitle(suptitle, color=theme.navy, y=1 - 0.18 / height_in)
 
-    fragments, seen = [], set()
-    for row in rows:
-        for mark in row.all_marks():
-            frag = getattr(mark, "caption", "")
-            if frag and frag not in seen:
-                seen.add(frag)
-                fragments.append(frag)
-    caption = ".   ".join(f[0].upper() + f[1:] for f in fragments)
-    caption += f".   Per-replicate marks use R = {reps}."
-    if caption_extra:
-        caption += f"   {caption_extra}"
-    fig.text(0.5, 0.015, caption, ha="center", va="bottom",
-             fontsize=theme.caption_fontsize, color=theme.gray, wrap=True)
+    if caption:
+        fragments, seen = [], set()
+        for row in rows:
+            for mark in row.all_marks():
+                frag = getattr(mark, "caption", "")
+                if frag and frag not in seen:
+                    seen.add(frag)
+                    fragments.append(frag)
+        text = ".   ".join(f[0].upper() + f[1:] for f in fragments)
+        text += f".   Per-replicate marks use R = {reps}."
+        if caption_extra:
+            text += f"   {caption_extra}"
+        fig.text(0.5, 0.015, text, ha="center", va="bottom",
+                 fontsize=theme.caption_fontsize, color=theme.gray, wrap=True)
 
     if out_path is not None:
         save(fig, out_path, formats=formats, dpi=dpi)
