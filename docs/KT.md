@@ -2,7 +2,9 @@
 
 *Supersedes `KT_proof_theorem3.1prime.md`, `KT_extension_to_nonorthogonal_factors.md`, and `KT_update_2026-05-04.md`. Self-contained briefing for a fresh session.*
 
-> Last updated: 2026-06-18 | Trigger: \ukt | Staleness: Drifting — §3.1 (proof_summary_5ideas.tex substantially changed: line count, color scheme, figure), §5 (session 2026-06-18 added).
+> Last updated: 2026-06-18 | Trigger: \ukt | Staleness: Drifting — merged two versions of this file that both branched from the 2026-06-05 baseline without syncing: an uncommitted local copy (sessions 2026-06-07 and 2026-06-11, never pushed) and the pulled copy (sessions 2026-06-17/18, `git` commit `bda2306`). §3.1 (`main-8.tex`, `opus_review_fiber_bundle.md`, `theorem_part_ii_1.md`, `main.tex.bak` restored; `condensed_proof_skeleton.tex`/`statmech_dictionary.tex` descriptions merged), §5 (2026-06-07 and 2026-06-11 entries re-inserted in chronological order — they were never in the pulled history at all), §6 (item 6c restored alongside item 7), §8 (`main-8.tex` added as historical reading).
+
+⚠️ MERGE NOTE (2026-09-02): Neither branch's session log records when/why `main-8.tex` was superseded by `main-9.tex` (both exist on disk). Recommend confirming `main-9.tex` is fully authoritative and that all of `main-8.tex`'s NLG CMT annotations (§5, session 2026-06-07) and the 2026-06-11 fiber-bundle/condensed-proof/stat-mech findings were actually carried forward before treating this section as settled.
 
 ---
 
@@ -107,21 +109,26 @@ All files in `C:\Users\nlgun\personal\nlgcode\factor_lab\` unless noted.
 | `theorem_part_ii_3_expanded.md` | Expanded proof of Theorem 1 Part (ii): statement, full 7-step proof with Lemmas 1/4/7 (fully proved with Borel–Cantelli + Kolmogorov SLLN), inline k=3 callouts, Corollary 4, worked example. | **Primary accessible proof document** |
 | `latex/theorem_part_ii_3_expanded.tex` | LaTeX conversion of the above via `md_to_latex.py`. Blockquote-wrapped tables and Unicode ✓ handled correctly. | LaTeX artefact — regenerate as needed |
 | `main-9.tex` | Primary formal manuscript, 1357 lines. Titled "Quantifying Principal Component Concentration Bias." Presents model, 5 assumptions, Theorem (floor + rotation), Lemma 1 (noise, a.s. via 4th moments + Borel-Cantelli), Lemma on dual Gram convergence, 4-step proof architecture: angular decomp → duality (exact at every p) → limiting inputs → assembly. Uses notation $W_n^{(p)}$, $\theta_{n,j}^{(p)}$, $\kappa_{n,j}^2 = \lambda_{n,j}/(\lambda_{n,j}+\delta^2/n)$. | **Active formal manuscript** |
+| `main-8.tex` | Predecessor to `main-9.tex` (1075 lines as of 2026-06-07 end-of-session). Explicit finite-$p$ small Gram matrices $M_n^{(p)}$/$M^{(p)}$ throughout; 6-step proof; NLG revision comments in forest green via `\nlgcmtnew{}` (CMTs #1–7 — see §5, session 2026-06-07). *(How/when this became `main-9.tex` is not recorded in either KT branch — verify all CMT content was carried forward.)* | Superseded by `main-9.tex` |
+| `main-8 - Copy.tex` | Backup copy of `main-8.tex`. | Backup |
 | `proof_summary_5ideas.tex` | ~480-line pedagogical companion, produces 12-page PDF. "5 ideas" summary: (1) SVD duality, (2) algebraic inversion, (3) spiked spectrum, (4) isometry, (5) nested projections + Pythagorean assembly + Chebyshev appendix. **Three-color observability scheme** throughout: `\obs{}` blue = directly from Y; `\est{}` green = estimable from spectrum of $W_n^{(p)}$; black = unobserved. Applied to Table 1 (signal matrices) and Appendix longtable. `\obs{n}` applied to standalone $n$ as multiplier in theorem equations. All `\includegraphics` use `../figures/` paths (TeXmaker symlink fix). `proof_summary_5ideas - Copy.tex` is backup of pre-edit state. **Note**: Chebyshev appendix proves in-probability convergence only; main-9's Lemma 1 uses 4th moments + Borel-Cantelli for a.s. — gap is open (see §6 item 7). | **Active pedagogical companion — last revised 2026-06-18** |
 | `memo_wn_and_snr.tex` | Technical memo on $W_n^{(p)}$ (the $n\times n$ dual Gram) and the SNR quantity $\kappa_{n,j}^2$. Supporting reference for main-9. | Created ≤2026-06-17 |
-| `condensed_proof_skeleton.tex` | Short condensed proof skeleton of the dispersion-bias theorem. | Supporting reference |
+| `condensed_proof_skeleton.tex` | Standalone restructured proof (2026-06-11): Gram duality to the fixed n×n dual W^(p), a single LLN limit, trace/projection assembly. Floor = noise share of the eigenvalue in three lines. Compiles (3 pp). See §6 item 6c for the open question of promoting this to the main manuscript proof. | Supporting reference |
 | `duality_graph.tex` | TikZ diagram illustrating the $p\times p \leftrightarrow n\times n$ SVD duality (Gram reduction). | Figure |
 | `gemini_theorem_proof_20260611_cleaned.tex` | Gemini-generated proof attempt, cleaned. | External/comparison draft |
 | `gemini_theorem_proof_20260611_expanded_cleaned.tex` | Expanded cleaned version of the above. | External/comparison draft |
-| `fiber_bundle_geometry.tex` | Exposition of the fiber bundle interpretation of the factor model proof geometry. | Exploratory — created ≤2026-06-17 |
-| `statmech_dictionary.tex` | "Variance as Energy" dictionary: stat-mech analogy mapping factor model objects to statistical mechanics objects. | Exploratory — created ≤2026-06-17 |
+| `opus_review_fiber_bundle.md` | Critical review (2026-06-11) of the fiber-bundle framework in `fiber_bundle_geometry.tex`. Key finding: §4 ("limiting fibration in ℓ²") is **incorrect** — the signal planes B^(p) do NOT converge in Gr(k,ℓ²) (unit loading vectors de-localize; cos∠(b^(p),b^(2p))≈1/√2, verified numerically); only the intrinsic Gram G_B^(p)→G_B converges. "Shape endomorphism" is a misnomer. See §5, session 2026-06-11, for the full findings and a suggested `\nlgcmtnew` rewrite. | **Open — fix not yet applied, see §6 item 6c** |
+| `fiber_bundle_geometry.tex` | Exposition of the fiber bundle interpretation of the factor model proof geometry. **§4 has a known error — see `opus_review_fiber_bundle.md` and §6 item 6c.** | Exploratory — created ≤2026-06-17 |
+| `statmech_dictionary.tex` | "Variance as Energy" dictionary (2026-06-11): spiked covariance ≅ spherical spin model in a planted field; floor = normalized Gaussian posterior variance (exact); alignment κ²=SNR/(1+SNR) = magnetization; no phase transition in the n-fixed regime. (+ `statmech_magnetization.pdf`; `statmech_dictionary_v2.pdf` is the latest build.) | Exploratory |
 | `DEFINED_TERMS.tex` | Complete table of all defined terms, symbols, and named objects (originally from `main.tex`). | Created 2026-06-05 |
+| `main.tex.bak` | Backup of `main.tex` before NLG revision session on 2026-06-05. | Backup |
 | `step5excerpt.tex` | Standalone expanded exposition of Step 5 (loading-frame coordinates): symbol glossary, Group A substeps 5A.1–5A.4, Group B substeps 5B.1–5B.3, explicit input/output interface. | Created 2026-06-05 |
 | `floor-rotation.tex` | Original AK paper draft (reviewed by NLG; issues catalogued). | Predecessor to main-9.tex |
 | `floor_rotation_nlged.tex` | NLG-revised version with numbered green `\nlgcmt{}` comments. | Reviewed draft |
 | `floor_rotation_nlged_v2.tex` | Copy with typos as `\typo{}` markers and substantive comments renumbered 1–10. | Alternate revision |
 | `Notation Migration Guide.md` | Complete two-table guide: symbol renames + affected locations for all documents. | Reference |
 | `proof_expansion_plan.md` | 9-section plan for expanding `theorem_part_ii_3.pdf`. Implemented in `theorem_part_ii_3_expanded.md`. | Implemented |
+| `theorem_part_ii_1.md` | Theorem statement and notation from `theorem_part_ii_1.pdf`, converted to markdown with migrated notation. | Created 2026-05-26 |
 
 ### 3.2 Supporting / Historical
 
@@ -239,6 +246,51 @@ These are the key missing piece for making the results statistically operational
 - Reviewed `main-9.tex` in full and compared with `proof_summary_5ideas.tex`. Key finding: main-9 has 4-step proof architecture (angular decomp → duality exact at every p → limiting inputs a.s. → assembly), versus 5ideas' narrative "5 ideas" format. main-9 contains Lemma 1 (a.s. convergence via 4th moments + Borel-Cantelli), Cor cor:noiseless (exact equality in noiseless case), Lemma lem:dual (Gram reduction), Lemma lem:econverge (eigenpair convergence). 5ideas' Chebyshev appendix proves only in-probability convergence — gap vs. main-9's a.s. result (see §6 item 7).
 - Read and summarized `refrences/Kolm-Ritter-2026.txt` ("Hidden Factors in Portfolio Risk Models", Kolm & Ritter 2026, 8143 lines). Key contrast: KR uses proportional regime ($N,T\to\infty$, $\gamma=N/T$ fixed, BBP/Marchenko-Pastur); main-9 uses fixed-$n$ regime ($n$ fixed, $p\to\infty$, elementary LLN). KR's main contribution is Monte Carlo calibration of finite-sample BBP thresholds. KR gives scalar Paul (2007) alignment $a^2 = (1-\gamma/\theta^2)/(1+\gamma/\theta)$; main-9 gives the Pythagorean two-term decomposition (floor + rotation) which KR lacks. Note: folder is spelled `refrences/` (typo) not `references/`.
 
+**Session 2026-06-11 (proof-architecture review — expository/conceptual, with Opus)**:
+
+Triggered by `prompt_for_opus.md` (request to review the fiber-bundle framing). No changes to `main-8.tex` itself; all output is in new companion files (see §3.1) and review notes.
+
+- **Fiber-bundle review** (`opus_review_fiber_bundle.md`): the bundle π^(p):ℝ^p→ℝ^k is a trivial split exact sequence over a contractible base — no curvature, holonomy, or characteristic classes, so the prompt's "deep geometry" questions are vacuous for *this* bundle. §4 of `fiber_bundle_geometry.md` ("limiting fibration in ℓ²") is **incorrect**: the signal planes B^(p) do NOT converge in Gr(k,ℓ²) (unit loading vectors de-localize; cos∠(b^(p),b^(2p))≈1/√2, verified numerically); only the intrinsic Gram G_B^(p)→G_B converges. "Shape endomorphism of the section" is a misnomer (it is the chart representation of the signal covariance). The genuine geometry, if wanted: the Berry/eigenbundle connection on the k×k operator base (the "sign fixed by continuity" choices are its trivializations; no holonomy because the gap keeps the path off degeneracies); the two fibrations form an SVD span/correspondence, not a Gelfand double fibration.
+- **Condensed proof** (`condensed_proof_skeleton.tex/.pdf`): three moves — (1) Gram duality h_j = Yχ_j^(p)/√(npθ_j^(p)) reduces ℝ^p to the fixed n×n dual W^(p); (2) one LLN limit W^(p)→(1/n)FG_BF^⊤+(δ²/n)I_n; (3) split Yχ_j = BF^⊤χ_j + Zχ_j into 𝓑 and 𝓑^⊥ parts. Floor = noise share δ²/(nλ_{n,j}+δ²) in three lines; the in-subspace rotation needs the loading chart exactly once. Includes a coordinate-free trace/Riesz-projection variant that removes all sign conventions.
+- **Kato lemma → Bolzano–Weierstrass**: drop-in replacement (exact find/replace text for Overleaf) for the "See Kato (1966)" proof of `lem:kato`, using only compactness + Weyl + the spectral gap; Kato then cited only for quantitative rates. Discharges the Weyl/Courant–Fischer spell-out for the manuscript. Also recorded the subsequence-principle lemma (every subsequence has a sub-subsequence → v ⟹ whole sequence → v).
+- **Statistical-mechanics note** (`statmech_dictionary.tex/.pdf` + figure): variance=energy dictionary; spiked covariance ≅ spherical spin model; floor = normalized Gaussian posterior variance (exact); alignment κ²=SNR/(1+SNR) = single-mode occupation / magnetization; the n-fixed regime is a paramagnetic crossover (no BBP transition — that needs p/n→c with a Marchenko–Pastur bulk). T↔δ² is structural (gauge-dependent split of SNR), not literal.
+- **Clarifications recorded** (now in §7): (B^⊤B)^{-1}B^⊤ is the Moore–Penrose pseudoinverse B^+ for full-column-rank B, so the chart projection is π^(p)=√p·B^+; the √p is the prevalence-driven rescaling keeping coordinates O(1); prevalence = extensivity of the signal energy; the dual n×n matrix is the only place p→∞ acts.
+
+**Session 2026-06-07 (proof-structure clarification + main-8.tex NLG revision)**:
+
+*All work on `main-8.tex`.* The session had two phases: (1) a conceptual discussion of proof structure leading to "isometry epiphany" insights, and (2) execution of agreed edits marked in forest green with `[NLG CMT #N: ...]` / `[NLG EN: ...]` format.
+
+Key conceptual clarifications established:
+- The proof's logical spine: (i) chart via isometry $\Phi^{(p)}:\mathbb{R}^k\to\mathcal{B}$ to a fixed finite-dimensional coordinate system; (ii) Kato eigenprojection continuity in compact $O(k)$-diffeomorphic frame space; (iii) floor from SLLN concentration of the out-of-subspace component. "Why not just say it?" motivated all exposition additions.
+- $(\Phi^{(p)})^{-1}$: direction is FROM $\mathcal{B}\subset\mathbb{R}^p$ DOWN to $(\mathbb{R}^k, G_B^{(p)})$; explicit formula $\sqrt{p}(B^\top B)^{-1}B^\top u$.
+- $G_B$-orthonormal frames are not literally $V(k,k)$ but are diffeomorphic to $O(k)$ via the $G_B^{1/2}$ reparametrization; this is exactly why $M_n = G_B^{1/2}(FF^\top/n)G_B^{1/2}$ works.
+- $\kappa_{n,j} = \lim_p\|\Pi_B h_j\|$; floor = $1-\kappa_{n,j}^2$ = squared norm lost projecting $h_j$ onto $\mathcal{B}$.
+- Bolzano-Weierstrass (user's argument) vs. Kato (proof's actual tool): both achieve convergence in the compact frame manifold; Kato is more direct and provides quantitative bounds.
+
+Edits applied to `main-8.tex` (all pure additions or typo corrections; no mathematical content removed):
+- **Preamble**: Added `\newcounter{nlgcmtnew}` and `\nlgcmtnew` macro; updated `\nlgcmt` to output `[NLG E<n>: ...]` prefix (pre-existing comments renumbered with "E" for "early").
+- **CMT #1** (after proof architecture paragraph): Two-paragraph conceptual preamble explaining $\Phi^{(p)}$ as the fixed coordinate device, $O(k)$-compactness, and Kato as the convergence mechanism; floor characterized as the out-of-$\mathcal{B}$ norm.
+- **CMT #2** (Step 2, after eq:metric): Names $(\Phi^{(p)})^{-1}$ explicitly with formula; states the "down" direction; notes Steps 2–4 chart into $\mathbb{R}^k$ and Steps 5–6 pass to limits.
+- **CMT #3** (Structure Remark): Links $1-\kappa_{n,j}^2$ to squared norm lost projecting $h_j$ onto $\mathcal{B}$; identifies floor and in-subspace terms geometrically.
+- **CMT #4–5**: Typo fixes ("in-subpace" → "in-subspace"; "Both terms tends" → "Both terms tend"); original wrong spelling preserved inside marker text.
+- **CMT #6** (Lemma `lem:kato`, before proof): **Replaced in continuation session** (see below). Initially added as a verbose statement of eigenprojection continuity with eigengap notation, Davis–Kahan bound, three explicit applications, and references. Replaced per standard mathematical writing practice with a clean, attributed single-corollary lemma (see "continuation" entry below).
+- **CMT #7** (Tables 1 and 2 appended): Complete symbol-audit tables (Table 1: ~50 symbols organized into 7 categories with type/dims/meaning; Table 2: defined-at and key appearances for every symbol) appended as an appendix via `longtable`. `\usepackage{longtable}` added to preamble.
+- **$\kappa_{n,j}$ definition relocated**: Moved from inside `\begin{proof}` (proof preamble) to a new labeled remark (eq:kappa) between the SNR Remark and `\section*{Proof}`, so it is visible to readers of both the theorem statement and the post-proof Structure Remark. In-proof usage changed to `Recall $\kappa_{n,j}$ from~\eqref{eq:kappa}`.
+
+Symbol audit produced during session (now also in Table 2 appendix of `main-8.tex`): Table 2 in `docs/KT.md` lists defined-at and key appearances for all symbols.
+
+*Session 2026-06-07 continuation — four additional fixes applied to `main-8.tex`:*
+
+- **Σ₀ full-rank error corrected** (was line 116): `"We assume Σ_y, Σ_0, and Δ_z have full rank"` is mathematically wrong — $\Sigma_0 = B\Sigma_f B^\top$ has rank at most $k < p$ and can never have full rank $p$. Replaced with `\nlgcmtnew{We assume Σ_f has full rank k and Δ_z has full rank p, so Σ_y = Σ_0 + Δ_z is invertible.}` with explicit explanation of the original error.
+
+- **Assumption 3 label and cross-reference fixed**: `\label{asm:hetvar}` added to the Heterogeneous Specific Risk assumption. The hardcoded `(Assumption~3)` in the theorem statement replaced with `(Assumption~\ref{asm:hetvar})`, marked with `\nlgcmtnew`.
+
+- **CMT #6 Kato lemma replaced with clean attributed lemma**: The verbose initial draft (eigengap notation, Davis–Kahan bound, three explicit in-text applications, inline references) was stripped. Replaced with a two-environment block: `\begin{lemma}[Eigenpair convergence; Kato (1966)]\label{lem:kato}` (5-line statement of exactly the corollary needed), and a one-sentence proof citing Kato (1966, Theorem~II.5.4). Preceded by a `\nlgcmtnew` note explaining the replacement. The three applications of the lemma remain in Step 5 where they are invoked.
+
+- **Tables appendix moved before `\end{document}`**: The tables block (appended via bash heredoc in an earlier session) was located after `\end{document}` — dead code that LaTeX never compiled. Fixed by removing the misplaced `\end{document}`, converting the hardcoded `\colortext{[NLG CMT #7:...]}` marker to `\nlgcmtnew{...}` for correct auto-numbering, and appending `\end{document}` after `\endgroup`. A file truncation caused by the Edit tool was repaired using Python head+tail reconstruction.
+
+*CMT counter note*: inserting `\nlgcmtnew` calls before pre-existing ones shifts the counter. Identify CMT annotations by body text, not number.
+
 **Session 2026-06-05 (continued — Step 5 expanded exposition)**:
 - Created `step5excerpt.tex`: standalone expanded exposition of Step 5 (loading-frame coordinates). Contains: complete symbol glossary for all Step 5 symbols; Group A (algebraic reduction, substeps 5A.1 Coordinate substitution / 5A.2 Gram premultiplication / 5A.3 Gram inversion / 5A.4 Eigenvalue rescaling); Group B (eigenvalue scaling note, substeps 5B.1 AB/BA dimension reduction / 5B.2 Growth rate identification / 5B.3 Limit passage); explicit "Output for Step 6" closing block with the two inner-product limits assembled.
 - Key fixes applied during review: replaced circular invertibility parenthetical in 5A.3 with the correct $\lambda_{\min}(B^\top B/p)\to\lambda_{\min}(G_B)>0$ argument; removed redundant similarity-relation proof of $\Sigma_fG_B \sim M$ (already established in 5B); added sign-convention note ($a_j\to\pm a_j^\infty$, sign fixed by $a_j^\top G_B^{1/2}w_j\ge 0$) to Kato invocation; replaced `$B_{\mathrm{here}}$` clash with $P$/$Q$ naming in AB/BA applications; fixed convergence argument in 5B.3 to invoke eigenvalue continuity explicitly.
@@ -334,6 +386,11 @@ These are the key missing piece for making the results statistically operational
 
 **6b. Notation migration decision**: $M_n$ notation is now used in `main.tex`. Decide whether to backport to `unified_dispersion_bias_proof_051926_cleaned.md` and other documents, or maintain separate conventions. If backporting, update `Notation Migration Guide.md` first.
 
+**6c. Decisions surfaced in the 2026-06-11 review (pending):**
+- Adopt the condensed proof (`condensed_proof_skeleton.tex`) — duality to the n×n dual + one LLN + trace assembly — as the manuscript proof, or keep the existing step structure? Much shorter; the in-subspace rotation step and reliance on the existing noise/Kato lemmas need full expansion before promotion.
+- Swap the `lem:kato` proof to the Bolzano–Weierstrass argument (find/replace text supplied 2026-06-11). No new assumptions; discharges the Weyl spell-out for the manuscript.
+- Fix `fiber_bundle_geometry.tex` §4: drop the incorrect "limiting fibration in ℓ²", replace with the intrinsic statement; rename "shape endomorphism." Apply the suggested `\nlgcmtnew` rewrite (resolves AK's "re-embedded"/"plural spaces" objections). *(Status as of the 2026-06-17/18 sessions: not yet confirmed applied — verify against current `fiber_bundle_geometry.tex`.)*
+
 **7. Fix a.s./in-probability gap in `proof_summary_5ideas.tex` Chebyshev appendix.** The appendix currently proves only in-probability convergence for each entry of $\frac{1}{p}Z^\top\Pi_B Z$. main-9's Lemma 1 achieves a.s. convergence using 4th moments + Borel-Cantelli ($\sum_p P(|X_{ij}| \geq \varepsilon) \leq C^2/(\varepsilon^2) \sum_p 1/p^2 < \infty$). Fix requires: (a) add assumption $\sup_i \mathbb{E}[Z_{ai}^4] \leq \kappa_4 < \infty$; (b) upgrade off-diagonal bound to show $O(1/p^2)$ summability; (c) invoke Borel-Cantelli. Medium effort.
 
 **6. Observable estimation for the $k$-frame correction.** Section §7 of the correction document estimates the Frobenius deficit but does not give a CLT or confidence interval for $\|\Pi_B W\|_F^2$. The AK observable bounds (Task 1 above) would fill this gap.
@@ -371,6 +428,7 @@ To come up to speed, read in this order:
 1. **This file** (`docs/KT.md`) — project overview.
 1b. `paper/proof_summary_5ideas.tex` — fastest orientation: 5-idea narrative summary + Chebyshev appendix. Read the PDF (12 pages). Color scheme: blue = observable, green = estimable, black = unobserved.
 1c. `paper/main-9.tex` — formal manuscript. 4-step proof architecture, all lemmas, exact notation.
+1d. `paper/main-8.tex` (historical) — predecessor manuscript with NLG conceptual annotations (CMTs #1–7, forest green) explaining the proof architecture's motivation; useful background if `main-9.tex`'s exposition is unclear.
 2. `unified_dispersion_bias_proof_051926_cleaned.md` §1–4 — theorem statement and examples.
 3. `dispersion_bias_correction_cleaned.md` §1–2, §7 — correction and k-frame extension *(verify filename — see §3.1)*.
 4. `unified_dispersion_bias_proof_051926_cleaned.md` §10–12 — corollaries and Grassmannian discussion.
